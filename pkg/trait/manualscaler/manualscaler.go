@@ -23,9 +23,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	oamv1alpha2 "github.com/crossplane/crossplane/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/pkg/oam"
 )
 
 const (
@@ -34,13 +33,13 @@ const (
 )
 
 // DeploymentModifier modifies the replica count of a Deployment.
-func DeploymentModifier(ctx context.Context, obj runtime.Object, t resource.Trait) error {
+func DeploymentModifier(ctx context.Context, obj runtime.Object, t oam.Trait) error {
 	d, ok := obj.(*appsv1.Deployment)
 	if !ok {
 		return errors.New(errNotDeployment)
 	}
 
-	ms, ok := t.(*oamv1alpha2.ManualScalerTrait)
+	ms, ok := t.(*v1alpha2.ManualScalerTrait)
 	if !ok {
 		return errors.New(errNotManualScalerTrait)
 	}

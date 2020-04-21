@@ -33,13 +33,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/oam/workload"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-
-	oamv1alpha2 "github.com/crossplane/crossplane/apis/oam/v1alpha2"
 	workloadv1alpha1 "github.com/crossplane/crossplane/apis/workload/v1alpha1"
+
+	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-runtime/pkg/oam/fake"
+	"github.com/crossplane/oam-runtime/pkg/reconciler/workload"
 )
 
 var (
@@ -183,12 +183,12 @@ func TestKubeAppWrapper(t *testing.T) {
 	deployBytesWithSecret, _ := json.Marshal(deployment(dmWithContainerEnvFromSecrets("test")))
 
 	type args struct {
-		w resource.Workload
-		o []resource.Object
+		w oam.Workload
+		o []oam.Object
 	}
 
 	type want struct {
-		result []resource.Object
+		result []oam.Object
 		err    error
 	}
 
@@ -214,9 +214,9 @@ func TestKubeAppWrapper(t *testing.T) {
 						UID:       types.UID(workloadUID),
 					},
 				},
-				o: []resource.Object{deployment()},
+				o: []oam.Object{deployment()},
 			},
-			want: want{result: []resource.Object{&workloadv1alpha1.KubernetesApplication{
+			want: want{result: []oam.Object{&workloadv1alpha1.KubernetesApplication{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: workloadName,
 				},
@@ -243,16 +243,16 @@ func TestKubeAppWrapper(t *testing.T) {
 		"SuccessfulCWWrapDeploymentWithSecrets": {
 			reason: "A Deployment for a ContainerizedWorkload should be able to be wrapped in a KubernetesApplicationResourceTemplate and Secrets should be added.",
 			args: args{
-				w: &oamv1alpha2.ContainerizedWorkload{
+				w: &v1alpha2.ContainerizedWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      workloadName,
 						Namespace: workloadNamespace,
 						UID:       types.UID(workloadUID),
 					},
 				},
-				o: []resource.Object{deployment(dmWithContainerEnvFromSecrets("test"))},
+				o: []oam.Object{deployment(dmWithContainerEnvFromSecrets("test"))},
 			},
-			want: want{result: []resource.Object{&workloadv1alpha1.KubernetesApplication{
+			want: want{result: []oam.Object{&workloadv1alpha1.KubernetesApplication{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: workloadName,
 				},
@@ -287,9 +287,9 @@ func TestKubeAppWrapper(t *testing.T) {
 						UID:       types.UID(workloadUID),
 					},
 				},
-				o: []resource.Object{deployment(dmWithContainerEnvFromSecrets("test"))},
+				o: []oam.Object{deployment(dmWithContainerEnvFromSecrets("test"))},
 			},
-			want: want{result: []resource.Object{&workloadv1alpha1.KubernetesApplication{
+			want: want{result: []oam.Object{&workloadv1alpha1.KubernetesApplication{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: workloadName,
 				},
@@ -333,12 +333,12 @@ var _ workload.TranslationWrapper = ServiceInjector
 
 func TestServiceInjector(t *testing.T) {
 	type args struct {
-		w resource.Workload
-		o []resource.Object
+		w oam.Workload
+		o []oam.Object
 	}
 
 	type want struct {
-		result []resource.Object
+		result []oam.Object
 		err    error
 	}
 
@@ -364,9 +364,9 @@ func TestServiceInjector(t *testing.T) {
 						UID:       types.UID(workloadUID),
 					},
 				},
-				o: []resource.Object{deployment(dmWithContainerPorts(3000))},
+				o: []oam.Object{deployment(dmWithContainerPorts(3000))},
 			},
-			want: want{result: []resource.Object{
+			want: want{result: []oam.Object{
 				deployment(dmWithContainerPorts(3000)),
 				service(sWithContainerPort(3000)),
 			}},
@@ -381,9 +381,9 @@ func TestServiceInjector(t *testing.T) {
 						UID:       types.UID(workloadUID),
 					},
 				},
-				o: []resource.Object{deployment(dmWithContainerPorts(3000, 3001))},
+				o: []oam.Object{deployment(dmWithContainerPorts(3000, 3001))},
 			},
-			want: want{result: []resource.Object{
+			want: want{result: []oam.Object{
 				deployment(dmWithContainerPorts(3000, 3001)),
 				service(sWithContainerPort(3000)),
 			}},
@@ -398,12 +398,12 @@ func TestServiceInjector(t *testing.T) {
 						UID:       types.UID(workloadUID),
 					},
 				},
-				o: []resource.Object{
+				o: []oam.Object{
 					deployment(dmWithContainerPorts(4000)),
 					deployment(dmWithContainerPorts(3000)),
 				},
 			},
-			want: want{result: []resource.Object{
+			want: want{result: []oam.Object{
 				deployment(dmWithContainerPorts(4000)),
 				deployment(dmWithContainerPorts(3000)),
 				service(sWithContainerPort(4000)),
@@ -419,12 +419,12 @@ func TestServiceInjector(t *testing.T) {
 						UID:       types.UID(workloadUID),
 					},
 				},
-				o: []resource.Object{
+				o: []oam.Object{
 					deployment(dmWithContainerPorts(3000, 3001), dmWithContainerPorts(4000, 4001)),
 					deployment(dmWithContainerPorts(5000, 5001), dmWithContainerPorts(6000, 6001)),
 				},
 			},
-			want: want{result: []resource.Object{
+			want: want{result: []oam.Object{
 				deployment(dmWithContainerPorts(3000, 3001), dmWithContainerPorts(4000, 4001)),
 				deployment(dmWithContainerPorts(5000, 5001), dmWithContainerPorts(6000, 6001)),
 				service(sWithContainerPort(3000)),
@@ -449,8 +449,8 @@ func TestServiceInjector(t *testing.T) {
 
 func TestGetSecretsFromCWDeployment(t *testing.T) {
 	type args struct {
-		w resource.Workload
-		o resource.Object
+		w oam.Workload
+		o oam.Object
 		p string
 	}
 
@@ -473,7 +473,7 @@ func TestGetSecretsFromCWDeployment(t *testing.T) {
 		"NotADeployment": {
 			reason: "Objects rendered from a ContainerizedWorkload that are not Deployments should not be parsed for secrets.",
 			args: args{
-				w: &oamv1alpha2.ContainerizedWorkload{},
+				w: &v1alpha2.ContainerizedWorkload{},
 				o: &corev1.Service{},
 			},
 			want: want{},
@@ -481,7 +481,7 @@ func TestGetSecretsFromCWDeployment(t *testing.T) {
 		"SuccessfulSingleSecretSingleContainer": {
 			reason: "A single secret used in a single container should be added to the KAR template secrets.",
 			args: args{
-				w: &oamv1alpha2.ContainerizedWorkload{},
+				w: &v1alpha2.ContainerizedWorkload{},
 				o: deployment(dmWithContainerEnvFromSecrets("test")),
 			},
 			want: want{
@@ -491,7 +491,7 @@ func TestGetSecretsFromCWDeployment(t *testing.T) {
 		"SuccessfulMultipleDifferentSecretSingleContainer": {
 			reason: "Multiple unique secrets on the same container should be each added to the KAR template secrets.",
 			args: args{
-				w: &oamv1alpha2.ContainerizedWorkload{},
+				w: &v1alpha2.ContainerizedWorkload{},
 				o: deployment(dmWithContainerEnvFromSecrets("test-one", "test-two")),
 			},
 			want: want{
@@ -504,7 +504,7 @@ func TestGetSecretsFromCWDeployment(t *testing.T) {
 		"SuccessfulMultipleSameSecretSingleContainer": {
 			reason: "Multiple secrets of the same secret on the same container should only be added to the KAR template secrets once.",
 			args: args{
-				w: &oamv1alpha2.ContainerizedWorkload{},
+				w: &v1alpha2.ContainerizedWorkload{},
 				o: deployment(dmWithContainerEnvFromSecrets("test", "test")),
 			},
 			want: want{
@@ -516,7 +516,7 @@ func TestGetSecretsFromCWDeployment(t *testing.T) {
 		"SuccessfulSingleSecretMultipleContainer": {
 			reason: "The same secret used in multiple containers should only be added to the KAR template secrets once.",
 			args: args{
-				w: &oamv1alpha2.ContainerizedWorkload{},
+				w: &v1alpha2.ContainerizedWorkload{},
 				o: deployment(dmWithContainerEnvFromSecrets("test"), dmWithContainerEnvFromSecrets("test")),
 			},
 			want: want{
@@ -528,7 +528,7 @@ func TestGetSecretsFromCWDeployment(t *testing.T) {
 		"SuccessfulMultipleSecretMultipleContainer": {
 			reason: "Multiple unique secrets on multiple containers should each be to the KAR template secrets.",
 			args: args{
-				w: &oamv1alpha2.ContainerizedWorkload{},
+				w: &v1alpha2.ContainerizedWorkload{},
 				o: deployment(dmWithContainerEnvFromSecrets("test-one"), dmWithContainerEnvFromSecrets("test-two")),
 			},
 			want: want{

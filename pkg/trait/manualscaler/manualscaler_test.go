@@ -25,12 +25,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/oam/trait"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	oamv1alpha2 "github.com/crossplane/crossplane/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-runtime/pkg/oam/fake"
+	"github.com/crossplane/oam-runtime/pkg/reconciler/trait"
 )
 
 var (
@@ -42,7 +42,7 @@ var _ trait.Modifier = trait.ModifyFn(DeploymentModifier)
 func TestDeploymentModifier(t *testing.T) {
 	type args struct {
 		o runtime.Object
-		t resource.Trait
+		t oam.Trait
 	}
 
 	type want struct {
@@ -77,8 +77,8 @@ func TestDeploymentModifier(t *testing.T) {
 						Replicas: &startingReplicas,
 					},
 				},
-				t: &oamv1alpha2.ManualScalerTrait{
-					Spec: oamv1alpha2.ManualScalerTraitSpec{
+				t: &v1alpha2.ManualScalerTrait{
+					Spec: v1alpha2.ManualScalerTraitSpec{
 						ReplicaCount: 3,
 					},
 				},

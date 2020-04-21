@@ -30,10 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	oamv1alpha2 "github.com/crossplane/crossplane/apis/oam/v1alpha2"
 	workloadv1alpha1 "github.com/crossplane/crossplane/apis/workload/v1alpha1"
+
+	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/pkg/oam"
 )
 
 const (
@@ -49,7 +49,7 @@ var (
 const LabelKey = "workload.oam.crossplane.io"
 
 // KubeAppWrapper wraps a set of translated objects in a KubernetesApplication.
-func KubeAppWrapper(ctx context.Context, w resource.Workload, objs []resource.Object) ([]resource.Object, error) {
+func KubeAppWrapper(ctx context.Context, w oam.Workload, objs []oam.Object) ([]oam.Object, error) {
 	if objs == nil {
 		return nil, nil
 	}
@@ -93,12 +93,12 @@ func KubeAppWrapper(ctx context.Context, w resource.Workload, objs []resource.Ob
 		},
 	}
 
-	return []resource.Object{app}, nil
+	return []oam.Object{app}, nil
 }
 
 // ServiceInjector adds a Service object for the first Port on the first
 // Container for the first Deployment observed in a workload translation.
-func ServiceInjector(ctx context.Context, w resource.Workload, objs []resource.Object) ([]resource.Object, error) {
+func ServiceInjector(ctx context.Context, w oam.Workload, objs []oam.Object) ([]oam.Object, error) {
 	if objs == nil {
 		return nil, nil
 	}
@@ -158,8 +158,8 @@ func ServiceInjector(ctx context.Context, w resource.Workload, objs []resource.O
 // KubernetesApplicationResourceTemplate it is wrapped in. It also updates the
 // Deployment's Secret reference to the name that the
 // KubernetesApplicationResource controller will propagate it with.
-func secretsForCWDeployment(w resource.Workload, o resource.Object, prefix string) []corev1.LocalObjectReference {
-	if _, ok := w.(*oamv1alpha2.ContainerizedWorkload); !ok {
+func secretsForCWDeployment(w oam.Workload, o oam.Object, prefix string) []corev1.LocalObjectReference {
+	if _, ok := w.(*v1alpha2.ContainerizedWorkload); !ok {
 		return nil
 	}
 

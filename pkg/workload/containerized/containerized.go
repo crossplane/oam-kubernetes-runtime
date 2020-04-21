@@ -26,9 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	oamv1alpha2 "github.com/crossplane/crossplane/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/pkg/oam"
 )
 
 // Reconcile error strings.
@@ -47,8 +46,8 @@ var (
 
 // Translator translates a ContainerizedWorkload into a Deployment.
 // nolint:gocyclo
-func Translator(ctx context.Context, w resource.Workload) ([]resource.Object, error) {
-	cw, ok := w.(*oamv1alpha2.ContainerizedWorkload)
+func Translator(ctx context.Context, w oam.Workload) ([]oam.Object, error) {
+	cw, ok := w.(*v1alpha2.ContainerizedWorkload)
 	if !ok {
 		return nil, errors.New(errNotContainerizedWorkload)
 	}
@@ -120,7 +119,7 @@ func Translator(ctx context.Context, w resource.Workload) ([]resource.Object, er
 					Name:      v.Name,
 					MountPath: v.MouthPath,
 				}
-				if v.AccessMode != nil && *v.AccessMode == oamv1alpha2.VolumeAccessModeRO {
+				if v.AccessMode != nil && *v.AccessMode == v1alpha2.VolumeAccessModeRO {
 					mount.ReadOnly = true
 				}
 				kubernetesContainer.VolumeMounts = append(kubernetesContainer.VolumeMounts, mount)
@@ -259,5 +258,5 @@ func Translator(ctx context.Context, w resource.Workload) ([]resource.Object, er
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, kubernetesContainer)
 	}
 
-	return []resource.Object{d}, nil
+	return []oam.Object{d}, nil
 }

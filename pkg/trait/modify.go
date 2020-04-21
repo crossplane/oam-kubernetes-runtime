@@ -26,10 +26,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/oam/trait"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
 	workloadv1alpha1 "github.com/crossplane/crossplane/apis/workload/v1alpha1"
+
+	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-runtime/pkg/reconciler/trait"
 )
 
 const (
@@ -43,7 +43,7 @@ var (
 
 // DeploymentFromKubeAppAccessor finds deployments in a KubernetesApplication
 // and applies the supplied modifier function to them.
-func DeploymentFromKubeAppAccessor(ctx context.Context, obj runtime.Object, t resource.Trait, m trait.ModifyFn) error {
+func DeploymentFromKubeAppAccessor(ctx context.Context, obj runtime.Object, t oam.Trait, m trait.ModifyFn) error {
 	a, ok := obj.(*workloadv1alpha1.KubernetesApplication)
 	if !ok {
 		return errors.New(errNotKubeApp)

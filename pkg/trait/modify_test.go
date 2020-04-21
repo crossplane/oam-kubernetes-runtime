@@ -26,12 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/oam/trait"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-
 	workloadv1alpha1 "github.com/crossplane/crossplane/apis/workload/v1alpha1"
+
+	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-runtime/pkg/oam/fake"
+	"github.com/crossplane/oam-runtime/pkg/reconciler/trait"
 )
 
 var (
@@ -43,7 +43,7 @@ var _ trait.ModifyAccessor = DeploymentFromKubeAppAccessor
 func TestDeploymentFromKubeAppAccessor(t *testing.T) {
 	type args struct {
 		o runtime.Object
-		t resource.Trait
+		t oam.Trait
 		m trait.ModifyFn
 	}
 

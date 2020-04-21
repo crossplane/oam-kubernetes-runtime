@@ -27,12 +27,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/oam/workload"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	oamv1alpha2 "github.com/crossplane/crossplane/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-runtime/pkg/oam/fake"
+	"github.com/crossplane/oam-runtime/pkg/reconciler/workload"
 )
 
 var (
@@ -91,23 +91,23 @@ func deployment(mod ...deploymentModifier) *appsv1.Deployment {
 	return d
 }
 
-type cwModifier func(*oamv1alpha2.ContainerizedWorkload)
+type cwModifier func(*v1alpha2.ContainerizedWorkload)
 
 func cwWithOS(os string) cwModifier {
-	return func(cw *oamv1alpha2.ContainerizedWorkload) {
-		oamOS := oamv1alpha2.OperatingSystem(os)
+	return func(cw *v1alpha2.ContainerizedWorkload) {
+		oamOS := v1alpha2.OperatingSystem(os)
 		cw.Spec.OperatingSystem = &oamOS
 	}
 }
 
-func cwWithContainer(c oamv1alpha2.Container) cwModifier {
-	return func(cw *oamv1alpha2.ContainerizedWorkload) {
+func cwWithContainer(c v1alpha2.Container) cwModifier {
+	return func(cw *v1alpha2.ContainerizedWorkload) {
 		cw.Spec.Containers = append(cw.Spec.Containers, c)
 	}
 }
 
-func containerizedWorkload(mod ...cwModifier) *oamv1alpha2.ContainerizedWorkload {
-	cw := &oamv1alpha2.ContainerizedWorkload{
+func containerizedWorkload(mod ...cwModifier) *v1alpha2.ContainerizedWorkload {
+	cw := &v1alpha2.ContainerizedWorkload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cwName,
 			Namespace: cwNamespace,
@@ -129,11 +129,11 @@ func TestTranslator(t *testing.T) {
 	envVarSecretVal := "nicesecretvalue"
 
 	type args struct {
-		w resource.Workload
+		w oam.Workload
 	}
 
 	type want struct {
-		result []resource.Object
+		result []oam.Object
 		err    error
 	}
 
@@ -154,41 +154,41 @@ func TestTranslator(t *testing.T) {
 			args: args{
 				w: containerizedWorkload(),
 			},
-			want: want{result: []resource.Object{deployment()}},
+			want: want{result: []oam.Object{deployment()}},
 		},
 		"SuccessfulOS": {
 			reason: "A ContainerizedWorkload should be successfully translateddinto a deployment.",
 			args: args{
 				w: containerizedWorkload(cwWithOS("test")),
 			},
-			want: want{result: []resource.Object{deployment(dmWithOS("test"))}},
+			want: want{result: []oam.Object{deployment(dmWithOS("test"))}},
 		},
 		"SuccessfulContainers": {
 			reason: "A ContainerizedWorkload should be successfully translated into a deployment.",
 			args: args{
-				w: containerizedWorkload(cwWithContainer(oamv1alpha2.Container{
+				w: containerizedWorkload(cwWithContainer(v1alpha2.Container{
 					Name:      "cool-container",
 					Image:     "cool/image:latest",
 					Command:   []string{"run"},
 					Arguments: []string{"--coolflag"},
-					Ports: []oamv1alpha2.ContainerPort{
+					Ports: []v1alpha2.ContainerPort{
 						{
 							Name: "cool-port",
 							Port: 8080,
 						},
 					},
-					Resources: &oamv1alpha2.ContainerResources{
-						Volumes: []oamv1alpha2.VolumeResource{
+					Resources: &v1alpha2.ContainerResources{
+						Volumes: []v1alpha2.VolumeResource{
 							{
 								Name:      "cool-volume",
 								MouthPath: "/my/cool/path",
 							},
 						},
 					},
-					Environment: []oamv1alpha2.ContainerEnvVar{
+					Environment: []v1alpha2.ContainerEnvVar{
 						{
 							Name: "COOL_SECRET",
-							FromSecret: &oamv1alpha2.SecretKeySelector{
+							FromSecret: &v1alpha2.SecretKeySelector{
 								Name: "cool-secret",
 								Key:  "secretdata",
 							},
@@ -201,7 +201,7 @@ func TestTranslator(t *testing.T) {
 						{
 							Name:  "USE_VAL_SECRET",
 							Value: &envVarSecretVal,
-							FromSecret: &oamv1alpha2.SecretKeySelector{
+							FromSecret: &v1alpha2.SecretKeySelector{
 								Name: "cool-secret",
 								Key:  "secretdata",
 							},
@@ -213,7 +213,7 @@ func TestTranslator(t *testing.T) {
 					},
 				})),
 			},
-			want: want{result: []resource.Object{deployment(dmWithContainer(corev1.Container{
+			want: want{result: []oam.Object{deployment(dmWithContainer(corev1.Container{
 				Name:    "cool-container",
 				Image:   "cool/image:latest",
 				Command: []string{"run"},
