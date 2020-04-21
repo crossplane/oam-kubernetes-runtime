@@ -34,8 +34,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	"github.com/crossplane/oam-runtime/pkg/oam"
-	"github.com/crossplane/oam-runtime/pkg/oam/fake"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/fake"
 )
 
 var _ reconcile.Reconciler = &Reconciler{}

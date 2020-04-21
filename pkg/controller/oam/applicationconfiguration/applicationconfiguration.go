@@ -34,7 +34,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/oam/v1alpha2"
 )
 
 const (

@@ -1,4 +1,4 @@
-module github.com/crossplane/oam-runtime
+module github.com/crossplane/oam-kubernetes-runtime
 
 go 1.13
 

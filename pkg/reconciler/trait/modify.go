@@ -21,7 +21,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
 // A Modifier is responsible for modifying or adding objects to a workload

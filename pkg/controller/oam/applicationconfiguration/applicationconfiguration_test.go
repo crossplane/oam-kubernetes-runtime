@@ -32,8 +32,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
-	"github.com/crossplane/oam-runtime/pkg/oam/fake"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/fake"
 )
 
 type acParam func(*v1alpha2.ApplicationConfiguration)

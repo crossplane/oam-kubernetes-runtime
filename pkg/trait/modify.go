@@ -28,8 +28,8 @@ import (
 
 	workloadv1alpha1 "github.com/crossplane/crossplane/apis/workload/v1alpha1"
 
-	"github.com/crossplane/oam-runtime/pkg/oam"
-	"github.com/crossplane/oam-runtime/pkg/reconciler/trait"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/reconciler/trait"
 )
 
 const (

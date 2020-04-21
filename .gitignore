@@ -1,15 +1,25 @@
-/.cache
-/.work
-/_output
-/config/
-/config
-cover.out
-/vendor
-/.vendor-new
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-# gitlab example
-# exclude files generate by running the example
-external-dns-*.tgz
-gitlab-*.tgz
-gitlab-gcp.yaml
-gitlab/
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+*.swp
+*.swo
+*~
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+.idea
+.DS_Store
+bin/
+tmp/
+
+# Vscode files
+.vscode
