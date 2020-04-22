@@ -7,6 +7,14 @@
 
 # Test binary, built with `go test -c`
 *.test
+/.cache
+/.work
+/_output
+/config/
+/config
+cover.out
+/vendor
+/.vendor-new
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
