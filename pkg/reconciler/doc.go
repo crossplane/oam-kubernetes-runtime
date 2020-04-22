@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package oam provides reconcilers for OAM workloads and traits.
-package oam
+// Package reconciler provides reconcilers for OAM workloads and traits.
+package reconciler

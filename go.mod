@@ -3,7 +3,6 @@ module github.com/crossplane/oam-kubernetes-runtime
 go 1.13
 
 require (
-	github.com/crossplane/crossplane v0.9.0
 	github.com/crossplane/crossplane-runtime v0.7.0
 	github.com/crossplane/crossplane-tools v0.0.0-20200219001116-bb8b2ce46330
 	github.com/google/go-cmp v0.4.0
