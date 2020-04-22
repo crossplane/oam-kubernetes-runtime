@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package trait provides functions used to modify Kubernetes objects that have
+// been translated from OAM workloads.
 package trait

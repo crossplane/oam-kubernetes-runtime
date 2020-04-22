@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package workload provides functions used to translate OAM workload types into
+// Kubernetes objects.
 package workload

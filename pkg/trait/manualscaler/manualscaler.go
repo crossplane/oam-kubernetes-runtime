@@ -23,7 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
