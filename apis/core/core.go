@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package oam contains Kubernetes API groups for OAM resources.
+// Package core contains Kubernetes API groups for core OAM resources.
 // Refer to https://github.com/oam-dev/spec for more details.
-package oam
+package core
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 func init() {

@@ -29,7 +29,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/fake"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/reconciler/workload"
