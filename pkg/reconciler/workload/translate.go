@@ -19,7 +19,7 @@ package workload
 import (
 	"context"
 
-	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
 // A Translator is responsible for packaging workloads into other objects.

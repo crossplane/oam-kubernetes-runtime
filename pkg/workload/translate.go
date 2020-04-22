@@ -32,8 +32,8 @@ import (
 
 	workloadv1alpha1 "github.com/crossplane/crossplane/apis/workload/v1alpha1"
 
-	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
-	"github.com/crossplane/oam-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
 const (

@@ -21,7 +21,7 @@ package oam
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplane/oam-runtime/apis/oam/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/oam/v1alpha2"
 )
 
 func init() {
