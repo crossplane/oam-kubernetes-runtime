@@ -1,14 +1,21 @@
-# oam-kubernetes-runtime Project
+# OAM Kubernetes Project
 
-The OAM Kubernetes runtime project is a collection of Golang help libraries and official api type
- definitions for building an OAM Kubernetes runtime that is compatible with the latest stable
-  OAM spec. 
+The OAM Kubernetes runtime project is a collection of Golang helper libraries and OAM api type
+ definitions. 
 
+It is designed to help OAM platform builders rather than being used directly by developers
+or end-users. We would recommend end-users to check
+[Crossplane  official  documentation](https://crossplane.github.io/docs) instead.
+
+In addition, we created this library with the following goals in mind  
+* All OAM Kubernetes platform builders use and contribute to this library. 
+* The wide adoption of this library can facilitate workload/trait interoperability among OAM
+ Kubernetes platform builders.
+ 
 ## Prerequisites
 
-1. go version 1.12+
-2. Kubernetes version v1.15+ with KubeCtl configured 
-
+1. Golang version 1.12+
+2. Kubernetes version v1.15+ with kubectl configured
 
 ## Getting started
 
@@ -26,11 +33,12 @@ make generate
 make
 ```
 
-* Install CRDs to your Kubernetes cluster
+* Generate and install CRDs to your Kubernetes cluster
 
 ```shell
-kubectl apply -f cluster/charts/oam-kubernetes-runtime/crds/
+make manifests
 
+kubectl apply -f crds/
 ```
 
 * Run OAM sample controller
@@ -38,10 +46,10 @@ kubectl apply -f cluster/charts/oam-kubernetes-runtime/crds/
 go run pkg/examples/containerized-workload/main.go
 ```
 
-* Apply the sample application config
+* Apply the sample application configurations
 
 ```
-kubectl apply -f pkg/examples/containerized-workload/sample_application_config.yaml
+kubectl apply -f examples/containerized-workload/
  
 ```
 
@@ -61,14 +69,10 @@ NAME                      AGE
 example-appconfig-trait   54s
 ```
 
-## Goals
-We created this library with the following goals in mind  
-* We want to make it super easy to build an OAM runtime on Kubernetes
-* We hope that all OAM Kubernetes platform builders use and contribute to this library. 
-* We hope that we can facilitate workload/trait interoperability based on the universal adoption
- of this library among the OAM platform builders.
 
- 
 ## Community, discussion, contribution
 You can reach the maintainers of this project at:
-* Slack channel: [#oam](https://crossplane.slack.com/#oam)
+* Slack channel: [crossplane#oam](https://crossplane.slack.com/#oam)
+
+## Licenses
+The OAM Kubernetes runtime is released under the [Apache 2.0 license](LICENSE).
