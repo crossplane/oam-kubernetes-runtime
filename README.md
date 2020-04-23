@@ -28,29 +28,26 @@ The functionality of this library can be demonstrated with the following steps:
 ```shell
 make submodules 
 
-make generate
-
 make
 ```
 
 * Generate and install CRDs to your Kubernetes cluster
 
 ```shell
-make manifests
+make generate
 
 kubectl apply -f crds/
 ```
 
 * Run OAM sample controller
 ```
-go run pkg/examples/containerized-workload/main.go
+go run examples/containerized-workload/main.go
 ```
 
 * Apply the sample application configurations
 
 ```
-kubectl apply -f examples/containerized-workload/
- 
+kubectl apply -f examples/containerized-workload/ 
 ```
 
 * Verify that corresponding CRs are emitted. 
