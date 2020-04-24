@@ -1,7 +1,7 @@
 # OAM Kubernetes Runtime
 
 The OAM Kubernetes runtime project is a collection of Golang helper libraries and OAM api type
- definitions. 
+definitions. 
 
 It is designed to help OAM platform builders rather than being used directly by developers
 or end-users. We would recommend end-users to check
@@ -52,20 +52,19 @@ kubectl apply -f examples/containerized-workload/
 
 * Verify that corresponding CRs are emitted. 
 
-You should see a containerizedworkloads looking like below
+You should see a `ContainerizedWorkload` looking like below
 ```
 kubectl get containerizedworkloads.core.oam.dev  
 NAME                         AGE
 example-appconfig-workload   12s
 ```
 
-And a manualscalertraits looking like below
+And a `Manualscalertrait` looking like below
 ```
 kubectl get manualscalertraits.core.oam.dev
 NAME                      AGE
 example-appconfig-trait   54s
 ```
-
 
 ## Community, discussion, contribution
 You can reach the maintainers of this project at:
