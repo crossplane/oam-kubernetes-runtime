@@ -1,4 +1,4 @@
-# OAM Kubernetes Project
+# OAM Kubernetes Runtime
 
 The OAM Kubernetes runtime project is a collection of Golang helper libraries and OAM api type
  definitions. 
