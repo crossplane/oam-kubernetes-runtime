@@ -92,3 +92,33 @@ oam-runtime.help:
 help-special: oam-runtime.help
 
 .PHONY: oam-runtime.help help-special
+
+# Image URL to use all building/pushing image targets
+IMG ?= controller:latest
+
+# Build the docker image
+docker-build:
+	docker build . -t $(IMG)
+
+# Push the docker image
+docker-push:
+	docker push ${IMG}
+
+# load docker image to the kind cluster
+kind-load:
+	kind load docker-image $(IMG) || { echo >&2 "kind not installed or error loading image: $(IMG)"; exit 1; }
+
+e2e-setup: generate
+	kubectl apply -f crds
+
+e2e-cleanup:
+	kubectl delete clusterrolebinding oam-role-binding --wait
+	kubectl delete pod oam-example --wait
+
+e2e-kind-test:
+	kubectl create clusterrolebinding oam-role-binding --clusterrole=cluster-admin --serviceaccount=default:default
+	kubectl run oam-example --generator=run-pod/v1 --image-pull-policy='Never' --image=$(IMG)
+	kubectl wait --for=condition=Ready pod -l run=oam-example --timeout=300s
+	ginkgo -v ./e2e-test/
+	kubectl delete pod oam-example --wait
+	kubectl delete clusterrolebinding oam-role-binding --wait
