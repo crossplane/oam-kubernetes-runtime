@@ -35,20 +35,23 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y golang-ginkgo-dev
 
-    - name: Test
-      run: make test
-
     - name: Setup Kind Cluster
       uses: engineerd/setup-kind@v0.3.0
       with:
         version: "v0.7.0"
 
-    - name: Kubernetes E2E
+    - name: Generate and apply CRDs
       run: |
-        kind get kubeconfig > kubeconfig
-        export KUBECONFIG="$PWD/kubeconfig"
-        kubectl wait -n kube-system --for=condition=Ready -l k8s-app=kube-dns pods --timeout=300s
-        make docker-build
-        make kind-load
+        make submodules
+        make
         make e2e-setup
-        make e2e-kind-test
+
+    - name: Build docker image
+      run: make docker-build
+
+    - name: Load docker image
+      run: make kind-load
+
+
+    - name: Kubernetes E2E
+      run: make e2e-kind-test
