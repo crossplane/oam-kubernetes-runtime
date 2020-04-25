@@ -1,5 +1,7 @@
 # OAM Kubernetes Runtime
 
+[![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/mod/github.com/crossplane/oam-kubernetes-runtime)
+
 The OAM Kubernetes runtime project is a collection of Golang helper libraries and OAM api type
 definitions. 
 
