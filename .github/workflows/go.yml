@@ -35,11 +35,20 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y golang-ginkgo-dev
 
-    - name: Setup build system and test
-      run: |
-        make submodules
-        make
-        make test
+    - name: Setup build system
+      run: make submodules
+
+    - name: Run Make
+      run: make
+
+    - name: Run Make reviewable
+      run: make reviewable
+
+    - name: Run Make test
+      run: make test
+
+    - name: Run Make build
+      run: make build
 
     - name: Setup Kind Cluster
       uses: engineerd/setup-kind@v0.3.0
