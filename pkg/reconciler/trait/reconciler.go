@@ -18,7 +18,6 @@ package trait
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -167,7 +166,6 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.client.Status().Update(ctx, trait), errUpdateTraitStatus)
 	}
 	if err != nil {
-		fmt.Println("HEEERREE")
 		log.Debug("Cannot get referenced workload", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(trait, event.Warning(reasonCannotGetWorkload, err))
 		trait.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errGetWorkload)))
