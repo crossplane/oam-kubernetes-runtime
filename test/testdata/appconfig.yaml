@@ -1,0 +1,15 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: test-ac
+  namespace: default
+spec:
+  components: 
+    - componentName: test-component
+      parameterValues:
+        - name: varOne
+          value: "replace-one"
+        - name: varTwo
+          value: "replace-two"
+        - name: varThree
+          value: "replace-three"
