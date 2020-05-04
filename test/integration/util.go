@@ -20,10 +20,7 @@ package integration
 
 import (
 	"context"
-	"io/ioutil"
 	"time"
-
-	"sigs.k8s.io/yaml"
 )
 
 func waitFor(ctx context.Context, interval time.Duration, check func() (bool, error)) error {
@@ -44,15 +41,4 @@ func waitFor(ctx context.Context, interval time.Duration, check func() (bool, er
 			}
 		}
 	}
-}
-
-func unmarshalFromFile(path string, obj interface{}) error {
-	dat, err := ioutil.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if err := yaml.Unmarshal(dat, obj); err != nil {
-		return err
-	}
-	return nil
 }
