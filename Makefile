@@ -31,6 +31,8 @@ NPROCS ?= 1
 # to half the number of CPU cores.
 GO_TEST_PARALLEL := $(shell echo $$(( $(NPROCS) / 2 )))
 
+GO_INTEGRATION_TESTS_SUBDIRS = test
+
 GO_LDFLAGS += -X $(GO_PROJECT)/pkg/version.Version=$(VERSION)
 GO_SUBDIRS += pkg apis
 GO111MODULE = on
@@ -71,6 +73,9 @@ check-diff: reviewable
 submodules:
 	@git submodule sync
 	@git submodule update --init --recursive
+
+go-integration:
+	GO_TEST_FLAGS="-timeout 1h -count=1 -v" GO_TAGS=integration $(MAKE) go.test.integration
 
 .PHONY: cobertura reviewable submodules fallthrough
 
