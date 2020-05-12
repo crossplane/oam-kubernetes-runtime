@@ -80,6 +80,10 @@ type TraitDefinitionSpec struct {
 	// Reference to the CustomResourceDefinition that defines this trait kind.
 	Reference DefinitionReference `json:"definitionRef"`
 
+	// Revision tells whether a trait is aware of component revision
+	// +optional
+	CreateRevision bool `json:"createRevision"`
+
 	// AppliesToWorkloads specifies the list of workload kinds this trait
 	// applies to. Workload kinds are specified in kind.group/version format,
 	// e.g. server.core.oam.dev/v1alpha2. Traits that omit this field apply to
@@ -192,6 +196,10 @@ type ComponentSpec struct {
 type ComponentStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
+	// LatestRevision of component
+	// +optional
+	LatestRevision string `json:"latestRevision"`
+
 	// TODO(negz): Maintain references to any ApplicationConfigurations that
 	// reference this component? Doing so would allow us to queue a reconcile
 	// for consuming ApplicationConfigurations when this Component changed.
@@ -247,9 +255,18 @@ type ComponentScope struct {
 // An ApplicationConfigurationComponent specifies a component of an
 // ApplicationConfiguration. Each component is used to instantiate a workload.
 type ApplicationConfigurationComponent struct {
-	// ComponentName specifies a component of which an ApplicationConfiguration
-	// should consist. The named component must exist.
+	// ComponentName specifies a component whose latest revision will be bind
+	// with ApplicationConfiguration. When the spec of the referenced component
+	// changes, ApplicationConfiguration will automatically migrate all trait
+	// affect from the prior revision to the new one. This is mutually exclusive
+	// with RevisionName.
+	// +optional
 	ComponentName string `json:"componentName"`
+
+	// RevisionName of a specific component revision to which to bind
+	// ApplicationConfiguration. This is mutually exclusive with componentName.
+	// +optional
+	RevisionName string `json:"revisionName"`
 
 	// ParameterValues specify values for the the specified component's
 	// parameters. Any parameter required by the component must be specified.

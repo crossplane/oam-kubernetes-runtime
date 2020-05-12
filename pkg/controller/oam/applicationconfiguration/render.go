@@ -19,6 +19,9 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
+	"strings"
+
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,14 +43,20 @@ const (
 
 // Render error format strings.
 const (
-	errFmtGetComponent     = "cannot get component %q"
-	errFmtResolveParams    = "cannot resolve parameter values for component %q"
-	errFmtRenderWorkload   = "cannot render workload for component %q"
-	errFmtRenderTrait      = "cannot render trait for component %q"
-	errFmtSetParam         = "cannot set parameter %q"
-	errFmtUnsupportedParam = "unsupported parameter %q"
-	errFmtRequiredParam    = "required parameter %q not specified"
+	errFmtGetComponent           = "cannot get component %q"
+	errFmtGetComponentRevision   = "cannot get component revision %q"
+	errFmtResolveParams          = "cannot resolve parameter values for component %q"
+	errFmtRenderWorkload         = "cannot render workload for component %q"
+	errFmtRenderTrait            = "cannot render trait for component %q"
+	errFmtSetParam               = "cannot set parameter %q"
+	errFmtUnsupportedParam       = "unsupported parameter %q"
+	errFmtRequiredParam          = "required parameter %q not specified"
+	errFmtControllerRevisionData = "cannot get valid component data from controllerRevision %q"
+	errFmtGetTraitDefinition     = "cannot find trait definition %q"
+	errSetValueForField          = "can not set value %q for fieldPath %q"
 )
+
+const instanceNamePath = "metadata.name"
 
 // A ComponentRenderer renders an ApplicationConfiguration's Components into
 // workloads and traits.
@@ -65,22 +74,25 @@ func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.Application
 }
 
 type components struct {
-	client   client.Reader
-	params   ParameterResolver
-	workload ResourceRenderer
-	trait    ResourceRenderer
+	client     client.Reader
+	appsClient *clientappv1.AppsV1Client
+	params     ParameterResolver
+	workload   ResourceRenderer
+	trait      ResourceRenderer
 }
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
 	workloads := make([]Workload, len(ac.Spec.Components))
 	for i, acc := range ac.Spec.Components {
 
-		c := &v1alpha2.Component{}
-		nn := types.NamespacedName{Namespace: ac.GetNamespace(), Name: acc.ComponentName}
-		if err := r.client.Get(ctx, nn, c); err != nil {
-			return nil, errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+		if acc.RevisionName != "" {
+			splits := strings.Split(acc.RevisionName, "-")
+			acc.ComponentName = strings.Join(splits[0:len(splits)-1], "-")
 		}
-
+		c, err := r.getComponent(ctx, acc, ac.GetNamespace())
+		if err != nil {
+			return nil, err
+		}
 		p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
 		if err != nil {
 			return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
@@ -96,6 +108,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		w.SetNamespace(ac.GetNamespace())
 
 		traits := make([]unstructured.Unstructured, len(acc.Traits))
+		traitDefs := make([]v1alpha2.TraitDefinition, len(acc.Traits))
 		for i, ct := range acc.Traits {
 			t, err := r.trait.Render(ct.Trait.Raw)
 			if err != nil {
@@ -111,11 +124,86 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 			t.SetNamespace(ac.GetNamespace())
 
 			traits[i] = *t
-		}
 
-		workloads[i] = Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}
+			traitDefinitionName := getCRDName(t)
+			var traitDef v1alpha2.TraitDefinition
+			err = r.client.Get(ctx, types.NamespacedName{
+				Name: traitDefinitionName,
+			}, &traitDef)
+			if err != nil {
+				return nil, errors.Wrapf(err, errFmtGetTraitDefinition, traitDefinitionName)
+			}
+			traitDefs = append(traitDefs, traitDef)
+		}
+		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
+			return nil, err
+		}
+		workloads[i] = Workload{ComponentName: acc.ComponentName, RevisionName: acc.RevisionName, Workload: w, Traits: traits}
 	}
 	return workloads, nil
+}
+
+// SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
+func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
+	//Don't override the specified name
+	if w.GetName() != "" {
+		return nil
+	}
+	pv := fieldpath.Pave(w.Object)
+	if IsCreateRevision(traitDefs) {
+		// if trait aware revision, use revisionName as workload name
+		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision); err != nil {
+			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
+		}
+		return nil
+	}
+	// use component name as workload name, which means we will always use one workload for different revisions
+	if err := pv.SetString(instanceNamePath, c.GetName()); err != nil {
+		return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.GetName())
+	}
+	w.Object = pv.UnstructuredContent()
+	return nil
+}
+
+// IsCreateRevision will check if any trait has createRevision flag, the appconfig should create a new workload instance
+func IsCreateRevision(traitDefs []v1alpha2.TraitDefinition) bool {
+	for _, td := range traitDefs {
+		if td.Spec.CreateRevision {
+			return true
+		}
+	}
+	return false
+}
+
+func getCRDName(u *unstructured.Unstructured) string {
+	apiVersion := u.GetAPIVersion()
+	kind := u.GetKind()
+	apis := strings.Split(apiVersion, "/")
+	if len(apis) < 2 {
+		return ""
+	}
+	// TODO(wonderflow) How could we find get specific crd name from CR object?
+	return strings.ToLower(kind) + "s." + apis[0]
+}
+
+func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, error) {
+	c := &v1alpha2.Component{}
+	if acc.RevisionName != "" {
+		revision, err := r.appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
+		if err != nil {
+			return nil, errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
+		}
+		if err := json.Unmarshal(revision.Data.Raw, c); err != nil {
+			return nil, errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
+		}
+		c.Status.LatestRevision = acc.RevisionName
+		return c, nil
+	}
+	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
+	if err := r.client.Get(ctx, nn, c); err != nil {
+		return nil, errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+	}
+	return c, nil
 }
 
 // A ResourceRenderer renders a Kubernetes-compliant YAML resource into an

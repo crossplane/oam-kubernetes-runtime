@@ -22,6 +22,9 @@ import (
 	"strings"
 	"time"
 
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -70,6 +73,11 @@ func Setup(mgr ctrl.Manager, l logging.Logger) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		For(&v1alpha2.ApplicationConfiguration{}).
+		Watches(&source.Kind{Type: &v1alpha2.Component{}}, &ComponentHandler{
+			client:     mgr.GetClient(),
+			l:          l,
+			appsClient: clientappv1.NewForConfigOrDie(mgr.GetConfig()),
+		}).
 		Complete(NewReconciler(mgr,
 			WithLogger(l.WithValues("controller", name)),
 			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
@@ -138,10 +146,11 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		client: m.GetClient(),
 		components: &components{
-			client:   m.GetClient(),
-			params:   ParameterResolveFn(resolve),
-			workload: ResourceRenderFn(renderWorkload),
-			trait:    ResourceRenderFn(renderTrait),
+			client:     m.GetClient(),
+			appsClient: clientappv1.NewForConfigOrDie(m.GetConfig()),
+			params:     ParameterResolveFn(resolve),
+			workload:   ResourceRenderFn(renderWorkload),
+			trait:      ResourceRenderFn(renderTrait),
 		},
 		workloads: &workloads{
 			client: resource.NewAPIPatchingApplicator(m.GetClient()),
@@ -232,6 +241,10 @@ type Workload struct {
 	// ComponentName that produced this workload.
 	ComponentName string
 
+	// +optional
+	// RevisionName of current Component
+	RevisionName string
+
 	// A Workload object.
 	Workload *unstructured.Unstructured
 
@@ -276,6 +289,12 @@ func (fn GarbageCollectorFn) Eligible(namespace string, ws []v1alpha2.WorkloadSt
 	return fn(namespace, ws, w)
 }
 
+// IsRevisionWorkload check is a workload is an old revision Workload which shouldn't be garbage collected.
+// TODO(wonderflow): Do we have a better way to recognise it's a revisionWorkload which can't be garbage collected by AppConfig?
+func IsRevisionWorkload(status v1alpha2.WorkloadStatus) bool {
+	return strings.HasPrefix(status.Reference.Name, status.ComponentName+"-")
+}
+
 func eligible(namespace string, ws []v1alpha2.WorkloadStatus, w []Workload) []unstructured.Unstructured {
 	applied := make(map[runtimev1alpha1.TypedReference]bool)
 	for _, wl := range w {
@@ -297,7 +316,7 @@ func eligible(namespace string, ws []v1alpha2.WorkloadStatus, w []Workload) []un
 	eligible := make([]unstructured.Unstructured, 0)
 	for _, s := range ws {
 
-		if !applied[s.Reference] {
+		if !applied[s.Reference] && !IsRevisionWorkload(s) {
 			w := &unstructured.Unstructured{}
 			w.SetAPIVersion(s.Reference.APIVersion)
 			w.SetKind(s.Reference.Kind)

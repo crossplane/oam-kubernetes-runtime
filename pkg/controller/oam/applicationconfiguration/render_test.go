@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
@@ -63,10 +65,11 @@ func TestRenderComponents(t *testing.T) {
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 
 	type fields struct {
-		client   client.Reader
-		params   ParameterResolver
-		workload ResourceRenderer
-		trait    ResourceRenderer
+		client    client.Reader
+		appclient *clientappv1.AppsV1Client
+		params    ParameterResolver
+		workload  ResourceRenderer
+		trait     ResourceRenderer
 	}
 	type args struct {
 		ctx context.Context
@@ -186,7 +189,7 @@ func TestRenderComponents(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			r := &components{tc.fields.client, tc.fields.appclient, tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, err := r.Render(tc.args.ctx, tc.args.ac)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, diff)

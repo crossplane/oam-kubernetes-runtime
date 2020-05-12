@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"k8s.io/client-go/rest"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -146,6 +148,11 @@ func (m *Manager) GetClient() client.Client { return m.Client }
 
 // GetScheme returns the scheme.
 func (m *Manager) GetScheme() *runtime.Scheme { return m.Scheme }
+
+// GetConfig returns the config for test.
+func (m *Manager) GetConfig() *rest.Config {
+	return &rest.Config{}
+}
 
 // GV returns a mock schema.GroupVersion.
 var GV = schema.GroupVersion{Group: "g", Version: "v"}
