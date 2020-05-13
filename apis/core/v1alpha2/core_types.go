@@ -30,11 +30,25 @@ type DefinitionReference struct {
 	Name string `json:"name"`
 }
 
+// A ChildResourceKind defines a child Kubernetes resource kind with a selector
+type ChildResourceKind struct {
+	// APIVersion of the child resource
+	APIVersion string `json:"apiVersion"`
+
+	// Kind of the child resource
+	Kind string `json:"kind"`
+
+	// Selector to select the child resources that the workload wants to expose to traits
+	Selector map[string]string `json:"selector,omitempty"`
+}
+
 // A WorkloadDefinitionSpec defines the desired state of a WorkloadDefinition.
 type WorkloadDefinitionSpec struct {
-	// Reference to the CustomResourceDefinition that defines this workload
-	// kind.
+	// Reference to the CustomResourceDefinition that defines this workload kind.
 	Reference DefinitionReference `json:"definitionRef"`
+
+	// ChildResourceKinds are the list of GVK of the child resources this workload generates
+	ChildResourceKinds []ChildResourceKind `json:"childResourceKinds,omitempty"`
 }
 
 // +kubebuilder:object:root=true
