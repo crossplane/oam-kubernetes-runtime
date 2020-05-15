@@ -65,6 +65,7 @@ func (a *workloads) Apply(ctx context.Context, w []Workload, ao ...resource.Appl
 				Kind:       wl.Workload.GetKind(),
 				Name:       wl.Workload.GetName(),
 			}
+			// TODO(rz): Need to find a way to make sure that this is compatible with the trait structure.
 			if err := fieldpath.Pave(t.UnstructuredContent()).SetValue("spec.workloadRef", ref); err != nil {
 				return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
 			}
