@@ -3,6 +3,5 @@ kind: TraitDefinition
 metadata:
   name: manualscalertraits.core.oam.dev
 spec:
-  createRevision: false
   definitionRef:
     name: manualscalertraits.core.oam.dev

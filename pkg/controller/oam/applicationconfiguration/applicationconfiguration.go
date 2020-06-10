@@ -22,14 +22,13 @@ import (
 	"strings"
 	"time"
 
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
@@ -240,10 +239,6 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 type Workload struct {
 	// ComponentName that produced this workload.
 	ComponentName string
-
-	// +optional
-	// RevisionName of current Component
-	RevisionName string
 
 	// A Workload object.
 	Workload *unstructured.Unstructured

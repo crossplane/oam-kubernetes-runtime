@@ -82,7 +82,7 @@ type TraitDefinitionSpec struct {
 
 	// Revision tells whether a trait is aware of component revision
 	// +optional
-	CreateRevision bool `json:"createRevision"`
+	CreateRevision bool `json:"createRevision,omitempty"`
 
 	// AppliesToWorkloads specifies the list of workload kinds this trait
 	// applies to. Workload kinds are specified in kind.group/version format,

@@ -37,3 +37,16 @@ func TestComponentHandler(t *testing.T) {
 	instance.Create(evt, q)
 
 }
+
+func TestConstructExtract(t *testing.T) {
+	tests := []string{"tam1", "test-comp", "xx", "tt-x-x-c"}
+	for _, componentName := range tests {
+		for i := 0; i < 30; i++ {
+			revisionName := ConstructRevisionName(componentName)
+			got := ExtractComponentName(revisionName)
+			if got != componentName {
+				t.Errorf("want to get %s from %s but got %s", componentName, revisionName, got)
+			}
+		}
+	}
+}

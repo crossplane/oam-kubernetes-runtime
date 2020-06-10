@@ -5,18 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/rs/xid"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
-
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -49,6 +49,7 @@ func (c *ComponentHandler) Update(evt event.UpdateEvent, q workqueue.RateLimitin
 
 // Delete implements EventHandler
 func (c *ComponentHandler) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+	// controllerRevision will be deleted by ownerReference mechanism
 	for _, req := range c.getRelatedAppConfig(evt.Meta) {
 		q.Add(req)
 	}
@@ -106,6 +107,11 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 	return true, oldRev.Revision + 1
 }
 
+func newTrue() *bool {
+	b := true
+	return &b
+}
+
 func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtime.Object) {
 	curComp := obj.(*v1alpha2.Component)
 	diff, newRevision := c.IsRevisionDiff(mt, curComp)
@@ -113,15 +119,23 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 		// No difference, no need to create new revision.
 		return
 	}
-	// hash suffix char set is (0-9, a-v)
-	revisionName := mt.GetName() + "-" + xid.NewWithTime(time.Now()).String()
+	revisionName := ConstructRevisionName(mt.GetName())
 	// set annotation to component
 	revision := appsv1.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: revisionName,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: v1alpha2.SchemeGroupVersion.String(),
+					Kind:       v1alpha2.ComponentKind,
+					Name:       curComp.Name,
+					UID:        curComp.UID,
+					Controller: newTrue(),
+				},
+			},
 		},
 		Revision: newRevision,
-		Data:     runtime.RawExtension{Object: obj},
+		Data:     runtime.RawExtension{Object: curComp},
 	}
 	_, err := c.appsClient.ControllerRevisions(mt.GetNamespace()).Create(context.Background(), &revision, metav1.CreateOptions{})
 	if err != nil {
@@ -134,4 +148,17 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 		c.l.Info(fmt.Sprintf("update component status latestRevision %s err %v", revisionName, err), "componentName", mt.GetName())
 		return
 	}
+	c.l.Info(fmt.Sprintf("ControllerRevision %s created", revisionName))
+}
+
+// ConstructRevisionName will generate revisionName from componentName
+// hash suffix char set added to componentName is (0-9, a-v)
+func ConstructRevisionName(componentName string) string {
+	return componentName + "-" + xid.NewWithTime(time.Now()).String()
+}
+
+// ExtractComponentName will extract componentName from revisionName
+func ExtractComponentName(revisionName string) string {
+	splits := strings.Split(revisionName, "-")
+	return strings.Join(splits[0:len(splits)-1], "-")
 }

@@ -21,16 +21,16 @@ import (
 	"encoding/json"
 	"strings"
 
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
-
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	addon "github.com/crossplane/oam-controllers/pkg/oam/util"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
@@ -86,8 +86,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 	for i, acc := range ac.Spec.Components {
 
 		if acc.RevisionName != "" {
-			splits := strings.Split(acc.RevisionName, "-")
-			acc.ComponentName = strings.Join(splits[0:len(splits)-1], "-")
+			acc.ComponentName = ExtractComponentName(acc.RevisionName)
 		}
 		c, err := r.getComponent(ctx, acc, ac.GetNamespace())
 		if err != nil {
@@ -108,43 +107,55 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		w.SetNamespace(ac.GetNamespace())
 
 		traits := make([]unstructured.Unstructured, len(acc.Traits))
-		traitDefs := make([]v1alpha2.TraitDefinition, len(acc.Traits))
+		traitDefs := make([]*v1alpha2.TraitDefinition, len(acc.Traits))
 		for i, ct := range acc.Traits {
 			t, err := r.trait.Render(ct.Trait.Raw)
 			if err != nil {
 				return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
 			}
 
-			// Set metadata name for `Trait` if the metadata name is NOT set.
-			if t.GetName() == "" {
-				t.SetName(acc.ComponentName)
-			}
-
-			t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-			t.SetNamespace(ac.GetNamespace())
+			setTraitProperties(t, acc.ComponentName, ac.GetNamespace(), ref)
 
 			traits[i] = *t
 
-			traitDefinitionName := getCRDName(t)
-			var traitDef v1alpha2.TraitDefinition
-			err = r.client.Get(ctx, types.NamespacedName{
-				Name: traitDefinitionName,
-			}, &traitDef)
+			traitDef, err := r.getTraitDefinition(ctx, t)
 			if err != nil {
-				return nil, errors.Wrapf(err, errFmtGetTraitDefinition, traitDefinitionName)
+				return nil, err
 			}
 			traitDefs = append(traitDefs, traitDef)
 		}
 		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 			return nil, err
 		}
-		workloads[i] = Workload{ComponentName: acc.ComponentName, RevisionName: acc.RevisionName, Workload: w, Traits: traits}
+		workloads[i] = Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}
 	}
 	return workloads, nil
 }
 
+func setTraitProperties(t *unstructured.Unstructured, componentName, namespace string, ref *metav1.OwnerReference) {
+	// Set metadata name for `Trait` if the metadata name is NOT set.
+	if t.GetName() == "" {
+		t.SetName(componentName)
+	}
+
+	t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+	t.SetNamespace(namespace)
+}
+
+func (r *components) getTraitDefinition(ctx context.Context, t *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
+	traitDefinitionName := getCRDName(t)
+	traitDef := &v1alpha2.TraitDefinition{}
+	err := r.client.Get(ctx, types.NamespacedName{
+		Name: traitDefinitionName,
+	}, traitDef)
+	if err != nil {
+		return nil, errors.Wrapf(err, errFmtGetTraitDefinition, traitDefinitionName)
+	}
+	return traitDef, nil
+}
+
 // SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
-func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
+func SetWorkloadInstanceName(traitDefs []*v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
 	//Don't override the specified name
 	if w.GetName() != "" {
 		return nil
@@ -166,7 +177,7 @@ func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructur
 }
 
 // IsCreateRevision will check if any trait has createRevision flag, the appconfig should create a new workload instance
-func IsCreateRevision(traitDefs []v1alpha2.TraitDefinition) bool {
+func IsCreateRevision(traitDefs []*v1alpha2.TraitDefinition) bool {
 	for _, td := range traitDefs {
 		if td.Spec.CreateRevision {
 			return true
@@ -176,14 +187,12 @@ func IsCreateRevision(traitDefs []v1alpha2.TraitDefinition) bool {
 }
 
 func getCRDName(u *unstructured.Unstructured) string {
-	apiVersion := u.GetAPIVersion()
-	kind := u.GetKind()
-	apis := strings.Split(apiVersion, "/")
-	if len(apis) < 2 {
-		return ""
+	group, _ := addon.ApiVersion2GroupVersion(u.GetAPIVersion())
+	resources := []string{addon.Kind2Resource(u.GetKind())}
+	if group != "" {
+		resources = append(resources, group)
 	}
-	// TODO(wonderflow) How could we find get specific crd name from CR object?
-	return strings.ToLower(kind) + "s." + apis[0]
+	return strings.Join(resources, ".")
 }
 
 func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, error) {
