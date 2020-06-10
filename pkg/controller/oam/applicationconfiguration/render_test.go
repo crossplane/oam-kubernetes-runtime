@@ -479,8 +479,8 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 		ac  *v1alpha2.ApplicationConfiguration
 	}
 	type want struct {
-		w   []Workload
-		err error
+		w []Workload
+		// err error
 	}
 	cases := map[string]struct {
 		reason string
@@ -534,8 +534,8 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _ := r.Render(tc.args.ctx, tc.args.ac)
-			if got == nil || got[0].Traits[0].GetName() != componentName {
-				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT" +
+			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].GetName() != componentName {
+				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
 					"automatically set.")
 			}
 		})
