@@ -442,3 +442,102 @@ func TestResolveParams(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderTraitWithoutMetadataName(t *testing.T) {
+	namespace := "ns"
+	acName := "coolappconfig"
+	acUID := types.UID("definitely-a-uuid")
+	componentName := "coolcomponent"
+	workloadName := "coolworkload"
+
+	ac := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      acName,
+			UID:       acUID,
+		},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{
+				{
+					ComponentName: componentName,
+					Traits:        []v1alpha2.ComponentTrait{{}},
+				},
+			},
+		},
+	}
+
+	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
+
+	type fields struct {
+		client   client.Reader
+		params   ParameterResolver
+		workload ResourceRenderer
+		trait    ResourceRenderer
+	}
+	type args struct {
+		ctx context.Context
+		ac  *v1alpha2.ApplicationConfiguration
+	}
+	type want struct {
+		w   []Workload
+		err error
+	}
+	cases := map[string]struct {
+		reason string
+		fields fields
+		args   args
+		want   want
+	}{
+		"Success": {
+			reason: "One workload and one trait should successfully be rendered",
+			fields: fields{
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
+				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+					return nil, nil
+				}),
+				workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					w := &unstructured.Unstructured{}
+					w.SetName(workloadName)
+					return w, nil
+				}),
+				trait: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					t := &unstructured.Unstructured{}
+					return t, nil
+				}),
+			},
+			args: args{ac: ac},
+			want: want{
+				w: []Workload{
+					{
+						ComponentName: componentName,
+						Workload: func() *unstructured.Unstructured {
+							w := &unstructured.Unstructured{}
+							w.SetNamespace(namespace)
+							w.SetName(workloadName)
+							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							return w
+						}(),
+						Traits: []unstructured.Unstructured{
+							func() unstructured.Unstructured {
+								t := &unstructured.Unstructured{}
+								t.SetNamespace(namespace)
+								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								return *t
+							}(),
+						},
+					},
+				},
+			},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			got, _ := r.Render(tc.args.ctx, tc.args.ac)
+			if got == nil || got[0].Traits[0].GetName() != componentName {
+				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT" +
+					"automatically set.")
+			}
+		})
+	}
+}
