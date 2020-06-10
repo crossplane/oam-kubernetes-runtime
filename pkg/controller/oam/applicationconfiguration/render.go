@@ -102,6 +102,11 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 				return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
 			}
 
+			// Set metadata name for `Trait` if the metadata name is NOT set.
+			if t.GetName() == "" {
+				t.SetName(acc.ComponentName)
+			}
+
 			t.SetOwnerReferences([]metav1.OwnerReference{*ref})
 			t.SetNamespace(ac.GetNamespace())
 
