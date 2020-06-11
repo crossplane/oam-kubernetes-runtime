@@ -66,8 +66,12 @@ func (a *workloads) Apply(ctx context.Context, w []Workload, ao ...resource.Appl
 				Name:       wl.Workload.GetName(),
 			}
 			// TODO(rz): Need to find a way to make sure that this is compatible with the trait structure.
-			if err := fieldpath.Pave(t.UnstructuredContent()).SetValue("spec.workloadRef", ref); err != nil {
-				return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
+			for k, _ := range t.UnstructuredContent()["spec"].(map[string]interface {}) {
+				if k == "workloadRef" {
+					if err := fieldpath.Pave(t.UnstructuredContent()).SetValue("spec.workloadRef", ref); err != nil {
+						return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
+					}
+				}
 			}
 
 			if err := a.client.Apply(ctx, t, ao...); err != nil {
