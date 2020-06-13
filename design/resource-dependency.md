@@ -97,6 +97,12 @@ In OAM, we model EtcdCluster as Component and EtcdBackup as Trait.
 However, the EtcdBackup depends on the connection secret specified in `status.connSecret` field of EtcdCluster.
 In other words, the EtcdBackup trait depends on EtcdCluster component.
 
+### 6. Ingress after component
+
+We have an ingress implementation that requires the microservice component must be setup before applying ingress entry.
+In this case, the ingress trait should only be created after the component is ready.
+
+
 ## Proposal
 
 The overall idea is to have each resource specify data inputs coming from data outputs (i.e. other resources' fields).
@@ -292,7 +298,7 @@ In this section we are providing more solution examples for dependency use cases
             fieldPath: "status.connSecret"
     ```
 
-2. Service binding trait.
+2. Service binding trait must start before component.
 
     ApplicationConfiguration :
 
@@ -321,3 +327,4 @@ In this section we are providing more solution examples for dependency use cases
             - name: my-secret-binding
               fieldPath: status.ready
     ```
+
