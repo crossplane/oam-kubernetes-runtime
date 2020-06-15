@@ -14,7 +14,7 @@ The functionality of this library can be demonstrated with the following steps:
 
 * Fork and clone this project
 ```shell script
-git clone https://github.com/xxxxxx/oam-kubernetes-runtime.git
+git clone git@github.com:crossplane/oam-kubernetes-runtime.git
 ```
 
 * Build the library 
