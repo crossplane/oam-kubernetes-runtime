@@ -93,6 +93,14 @@ var (
 	ManualScalerTraitGroupVersionKind = SchemeGroupVersion.WithKind(ManualScalerTraitKind)
 )
 
+// HealthScope type metadata.
+var (
+	HealthScopeKind             = reflect.TypeOf(HealthScope{}).Name()
+	HealthScopeGroupKind        = schema.GroupKind{Group: Group, Kind: HealthScopeKind}.String()
+	HealthScopeKindAPIVersion   = HealthScopeKind + "." + SchemeGroupVersion.String()
+	HealthScopeGroupVersionKind = SchemeGroupVersion.WithKind(HealthScopeKind)
+)
+
 func init() {
 	SchemeBuilder.Register(&WorkloadDefinition{}, &WorkloadDefinitionList{})
 	SchemeBuilder.Register(&TraitDefinition{}, &TraitDefinitionList{})
@@ -101,4 +109,5 @@ func init() {
 	SchemeBuilder.Register(&ApplicationConfiguration{}, &ApplicationConfigurationList{})
 	SchemeBuilder.Register(&ContainerizedWorkload{}, &ContainerizedWorkloadList{})
 	SchemeBuilder.Register(&ManualScalerTrait{}, &ManualScalerTraitList{})
+	SchemeBuilder.Register(&HealthScope{}, &HealthScopeList{})
 }

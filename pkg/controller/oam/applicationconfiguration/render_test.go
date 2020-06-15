@@ -217,6 +217,7 @@ func TestRenderComponents(t *testing.T) {
 								return *t
 							}(),
 						},
+						Scopes: []unstructured.Unstructured{},
 					},
 				},
 			},
@@ -261,6 +262,7 @@ func TestRenderComponents(t *testing.T) {
 								return *t
 							}(),
 						},
+						Scopes: []unstructured.Unstructured{},
 					},
 				},
 			},
@@ -314,6 +316,7 @@ func TestRenderComponents(t *testing.T) {
 								return *t
 							}(),
 						},
+						Scopes: []unstructured.Unstructured{},
 					},
 				},
 			},
