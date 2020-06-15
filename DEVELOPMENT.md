@@ -12,7 +12,7 @@ contributing to `oam-kubernetes-runtime` or build a PoC (Proof of Concept).
 
 The functionality of this library can be demonstrated with the following steps:
 
-* Fork and clone this project
+* Clone this project
 ```shell script
 git clone git@github.com:crossplane/oam-kubernetes-runtime.git
 ```
