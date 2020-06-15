@@ -81,4 +81,4 @@ Before make a PR, please:
 
 ## Clean up
 
-Delete all crds by `kubectl delete -f crds/` and other rouses you created.
+Delete all crds by `kubectl delete -f crds/` and other resources you created.
