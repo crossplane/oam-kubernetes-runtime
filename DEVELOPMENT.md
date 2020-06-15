@@ -41,7 +41,7 @@ Make changes and run the following to test it.
 If you only change code under [core apis](./apis/core), remember to
 regenerate crds mainifests as the step above.
 
-## Verification
+## Run a simple and basic workflow locally
 You can start running OAM Kubernetes runtime to verify your chanes.
 * Run OAM sample controller
 ```
