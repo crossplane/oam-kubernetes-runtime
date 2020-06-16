@@ -15,7 +15,7 @@ In addition, we created this library with the following goals in mind
  Kubernetes platform builders.
 
 ## Getting started
-Check out [DEVELOPMENT.md](./DEVELOPMENT.md)
+Check out [DEVELOPMENT.md](./DEVELOPMENT.md) to see how to develop with OAM Kubernetes runtime
 
 ## Community, discussion, contribution
 You can reach the maintainers of this project at:
