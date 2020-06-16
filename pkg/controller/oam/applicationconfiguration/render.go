@@ -88,7 +88,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		if acc.RevisionName != "" {
 			acc.ComponentName = ExtractComponentName(acc.RevisionName)
 		}
-		c, err := r.getComponent(ctx, acc, ac.GetNamespace())
+		c, componentRevision, err := r.getComponent(ctx, acc, ac.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
@@ -107,7 +107,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		w.SetNamespace(ac.GetNamespace())
 
 		traits := make([]unstructured.Unstructured, len(acc.Traits))
-		traitDefs := make([]*v1alpha2.TraitDefinition, len(acc.Traits))
+		traitDefs := make([]v1alpha2.TraitDefinition, len(acc.Traits))
 		for i, ct := range acc.Traits {
 			t, err := r.trait.Render(ct.Trait.Raw)
 			if err != nil {
@@ -127,7 +127,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 			return nil, err
 		}
-		workloads[i] = Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}
+		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevision: componentRevision, Workload: w, Traits: traits}
 	}
 	return workloads, nil
 }
@@ -142,27 +142,27 @@ func setTraitProperties(t *unstructured.Unstructured, componentName, namespace s
 	t.SetNamespace(namespace)
 }
 
-func (r *components) getTraitDefinition(ctx context.Context, t *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
+func (r *components) getTraitDefinition(ctx context.Context, t *unstructured.Unstructured) (v1alpha2.TraitDefinition, error) {
 	traitDefinitionName := getCRDName(t)
-	traitDef := &v1alpha2.TraitDefinition{}
+	traitDef := v1alpha2.TraitDefinition{}
 	err := r.client.Get(ctx, types.NamespacedName{
 		Name: traitDefinitionName,
-	}, traitDef)
+	}, &traitDef)
 	if err != nil {
-		return nil, errors.Wrapf(err, errFmtGetTraitDefinition, traitDefinitionName)
+		return traitDef, errors.Wrapf(err, errFmtGetTraitDefinition, traitDefinitionName)
 	}
 	return traitDef, nil
 }
 
 // SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
-func SetWorkloadInstanceName(traitDefs []*v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
+func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
 	//Don't override the specified name
 	if w.GetName() != "" {
 		return nil
 	}
 	pv := fieldpath.Pave(w.Object)
-	if IsCreateRevision(traitDefs) {
-		// if trait aware revision, use revisionName as workload name
+	if IsRevisionEnabled(traitDefs) {
+		// if revisionEnabled, use revisionName as workload name
 		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision); err != nil {
 			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
 		}
@@ -176,10 +176,10 @@ func SetWorkloadInstanceName(traitDefs []*v1alpha2.TraitDefinition, w *unstructu
 	return nil
 }
 
-// IsCreateRevision will check if any trait has createRevision flag, the appconfig should create a new workload instance
-func IsCreateRevision(traitDefs []*v1alpha2.TraitDefinition) bool {
+// IsRevisionEnabled will check if any trait has createRevision flag, the appconfig should create a new workload instance
+func IsRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
 	for _, td := range traitDefs {
-		if td.Spec.CreateRevision {
+		if td.Spec.RevisionEnabled {
 			return true
 		}
 	}
@@ -195,24 +195,23 @@ func getCRDName(u *unstructured.Unstructured) string {
 	return strings.Join(resources, ".")
 }
 
-func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, error) {
+func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
 	c := &v1alpha2.Component{}
 	if acc.RevisionName != "" {
 		revision, err := r.appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
 		if err != nil {
-			return nil, errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
+			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
 		}
 		if err := json.Unmarshal(revision.Data.Raw, c); err != nil {
-			return nil, errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
+			return nil, "", errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
 		}
-		c.Status.LatestRevision = acc.RevisionName
-		return c, nil
+		return c, acc.RevisionName, nil
 	}
 	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
 	if err := r.client.Get(ctx, nn, c); err != nil {
-		return nil, errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+		return nil, "", errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
 	}
-	return c, nil
+	return c, c.Status.LatestRevision, nil
 }
 
 // A ResourceRenderer renders a Kubernetes-compliant YAML resource into an

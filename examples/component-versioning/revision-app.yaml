@@ -1,0 +1,13 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - revisionName: example-component-brkaek3ipt3d60vfo4u0
+      traits:
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            spec:
+              replicaCount: 3

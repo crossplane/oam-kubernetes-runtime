@@ -82,7 +82,7 @@ type TraitDefinitionSpec struct {
 
 	// Revision tells whether a trait is aware of component revision
 	// +optional
-	CreateRevision bool `json:"createRevision,omitempty"`
+	RevisionEnabled bool `json:"revisionEnabled,omitempty"`
 
 	// AppliesToWorkloads specifies the list of workload kinds this trait
 	// applies to. Workload kinds are specified in kind.group/version format,
@@ -303,6 +303,9 @@ type WorkloadTrait struct {
 type WorkloadStatus struct {
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
+
+	//ComponentRevision of current component
+	ComponentRevision string `json:"componentRevision,omitempty"`
 
 	// Reference to a workload created by an ApplicationConfiguration.
 	Reference runtimev1alpha1.TypedReference `json:"workloadRef,omitempty"`
