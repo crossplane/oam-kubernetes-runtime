@@ -14,7 +14,7 @@ In addition, we created this library with the following goals in mind
 * The wide adoption of this library can facilitate workload/trait interoperability among OAM
  Kubernetes platform builders.
 
-## To start developing OAM Kubernetes runtime
+## Getting started
 Check out [DEVELOPMENT.md](./DEVELOPMENT.md)
 
 ## Community, discussion, contribution
