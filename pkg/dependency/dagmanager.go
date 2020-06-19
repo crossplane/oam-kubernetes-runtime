@@ -26,26 +26,28 @@ type DAGManager interface {
 	// It should be called in initialization stage.
 	Start(context.Context)
 
+	// AddDAG adds a dag of an AppConfig into DAGManager.
 	AddDAG(appKey string, dag *DAG)
 }
 
 // SetupGlobalDAGManager sets up the global dagManager.
 func SetupGlobalDAGManager(l logging.Logger, c client.Client) {
-	GlobalManager = &dagManager{
+	GlobalManager = &dagManagerImpl{
 		client:  c,
 		log:     l.WithValues("manager", "dag"),
 		app2dag: make(map[string]*DAG),
 	}
 }
 
-type dagManager struct {
-	mu      sync.Mutex
-	log     logging.Logger
-	client  client.Client
+type dagManagerImpl struct {
+	mu     sync.Mutex
+	log    logging.Logger
+	client client.Client
+
 	app2dag map[string]*DAG
 }
 
-func (dm *dagManager) Start(ctx context.Context) {
+func (dm *dagManagerImpl) Start(ctx context.Context) {
 	for {
 		select {
 		case <-time.After(5 * time.Second):
@@ -56,12 +58,12 @@ func (dm *dagManager) Start(ctx context.Context) {
 	}
 }
 
-func (dm *dagManager) scan(ctx context.Context) {
+func (dm *dagManagerImpl) scan(ctx context.Context) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
 	for app, dag := range dm.app2dag {
-		for sourceName, source := range dag.sources {
+		for sourceName, source := range dag.Sources {
 			// TODO: avoid repeating processing the same source by marking done in AppConfig status
 			val, err := dm.checkSourceReady(ctx, source)
 			if err != nil {
@@ -72,7 +74,7 @@ func (dm *dagManager) scan(ctx context.Context) {
 				continue
 			}
 
-			for sinkName, sink := range dag.sinks[sourceName] {
+			for sinkName, sink := range dag.Sinks[sourceName] {
 				dm.log.Debug("triggering sinks", "app", app, "source", sourceName, "sink", sinkName)
 				err := dm.trigger(ctx, sink, val)
 				if err != nil {
@@ -80,17 +82,17 @@ func (dm *dagManager) scan(ctx context.Context) {
 				}
 			}
 
-			delete(dag.sources, sourceName)
+			delete(dag.Sources, sourceName)
 		}
 
-		if len(dag.sources) == 0 {
+		if len(dag.Sources) == 0 {
 			dm.log.Debug("all dependencies satisfied", "app", app)
 			delete(dm.app2dag, app)
 		}
 	}
 }
 
-func (dm *dagManager) checkSourceReady(ctx context.Context, s *Source) (string, error) {
+func (dm *dagManagerImpl) checkSourceReady(ctx context.Context, s *Source) (string, error) {
 	// TODO: avoid repeating check by marking ready in AppConfig status
 	obj := s.ObjectRef
 	key := types.NamespacedName{
@@ -114,7 +116,7 @@ func (dm *dagManager) checkSourceReady(ctx context.Context, s *Source) (string, 
 	return val, nil
 }
 
-func (dm *dagManager) trigger(ctx context.Context, s *Sink, val string) error {
+func (dm *dagManagerImpl) trigger(ctx context.Context, s *Sink, val string) error {
 	// TODO: avoid repeating processing the same sink by marking done in AppConfig status
 	obj := s.Object
 	key := types.NamespacedName{
@@ -144,7 +146,7 @@ func (dm *dagManager) trigger(ctx context.Context, s *Sink, val string) error {
 	return errors.Wrap(dm.client.Create(ctx, &unstructured.Unstructured{Object: paved.UnstructuredContent()}), "create sink object failed")
 }
 
-func (dm *dagManager) AddDAG(appKey string, dag *DAG) {
+func (dm *dagManagerImpl) AddDAG(appKey string, dag *DAG) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
