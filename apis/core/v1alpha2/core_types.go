@@ -236,6 +236,12 @@ type ComponentTrait struct {
 	// +kubebuilder:validation:EmbeddedResource
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Trait runtime.RawExtension `json:"trait"`
+
+	// DataOutputs specify the data output sources from this trait.
+	DataOutputs []DataOutput `json:"dataOutputs,omitempty"`
+
+	// DataInputs specify the data input sinks into this trait.
+	DataInputs []DataInput `json:"dataInputs,omitempty"`
 }
 
 // A ComponentScope specifies a scope in which a component should exist.
@@ -255,6 +261,12 @@ type ApplicationConfigurationComponent struct {
 	// parameters. Any parameter required by the component must be specified.
 	// +optional
 	ParameterValues []ComponentParameterValue `json:"parameterValues,omitempty"`
+
+	// DataOutputs specify the data output sources from this component.
+	DataOutputs []DataOutput `json:"dataOutputs,omitempty"`
+
+	// DataInputs specify the data input sinks into this component.
+	DataInputs []DataInput `json:"dataInputs,omitempty"`
 
 	// Traits of the specified component.
 	// +optional
@@ -323,4 +335,27 @@ type ApplicationConfigurationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ApplicationConfiguration `json:"items"`
+}
+
+// DataOutput specifies a data output source from an object.
+type DataOutput struct {
+	// Name is the unique name of a DataOutput in an ApplicationConfiguration.
+	Name string `json:"name,omitempty"`
+
+	// FieldPath referrs to the value of an object's field.
+	FieldPath string `json:"fieldPath,omitempty"`
+}
+
+// DataInput specifies a data input sink to an object.
+type DataInput struct {
+	// ValueFrom specifies the value source.
+	ValueFrom DataInputValueFrom `json:"valueFrom,omitempty"`
+
+	// ToFieldPaths specifies the field paths of an object to fill passed value.
+	ToFieldPaths []string `json:"toFieldPaths,omitempty"`
+}
+
+// DataInputValueFrom specifies the value source for a data input.
+type DataInputValueFrom struct {
+	DataOutputName string `json:"dataOutputName,omitempty"`
 }

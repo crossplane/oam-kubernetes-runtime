@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +31,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/dependency"
 )
 
 // Render error strings.
@@ -73,8 +75,10 @@ type components struct {
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
 	workloads := make([]Workload, len(ac.Spec.Components))
-	for i, acc := range ac.Spec.Components {
 
+	dag := dependency.NewDAG()
+
+	for i, acc := range ac.Spec.Components {
 		c := &v1alpha2.Component{}
 		nn := types.NamespacedName{Namespace: ac.GetNamespace(), Name: acc.ComponentName}
 		if err := r.client.Get(ctx, nn, c); err != nil {
@@ -95,8 +99,22 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 		w.SetNamespace(ac.GetNamespace())
 
+		for _, out := range acc.DataOutputs {
+			r := &corev1.ObjectReference{
+				APIVersion: w.GetAPIVersion(),
+				Kind:       w.GetKind(),
+				Name:       w.GetName(),
+				Namespace:  w.GetNamespace(),
+				FieldPath:  out.FieldPath,
+			}
+			dag.AddSource(out.Name, r)
+		}
+		for _, in := range acc.DataInputs {
+			dag.AddSink(in.ValueFrom.DataOutputName, w, in.ToFieldPaths)
+		}
+
 		traits := make([]unstructured.Unstructured, len(acc.Traits))
-		for i, ct := range acc.Traits {
+		for _, ct := range acc.Traits {
 			t, err := r.trait.Render(ct.Trait.Raw)
 			if err != nil {
 				return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
@@ -110,11 +128,33 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 			t.SetOwnerReferences([]metav1.OwnerReference{*ref})
 			t.SetNamespace(ac.GetNamespace())
 
-			traits[i] = *t
+			for _, out := range ct.DataOutputs {
+				r := &corev1.ObjectReference{
+					APIVersion: t.GetAPIVersion(),
+					Kind:       t.GetKind(),
+					Name:       t.GetName(),
+					Namespace:  t.GetNamespace(),
+					FieldPath:  out.FieldPath,
+				}
+				dag.AddSource(out.Name, r)
+			}
+			for _, in := range ct.DataInputs {
+				dag.AddSink(in.ValueFrom.DataOutputName, t, in.ToFieldPaths)
+			}
+
+			// Only create trait if it doesn't depend on anything.
+			if len(ct.DataInputs) == 0 {
+				traits = append(traits, *t)
+			}
 		}
 
-		workloads[i] = Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}
+		// Only create workload if it doesn't depend on anything.
+		if len(acc.DataInputs) == 0 {
+			workloads[i] = Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}
+		}
 	}
+
+	dependency.GlobalManager.AddDAG(ac.GetNamespace()+"/"+ac.GetName(), dag)
 	return workloads, nil
 }
 
