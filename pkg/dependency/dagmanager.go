@@ -16,6 +16,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 )
 
+// GlobalManager is the singleton instance of DAGManager.
 var GlobalManager DAGManager
 
 // DAGManager manages the dependency graphs (DAG) of all AppConfigs.

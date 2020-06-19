@@ -342,7 +342,7 @@ type DataOutput struct {
 	// Name is the unique name of a DataOutput in an ApplicationConfiguration.
 	Name string `json:"name,omitempty"`
 
-	// FieldPath referrs to the value of an object's field.
+	// FieldPath refers to the value of an object's field.
 	FieldPath string `json:"fieldPath,omitempty"`
 }
 

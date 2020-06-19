@@ -74,88 +74,97 @@ type components struct {
 }
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-	workloads := make([]Workload, len(ac.Spec.Components))
+	workloads := make([]Workload, 0, len(ac.Spec.Components))
 
 	dag := dependency.NewDAG()
-
-	for i, acc := range ac.Spec.Components {
-		c := &v1alpha2.Component{}
-		nn := types.NamespacedName{Namespace: ac.GetNamespace(), Name: acc.ComponentName}
-		if err := r.client.Get(ctx, nn, c); err != nil {
-			return nil, errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
-		}
-
-		p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
+	for _, acc := range ac.Spec.Components {
+		w, err := r.renderComponent(ctx, acc, ac, dag)
 		if err != nil {
-			return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
+			return nil, err
 		}
-
-		w, err := r.workload.Render(c.Spec.Workload.Raw, p...)
-		if err != nil {
-			return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
-		}
-
-		ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
-		w.SetOwnerReferences([]metav1.OwnerReference{*ref})
-		w.SetNamespace(ac.GetNamespace())
-
-		for _, out := range acc.DataOutputs {
-			r := &corev1.ObjectReference{
-				APIVersion: w.GetAPIVersion(),
-				Kind:       w.GetKind(),
-				Name:       w.GetName(),
-				Namespace:  w.GetNamespace(),
-				FieldPath:  out.FieldPath,
-			}
-			dag.AddSource(out.Name, r)
-		}
-		for _, in := range acc.DataInputs {
-			dag.AddSink(in.ValueFrom.DataOutputName, w, in.ToFieldPaths)
-		}
-
-		traits := make([]unstructured.Unstructured, len(acc.Traits))
-		for _, ct := range acc.Traits {
-			t, err := r.trait.Render(ct.Trait.Raw)
-			if err != nil {
-				return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
-			}
-
-			// Set metadata name for `Trait` if the metadata name is NOT set.
-			if t.GetName() == "" {
-				t.SetName(acc.ComponentName)
-			}
-
-			t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-			t.SetNamespace(ac.GetNamespace())
-
-			for _, out := range ct.DataOutputs {
-				r := &corev1.ObjectReference{
-					APIVersion: t.GetAPIVersion(),
-					Kind:       t.GetKind(),
-					Name:       t.GetName(),
-					Namespace:  t.GetNamespace(),
-					FieldPath:  out.FieldPath,
-				}
-				dag.AddSource(out.Name, r)
-			}
-			for _, in := range ct.DataInputs {
-				dag.AddSink(in.ValueFrom.DataOutputName, t, in.ToFieldPaths)
-			}
-
-			// Only create trait if it doesn't depend on anything.
-			if len(ct.DataInputs) == 0 {
-				traits = append(traits, *t)
-			}
-		}
-
-		// Only create workload if it doesn't depend on anything.
-		if len(acc.DataInputs) == 0 {
-			workloads[i] = Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}
+		if w != nil {
+			workloads = append(workloads, *w)
 		}
 	}
 
-	dependency.GlobalManager.AddDAG(ac.GetNamespace()+"/"+ac.GetName(), dag)
+	if dependency.GlobalManager != nil {
+		dependency.GlobalManager.AddDAG(ac.GetNamespace()+"/"+ac.GetName(), dag)
+	}
 	return workloads, nil
+}
+
+func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag *dependency.DAG) (*Workload, error) {
+	c := &v1alpha2.Component{}
+	nn := types.NamespacedName{Namespace: ac.GetNamespace(), Name: acc.ComponentName}
+	if err := r.client.Get(ctx, nn, c); err != nil {
+		return nil, errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+	}
+
+	p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
+	if err != nil {
+		return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
+	}
+
+	w, err := r.workload.Render(c.Spec.Workload.Raw, p...)
+	if err != nil {
+		return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
+	}
+
+	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
+	w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+	w.SetNamespace(ac.GetNamespace())
+
+	addDataOutputsToDAG(dag, acc.DataOutputs, w)
+	addDataInputsToDAG(dag, acc.DataInputs, w)
+
+	traits := make([]unstructured.Unstructured, 0, len(acc.Traits))
+	for _, ct := range acc.Traits {
+		t, err := r.trait.Render(ct.Trait.Raw)
+		if err != nil {
+			return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
+		}
+
+		// Set metadata name for `Trait` if the metadata name is NOT set.
+		if t.GetName() == "" {
+			t.SetName(acc.ComponentName)
+		}
+
+		t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+		t.SetNamespace(ac.GetNamespace())
+
+		addDataOutputsToDAG(dag, ct.DataOutputs, t)
+		addDataInputsToDAG(dag, ct.DataInputs, t)
+
+		// Only create trait if it doesn't depend on anything.
+		if len(ct.DataInputs) == 0 {
+			traits = append(traits, *t)
+		}
+	}
+
+	// Only create workload if it doesn't depend on anything.
+	if len(acc.DataInputs) == 0 {
+		return &Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}, nil
+	}
+	return nil, nil
+}
+
+func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *unstructured.Unstructured) {
+	for _, out := range outs {
+		r := &corev1.ObjectReference{
+			APIVersion: obj.GetAPIVersion(),
+			Kind:       obj.GetKind(),
+			Name:       obj.GetName(),
+			Namespace:  obj.GetNamespace(),
+			FieldPath:  out.FieldPath,
+		}
+		dag.AddSource(out.Name, r)
+	}
+}
+
+func addDataInputsToDAG(dag *dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured) {
+	for _, in := range ins {
+		dag.AddSink(in.ValueFrom.DataOutputName, obj, in.ToFieldPaths)
+	}
 }
 
 // A ResourceRenderer renders a Kubernetes-compliant YAML resource into an

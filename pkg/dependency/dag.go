@@ -27,6 +27,7 @@ type Sink struct {
 	ToFieldPaths []string
 }
 
+// NewDAG creates a fresh DAG.
 func NewDAG() *DAG {
 	return &DAG{
 		sources: make(map[string]*Source),
@@ -34,10 +35,12 @@ func NewDAG() *DAG {
 	}
 }
 
+// AddSource adds a data output source into the DAG.
 func (d *DAG) AddSource(sourceName string, ref *corev1.ObjectReference) {
 	d.sources[sourceName] = &Source{ObjectRef: ref}
 }
 
+// AddSink adds a data input sink into the DAG.
 func (d *DAG) AddSink(sourceName string, obj *unstructured.Unstructured, toFieldPaths []string) {
 	m, ok := d.sinks[sourceName]
 	if !ok {
