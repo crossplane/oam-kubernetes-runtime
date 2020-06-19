@@ -216,10 +216,10 @@ spec:
               replicaCount: 3
 ```
 
-Assume we name it as `revision-app.yaml` and apply this AppConfig.
+Assume we name it as `component-mutable-app.yaml` and apply this AppConfig.
 
 ```shell script
-$ kubectl apply -f revision-app.yaml
+$ kubectl apply -f component-mutable-app.yaml
 applicationconfiguration.core.oam.dev/example-appconfig created
 ```
 
@@ -295,6 +295,16 @@ spec:
 ```
 
 So specify revisionName will let AppConfig use a fixed revision of component.
+
+
+Step 4. Clean the environment for next demo
+
+```shell script
+$ kubectl delete appconfig example-appconfig
+applicationconfiguration.core.oam.dev "example-appconfig" deleted
+$ kubectl delete component example-component
+component.core.oam.dev "example-component" deleted
+```
 
 ## Note
 

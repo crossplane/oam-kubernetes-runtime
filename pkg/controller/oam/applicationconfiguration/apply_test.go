@@ -80,7 +80,7 @@ func TestApplyWorkloads(t *testing.T) {
 				return nil
 			}),
 			args: args{w: []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}}},
-			want: errors.Wrapf(errBoom, errFmtApplyTrait, trait.GetName()),
+			want: errors.Wrapf(errBoom, errFmtApplyTrait, trait.GetKind(), trait.GetName()),
 		},
 		"Success": {
 			reason: "Applied workloads and traits should be returned as a set of UIDs",

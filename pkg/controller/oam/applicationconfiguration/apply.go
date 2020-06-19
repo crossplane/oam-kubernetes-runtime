@@ -30,7 +30,7 @@ import (
 const (
 	errFmtApplyWorkload  = "cannot apply workload %q"
 	errFmtSetWorkloadRef = "cannot set trait %q reference to %q"
-	errFmtApplyTrait     = "cannot apply trait %q"
+	errFmtApplyTrait     = "cannot apply trait %q %q"
 )
 
 // A WorkloadApplicator creates or updates workloads and their traits.
@@ -71,7 +71,7 @@ func (a *workloads) Apply(ctx context.Context, w []Workload, ao ...resource.Appl
 			}
 
 			if err := a.client.Apply(ctx, t, ao...); err != nil {
-				return errors.Wrapf(err, errFmtApplyTrait, t.GetName())
+				return errors.Wrapf(err, errFmtApplyTrait, t.GetKind(), t.GetName())
 			}
 		}
 	}

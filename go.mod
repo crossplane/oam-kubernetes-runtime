@@ -8,6 +8,7 @@ require (
 	github.com/google/go-cmp v0.4.0
 	github.com/pkg/errors v0.8.1
 	github.com/rs/xid v1.2.1
+	golang.org/x/tools v0.0.0-20200325010219-a49f79bcc224
 	k8s.io/api v0.18.2
 	k8s.io/apiextensions-apiserver v0.18.2
 	k8s.io/apimachinery v0.18.2
