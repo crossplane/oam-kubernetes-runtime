@@ -122,16 +122,18 @@ The overall idea is for the applicationConfiguration controller to fill critical
 in the workload and trait CR it emits. In addition, we will provide a helper library so that
 trait controller developers can locate the resources they need with a simple function call. 
 Here is the list of changes that we propose.
-1. Add an optional field called `oamAware` to the `traitDefinition` schema. The trait owner needs
- to declare that a trait relies on the OAM trait/workload interaction mechanism in its
- corresponding `traitDefinition`. In our example, the new trait definition would look like below.  
+1. Add an optional field called `nativeTrait` to the `traitDefinition` schema. This is for the trait
+ owner to declare that a trait is native to the OAM trait system instead of importing from an
+ existing operator. This field indicates that the trait owner can modify the trait's operator. It
+ implies that the trait relies on the OAM trait/workload interaction mechanism. In our example
+ , the trait definition would look like below.  
      ```yaml
        apiVersion: core.oam.dev/v1alpha2
        kind: TraitDefinition
        metadata:
          name: manualscalertraits.core.oam.dev
        spec:
-         oamAware: true
+         nativeTrait: true
          definitionRef:
            name: manualscalertraits.core.oam.dev
      ```
