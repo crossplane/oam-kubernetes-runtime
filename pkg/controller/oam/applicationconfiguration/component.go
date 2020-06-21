@@ -32,7 +32,10 @@ type ComponentHandler struct {
 
 // Create implements EventHandler
 func (c *ComponentHandler) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
-	c.createControllerRevision(evt.Meta, evt.Object)
+	if !c.createControllerRevision(evt.Meta, evt.Object) {
+		// No revision created, return
+		return
+	}
 	for _, req := range c.getRelatedAppConfig(evt.Meta) {
 		q.Add(req)
 	}
@@ -40,9 +43,12 @@ func (c *ComponentHandler) Create(evt event.CreateEvent, q workqueue.RateLimitin
 
 // Update implements EventHandler
 func (c *ComponentHandler) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
-	c.createControllerRevision(evt.MetaNew, evt.ObjectNew)
+	if !c.createControllerRevision(evt.MetaNew, evt.ObjectNew) {
+		// No revision created, return
+		return
+	}
 	//Note(wonderflow): MetaOld => MetaNew, requeue once is enough
-	for _, req := range c.getRelatedAppConfig(evt.MetaOld) {
+	for _, req := range c.getRelatedAppConfig(evt.MetaNew) {
 		q.Add(req)
 	}
 }
@@ -86,25 +92,39 @@ func (c *ComponentHandler) getRelatedAppConfig(object metav1.Object) []reconcile
 
 //IsRevisionDiff check whether there's any different between two component revision
 func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Component) (bool, int64) {
-	if curComp.Status.LatestRevision == "" {
-		return true, 1
+	if curComp.Status.LatestRevision == nil {
+		return true, 0
 	}
-	oldRev, err := c.appsClient.ControllerRevisions(mt.GetNamespace()).Get(context.Background(), curComp.Status.LatestRevision, metav1.GetOptions{})
+	oldRev, err := c.appsClient.ControllerRevisions(mt.GetNamespace()).Get(context.Background(), curComp.Status.LatestRevision.Name, metav1.GetOptions{})
 	if err != nil {
-		c.l.Info(fmt.Sprintf("get old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision, err), "componentName", mt.GetName())
-		// Note(wonderflow) Use generation as revision number when fail to get old revision
-		return true, mt.GetGeneration()
+		c.l.Info(fmt.Sprintf("get old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
+		return true, curComp.Status.LatestRevision.Revision
 	}
-	var oldComp v1alpha2.Component
-	err = json.Unmarshal(oldRev.Data.Raw, &oldComp)
+	oldComp, err := UnpackRevisionData(oldRev)
 	if err != nil {
-		c.l.Info(fmt.Sprintf("Unmarshal old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision, err), "componentName", mt.GetName())
-		return true, oldRev.Revision + 1
+		c.l.Info(fmt.Sprintf("Unmarshal old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
+		return true, oldRev.Revision
 	}
+
 	if reflect.DeepEqual(curComp.Spec, oldComp.Spec) {
-		return false, -1
+		return false, oldRev.Revision
 	}
-	return true, oldRev.Revision + 1
+	return true, oldRev.Revision
+}
+
+// UnpackRevisionData will unpack revision.Data to Component
+func UnpackRevisionData(rev *appsv1.ControllerRevision) (*v1alpha2.Component, error) {
+	var err error
+	if rev.Data.Object != nil {
+		comp, ok := rev.Data.Object.(*v1alpha2.Component)
+		if !ok {
+			return nil, fmt.Errorf("invalid type of revision %s, type should not be %v", rev.Name, reflect.TypeOf(rev.Data.Object))
+		}
+		return comp, nil
+	}
+	var comp v1alpha2.Component
+	err = json.Unmarshal(rev.Data.Raw, &comp)
+	return &comp, err
 }
 
 func newTrue() *bool {
@@ -112,13 +132,14 @@ func newTrue() *bool {
 	return &b
 }
 
-func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtime.Object) {
+func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtime.Object) bool {
 	curComp := obj.(*v1alpha2.Component)
-	diff, newRevision := c.IsRevisionDiff(mt, curComp)
+	diff, curRevision := c.IsRevisionDiff(mt, curComp)
 	if !diff {
 		// No difference, no need to create new revision.
-		return
+		return false
 	}
+	nextRevision := curRevision + 1
 	revisionName := ConstructRevisionName(mt.GetName())
 	// set annotation to component
 	revision := appsv1.ControllerRevision{
@@ -134,21 +155,25 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 				},
 			},
 		},
-		Revision: newRevision,
+		Revision: nextRevision,
 		Data:     runtime.RawExtension{Object: curComp},
 	}
 	_, err := c.appsClient.ControllerRevisions(mt.GetNamespace()).Create(context.Background(), &revision, metav1.CreateOptions{})
 	if err != nil {
 		c.l.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
-		return
+		return false
 	}
-	curComp.Status.LatestRevision = revisionName
+	curComp.Status.LatestRevision = &v1alpha2.Revision{
+		Name:     revisionName,
+		Revision: nextRevision,
+	}
 	err = c.client.Status().Update(context.Background(), curComp)
 	if err != nil {
 		c.l.Info(fmt.Sprintf("update component status latestRevision %s err %v", revisionName, err), "componentName", mt.GetName())
-		return
+		return false
 	}
 	c.l.Info(fmt.Sprintf("ControllerRevision %s created", revisionName))
+	return true
 }
 
 // ConstructRevisionName will generate revisionName from componentName

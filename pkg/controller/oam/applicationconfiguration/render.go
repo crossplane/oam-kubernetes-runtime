@@ -75,7 +75,7 @@ func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.Application
 
 type components struct {
 	client     client.Reader
-	appsClient *clientappv1.AppsV1Client
+	appsClient clientappv1.AppsV1Interface
 	params     ParameterResolver
 	workload   ResourceRenderer
 	trait      ResourceRenderer
@@ -88,7 +88,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		if acc.RevisionName != "" {
 			acc.ComponentName = ExtractComponentName(acc.RevisionName)
 		}
-		c, componentRevision, err := r.getComponent(ctx, acc, ac.GetNamespace())
+		c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 			return nil, err
 		}
-		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevision: componentRevision, Workload: w, Traits: traits}
+		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits}
 	}
 	return workloads, nil
 }
@@ -163,7 +163,7 @@ func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructur
 	pv := fieldpath.Pave(w.Object)
 	if IsRevisionEnabled(traitDefs) {
 		// if revisionEnabled, use revisionName as workload name
-		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision); err != nil {
+		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision.Name); err != nil {
 			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
 		}
 		return nil
@@ -197,21 +197,27 @@ func getCRDName(u *unstructured.Unstructured) string {
 
 func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
 	c := &v1alpha2.Component{}
+	var revisionName string
 	if acc.RevisionName != "" {
 		revision, err := r.appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
 		if err != nil {
 			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
 		}
-		if err := json.Unmarshal(revision.Data.Raw, c); err != nil {
+		c, err := UnpackRevisionData(revision)
+		if err != nil {
 			return nil, "", errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
 		}
-		return c, acc.RevisionName, nil
+		revisionName = acc.RevisionName
+		return c, revisionName, nil
 	}
 	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
 	if err := r.client.Get(ctx, nn, c); err != nil {
 		return nil, "", errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
 	}
-	return c, c.Status.LatestRevision, nil
+	if c.Status.LatestRevision != nil {
+		revisionName = c.Status.LatestRevision.Name
+	}
+	return c, revisionName, nil
 }
 
 // A ResourceRenderer renders a Kubernetes-compliant YAML resource into an

@@ -424,3 +424,9 @@ func TestEligible(t *testing.T) {
 		})
 	}
 }
+
+func TestIsRevisionWorkload(t *testing.T) {
+	if true != IsRevisionWorkload(v1alpha2.WorkloadStatus{ComponentName: "compName", Reference: runtimev1alpha1.TypedReference{Name: "compName-rev1"}}) {
+		t.Error("workloadName has componentName as prefix is revisionWorkload")
+	}
+}

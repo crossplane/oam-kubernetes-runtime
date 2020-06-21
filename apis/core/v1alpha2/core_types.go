@@ -198,11 +198,17 @@ type ComponentStatus struct {
 
 	// LatestRevision of component
 	// +optional
-	LatestRevision string `json:"latestRevision"`
+	LatestRevision *Revision `json:"latestRevision,omitempty"`
 
 	// TODO(negz): Maintain references to any ApplicationConfigurations that
 	// reference this component? Doing so would allow us to queue a reconcile
 	// for consuming ApplicationConfigurations when this Component changed.
+}
+
+// Revision has name and revision number
+type Revision struct {
+	Name     string `json:"name"`
+	Revision int64  `json:"revision"`
 }
 
 // +kubebuilder:object:root=true
@@ -304,8 +310,8 @@ type WorkloadStatus struct {
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
 
-	//ComponentRevision of current component
-	ComponentRevision string `json:"componentRevision,omitempty"`
+	//ComponentRevisionName of current component
+	ComponentRevisionName string `json:"componentRevisionName,omitempty"`
 
 	// Reference to a workload created by an ApplicationConfiguration.
 	Reference runtimev1alpha1.TypedReference `json:"workloadRef,omitempty"`

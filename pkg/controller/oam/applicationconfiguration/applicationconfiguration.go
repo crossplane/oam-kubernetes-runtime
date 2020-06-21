@@ -240,8 +240,8 @@ type Workload struct {
 	// ComponentName that produced this workload.
 	ComponentName string
 
-	//ComponentRevision of current component
-	ComponentRevision string
+	//ComponentRevisionName of current component
+	ComponentRevisionName string
 
 	// A Workload object.
 	Workload *unstructured.Unstructured
@@ -254,8 +254,8 @@ type Workload struct {
 // in the status of an ApplicationConfiguration.
 func (w Workload) Status() v1alpha2.WorkloadStatus {
 	acw := v1alpha2.WorkloadStatus{
-		ComponentName:     w.ComponentName,
-		ComponentRevision: w.ComponentRevision,
+		ComponentName:         w.ComponentName,
+		ComponentRevisionName: w.ComponentRevisionName,
 		Reference: runtimev1alpha1.TypedReference{
 			APIVersion: w.Workload.GetAPIVersion(),
 			Kind:       w.Workload.GetKind(),
