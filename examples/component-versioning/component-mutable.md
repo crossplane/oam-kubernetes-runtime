@@ -192,7 +192,7 @@ component.core.oam.dev/example-component created
 ```shell script
 $ kubectl get controllerrevisions.apps
 NAME                                     CONTROLLER                                 REVISION   AGE
-example-component-brkaek3ipt3d60vfo4u0   component.core.oam.dev/example-component   1          13s
+example-component-brk71b3ipt3d60vfo4sg   component.core.oam.dev/example-component   1          13s
 ``` 
 
 Step 2. Specify ControllerRevision in OAM AppConfig.
@@ -268,7 +268,7 @@ The controllerRevision was created.
 
 ```shell script
 NAME                                     CONTROLLER                                 REVISION   AGE
-example-component-brkaek3ipt3d60vfo4u0   component.core.oam.dev/example-component   1          29m
+example-component-brk71b3ipt3d60vfo4sg   component.core.oam.dev/example-component   1          29m
 example-component-brke6rbipt3d60vfo4ug   component.core.oam.dev/example-component   2          73s
 ```
 
@@ -308,5 +308,4 @@ component.core.oam.dev "example-component" deleted
 
 ## Note
 
-In this case, we use ContainerizedWorkload as example, for any other kind of workload,
-they are the same.
+In this case, we use ContainerizedWorkload as an example. The general rule applies to any type of workload.

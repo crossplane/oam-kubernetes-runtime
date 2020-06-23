@@ -30,7 +30,7 @@ spec:
     name: simplerollouttraits.extend.oam.dev
 ``` 
 
-You can notice that revisionEnabled flag is true.
+You can see that the  `revisionEnabled` flag is set to true.
 
 Step 1. Create OAM component
 
@@ -42,6 +42,28 @@ component.core.oam.dev/example-component created
 The first step is the same with [Component Mutable Demo](./component-mutable.md#ApplicationConfiguration-always-using-the-latest-component)
 
 Step 2. Create AppConfig
+
+In this example, we use SimpleRolloutTrait which has `revisionEnabled` to be true.
+
+```yaml
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig-rollout
+spec:
+  components:
+    - componentName: example-component
+      traits:
+        - trait:
+            apiVersion: extend.oam.dev/v1alpha2
+            kind: SimpleRolloutTrait
+            spec:
+              replica: 6
+              maxUnavailable: 2
+              batch: 2
+```
+
+Assume we name it as `versioning-demo-app.yaml` and apply this AppConfig.
 
 ```shell script
 $ kubectl apply -f examples/component-versioning/versioning-demo-app.yaml

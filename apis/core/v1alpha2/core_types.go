@@ -267,12 +267,12 @@ type ApplicationConfigurationComponent struct {
 	// affect from the prior revision to the new one. This is mutually exclusive
 	// with RevisionName.
 	// +optional
-	ComponentName string `json:"componentName"`
+	ComponentName string `json:"componentName,omitempty"`
 
 	// RevisionName of a specific component revision to which to bind
 	// ApplicationConfiguration. This is mutually exclusive with componentName.
 	// +optional
-	RevisionName string `json:"revisionName"`
+	RevisionName string `json:"revisionName,omitempty"`
 
 	// ParameterValues specify values for the the specified component's
 	// parameters. Any parameter required by the component must be specified.

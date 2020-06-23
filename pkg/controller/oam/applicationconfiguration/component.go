@@ -56,6 +56,8 @@ func (c *ComponentHandler) Update(evt event.UpdateEvent, q workqueue.RateLimitin
 // Delete implements EventHandler
 func (c *ComponentHandler) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
 	// controllerRevision will be deleted by ownerReference mechanism
+	// so we don't need to delete controllerRevision here.
+	// but trigger an event to AppConfig controller, let it know.
 	for _, req := range c.getRelatedAppConfig(evt.Meta) {
 		q.Add(req)
 	}
@@ -63,6 +65,9 @@ func (c *ComponentHandler) Delete(evt event.DeleteEvent, q workqueue.RateLimitin
 
 // Generic implements EventHandler
 func (c *ComponentHandler) Generic(_ event.GenericEvent, _ workqueue.RateLimitingInterface) {
+	// Generic is called in response to an event of an unknown type or a synthetic event triggered as a cron or
+	// external trigger request - e.g. reconcile Autoscaling, or a Webhook.
+	// so we need to do nothing here.
 }
 
 func isMatch(appConfigs *v1alpha2.ApplicationConfigurationList, compName string) (bool, types.NamespacedName) {
@@ -179,7 +184,7 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 // ConstructRevisionName will generate revisionName from componentName
 // hash suffix char set added to componentName is (0-9, a-v)
 func ConstructRevisionName(componentName string) string {
-	return componentName + "-" + xid.NewWithTime(time.Now()).String()
+	return strings.Join([]string{componentName, xid.NewWithTime(time.Now()).String()}, "-")
 }
 
 // ExtractComponentName will extract componentName from revisionName
