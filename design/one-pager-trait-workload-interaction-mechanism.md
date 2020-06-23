@@ -116,31 +116,30 @@ apply to in the future.
           awsSecret: <aws-secret>
       ```
 
-
 ## Proposal
 The overall idea is for the applicationConfiguration controller to fill critical information
 in the workload and trait CR it emits. In addition, we will provide a helper library so that
 trait controller developers can locate the resources they need with a simple function call. 
 Here is the list of changes that we propose.
-1. Add an optional field called `nativeTrait` to the `traitDefinition` schema. This is for the trait
- owner to declare that a trait is native to the OAM trait system instead of importing from an
- existing operator. This field indicates that the trait owner can modify the trait's operator. It
- implies that the trait relies on the OAM trait/workload interaction mechanism. In our example
- , the trait definition would look like below.  
+1. Add an optional field called `workloadRefPath` to the `traitDefinition` schema. This is for the 
+ trait owner to declare that the trait relies on the OAM trait/workload interaction
+ mechanism. The value of the field is the path to the field that takes a `workloadRef` object. In
+ our example, the trait definition would look like below since our `manualscalertraits` takes
+ the `workloadRef` field at `spec.workloadRef`.
      ```yaml
        apiVersion: core.oam.dev/v1alpha2
        kind: TraitDefinition
        metadata:
          name: manualscalertraits.core.oam.dev
        spec:
-         nativeTrait: true
+         workloadRefPath: spec.workloadRef
          definitionRef:
            name: manualscalertraits.core.oam.dev
      ```
 2. ApplicationConfig controller no longer assumes that all `trait` CRDs contain a "spec
 .workloadRef" field conforms to the OAM definition. It only fills the workload GVK to a `trait
-` CR with "spec.workloadRef" field defined as below if the corresponding `traitDefiniton` is
- marked as "oamAware".   
+` CR with "spec.workloadRef" field defined as below if the corresponding `traitDefiniton` has a
+ "workloadRefPath" field.   
      ```yaml
        workloadRef:
          properties:
@@ -190,17 +189,18 @@ deployment and service child resources.
        `containerizedworkloads.core.oam.dev` as well. 
     3. Fetch all the `childResourceKinds` values in the corresponding`workloadDefinition` instance. 
     4. List each child resource by its GVK and filter by owner reference. Here, we assume that
-     all the child resources that the workload controller generates have an controller reference
+     all the child resources that the workload controller generates have a controller reference
       field pointing back to the workload instance.
 
 ## Impact to the existing system
 Here are the impacts of this mechanism to the existing OAM components
 - ApplicationConfiguration: This mechanism requires minimum changes in the
- applicationConfiguration controller except that it now needs to check if a trait is "oamAware".
+ applicationConfiguration controller except that it now needs to check if a trait definition has a
+  "workloadRefPath" before patching the workloadRef field.
 - Workload: This mechanism does not affect workload controller implementation.
 - Trait: This mechanism is optional so all existing trait controller still works. This mechanism
-requires modification to any existing trait and its traitDefintion that wants to take advantage of
-extensibility of OAM. Any trait that only applies to a certain type of workload, such as
+requires modification to any existing trait and its traitDefinition that wants to take advantage of
+the extensibility of OAM. Any trait that only applies to a certain type of workload, such as
  `EtcdBackup` trait, doesn't need to use this mechanism.
 - WorkloadDefinition: workload owners can modify the existing workloadDefinition if needed.
 
@@ -211,7 +211,7 @@ corresponding workload CR. I would not recommend this approach as it increases t
 of the applicationConfiguration controller and makes more of availability liability. 
 2. Another approach is to implement a separate type for binding traits to workloads. This would
  work, but it seems that label/annotation is a natural place to record the information. Otherwise
- , we need a way for the trait to discover the binding instance first.   
+ , we need a way for the trait to discover the binding instance first.
 
 ## Extra labels
 There might be cases that a workload generates more than one resource with the same GVK and only
