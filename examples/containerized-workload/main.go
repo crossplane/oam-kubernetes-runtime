@@ -37,7 +37,7 @@ func main() {
 		o.Development = true
 	}))
 
-	oamLog := ctrl.Log.WithName("oam kubernetes runtime example")
+	oamLog := ctrl.Log.WithName("oam-runtime")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,

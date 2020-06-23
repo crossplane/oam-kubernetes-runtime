@@ -48,6 +48,7 @@ type dagManagerImpl struct {
 }
 
 func (dm *dagManagerImpl) Start(ctx context.Context) {
+	dm.log.Info("starting DAG manager...")
 	for {
 		select {
 		case <-time.After(5 * time.Second):
@@ -110,7 +111,7 @@ func (dm *dagManagerImpl) checkSourceReady(ctx context.Context, s *Source) (stri
 	// TODO: Currently only string value supported. Need to support more types.
 	val, err := paved.GetString(obj.FieldPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to get field value (%s): %w", obj.FieldPath, err)
+		return "", fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
 	}
 
 	return val, nil

@@ -1,0 +1,42 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: source
+spec:
+  workload:
+    apiVersion: example.com/v1
+    kind: Foo
+    metadata:
+      name: source
+    status: # comment this part to mimic dependency wait time.
+      key: test
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: sink
+spec:
+  workload:
+    apiVersion: example.com/v1
+    kind: Foo
+    metadata:
+      name: sink
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - componentName: source
+      dataOutputs:
+      - name: example-key
+        fieldPath: "status.key"
+    - componentName: sink
+      dataInputs:
+      - valueFrom:
+          dataOutputName: example-key
+        toFieldPaths:
+        - "spec.key"
+---
+
