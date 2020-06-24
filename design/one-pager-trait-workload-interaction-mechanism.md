@@ -2,7 +2,7 @@
 
 * Owner: Ryan Zhang (@ryanzhang-oss)
 * Reviewers: Crossplane Maintainers
-* Status: Draft
+* Status: Implemented
 
 ## Terminology
 
@@ -26,49 +26,49 @@ We will use the following hypothetical OAM application as the baseline to illust
 apiVersion: core.oam.dev/v1alpha2
 kind: WorkloadDefinition
 metadata:
-name: mydbs.standard.oam.dev
-spec:
-definitionRef:
   name: mydbs.standard.oam.dev
+spec:
+  definitionRef:
+    name: mydbs.standard.oam.dev
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: TraitDefinition
 metadata:
-name: manualscalertraits.core.oam.dev
+  name: manualscalertraits.core.oam.dev
 spec:
-definitionRef:
- name: manualscalertraits.core.oam.dev
+  definitionRef:
+    name: manualscalertraits.core.oam.dev
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component
 metadata:
-name: example-db
+  name: example-db
 spec:
-workload:
- apiVersion: standard.oam.dev/v1alpha2
- kind: Mydb
- metadata:
-   name: mydb-example
- spec:
-   containers:
-     - name: mysql
-       image: mysql:latest
+  workload:
+    apiVersion: standard.oam.dev/v1alpha2
+    kind: Mydb
+    metadata:
+      name: mydb-example
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:latest
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: ApplicationConfiguration
 metadata:
-name: example-appconfig
+  name: example-appconfig
 spec:
-components:
- - componentName: example-db      
-   traits:
-     - trait:
-         apiVersion: core.oam.dev/v1alpha2
-         kind: ManualScalerTrait
-         metadata:
-           name:  example-appconfig-trait
-         spec:
-           replicaCount: 3
+  components:
+     - componentName: example-db      
+       traits:
+         - trait:
+             apiVersion: core.oam.dev/v1alpha2
+             kind: ManualScalerTrait
+             metadata:
+               name:  example-appconfig-trait
+             spec:
+               replicaCount: 3
 ```
 
 The problem is two folds
@@ -116,15 +116,30 @@ apply to in the future.
           awsSecret: <aws-secret>
       ```
 
-
 ## Proposal
 The overall idea is for the applicationConfiguration controller to fill critical information
 in the workload and trait CR it emits. In addition, we will provide a helper library so that
 trait controller developers can locate the resources they need with a simple function call. 
 Here is the list of changes that we propose.
-1. ApplicationConfig controller no longer assumes that all `trait` CRDs contain a "spec
+1. Add an optional field called `workloadRefPath` to the `traitDefinition` schema. This is for the 
+ trait owner to declare that the trait relies on the OAM trait/workload interaction
+ mechanism. The value of the field is the path to the field that takes a `workloadRef` object. In
+ our example, the trait definition would look like below since our `manualscalertraits` takes
+ the `workloadRef` field at `spec.workloadRef`.
+     ```yaml
+       apiVersion: core.oam.dev/v1alpha2
+       kind: TraitDefinition
+       metadata:
+         name: manualscalertraits.core.oam.dev
+       spec:
+         workloadRefPath: spec.workloadRef
+         definitionRef:
+           name: manualscalertraits.core.oam.dev
+     ```
+2. ApplicationConfig controller no longer assumes that all `trait` CRDs contain a "spec
 .workloadRef" field conforms to the OAM definition. It only fills the workload GVK to a `trait
-` CR if its CRD has a "spec.workloadRef" field defined as below.  
+` CR with "spec.workloadRef" field defined as below if the corresponding `traitDefiniton` has a
+ "workloadRefPath" field.   
      ```yaml
        workloadRef:
          properties:
@@ -140,7 +155,8 @@ Here is the list of changes that we propose.
          - name
          type: object
      ```
-2. Add a `childResourceKinds` field in the  WorkloadDefinition. 
+     
+3. Add a `childResourceKinds` field in the  WorkloadDefinition. 
 Currently, a workloadDefinition is nothing but a shim of a real workload CRD. We propose to add
 an **optional** field called `childResourceKinds` to the schema of the workloadDefinition. We encourage
 workload owners to fill in this field when they register their controllers to the OAM system. 
@@ -161,7 +177,7 @@ deployment and service child resources.
          - apiVersion: v1
            kind: Service      
     ```
-3. OAM runtime will provide a helper library. The library follows the following logic to help a
+4. OAM runtime will provide a helper library. The library follows the following logic to help a
  trait developer locate the resources for the trait to modify.
     1. Get the corresponding `workload` instance from the Kubernetes cluster with the information
      inserted by the application controller in the `trait` CR.
@@ -173,17 +189,18 @@ deployment and service child resources.
        `containerizedworkloads.core.oam.dev` as well. 
     3. Fetch all the `childResourceKinds` values in the corresponding`workloadDefinition` instance. 
     4. List each child resource by its GVK and filter by owner reference. Here, we assume that
-     all the child resources that the workload controller generates have an controller reference
+     all the child resources that the workload controller generates have a controller reference
       field pointing back to the workload instance.
 
 ## Impact to the existing system
 Here are the impacts of this mechanism to the existing OAM components
 - ApplicationConfiguration: This mechanism requires minimum changes in the
- applicationConfiguration controller.
+ applicationConfiguration controller except that it now needs to check if a trait definition has a
+  "workloadRefPath" before patching the workloadRef field.
 - Workload: This mechanism does not affect workload controller implementation.
 - Trait: This mechanism is optional so all existing trait controller still works. This mechanism
-requires modification to any existing trait that wants to take advantage of
-extensibility of OAM. Any trait that only applies to a certain type of workload, such as
+requires modification to any existing trait and its traitDefinition that wants to take advantage of
+the extensibility of OAM. Any trait that only applies to a certain type of workload, such as
  `EtcdBackup` trait, doesn't need to use this mechanism.
 - WorkloadDefinition: workload owners can modify the existing workloadDefinition if needed.
 
@@ -194,7 +211,7 @@ corresponding workload CR. I would not recommend this approach as it increases t
 of the applicationConfiguration controller and makes more of availability liability. 
 2. Another approach is to implement a separate type for binding traits to workloads. This would
  work, but it seems that label/annotation is a natural place to record the information. Otherwise
- , we need a way for the trait to discover the binding instance first.   
+ , we need a way for the trait to discover the binding instance first.
 
 ## Extra labels
 There might be cases that a workload generates more than one resource with the same GVK and only
