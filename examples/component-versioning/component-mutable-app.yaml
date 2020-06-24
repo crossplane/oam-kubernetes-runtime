@@ -4,14 +4,10 @@ metadata:
   name: example-appconfig
 spec:
   components:
-    - componentName: example-component
+    - revisionName: example-component-brkaek3ipt3d60vfo4u0
       traits:
         - trait:
             apiVersion: core.oam.dev/v1alpha2
             kind: ManualScalerTrait
-            metadata:
-              # TODO(negz): This name can be omitted and generated automatically if
-              # each trait kind may apply only once to a component/workload.
-              name:  example-appconfig-trait
             spec:
               replicaCount: 3

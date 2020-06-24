@@ -19,15 +19,18 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	addon "github.com/crossplane/oam-controllers/pkg/oam/util"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
@@ -40,14 +43,20 @@ const (
 
 // Render error format strings.
 const (
-	errFmtGetComponent     = "cannot get component %q"
-	errFmtResolveParams    = "cannot resolve parameter values for component %q"
-	errFmtRenderWorkload   = "cannot render workload for component %q"
-	errFmtRenderTrait      = "cannot render trait for component %q"
-	errFmtSetParam         = "cannot set parameter %q"
-	errFmtUnsupportedParam = "unsupported parameter %q"
-	errFmtRequiredParam    = "required parameter %q not specified"
+	errFmtGetComponent           = "cannot get component %q"
+	errFmtGetComponentRevision   = "cannot get component revision %q"
+	errFmtResolveParams          = "cannot resolve parameter values for component %q"
+	errFmtRenderWorkload         = "cannot render workload for component %q"
+	errFmtRenderTrait            = "cannot render trait for component %q"
+	errFmtSetParam               = "cannot set parameter %q"
+	errFmtUnsupportedParam       = "unsupported parameter %q"
+	errFmtRequiredParam          = "required parameter %q not specified"
+	errFmtControllerRevisionData = "cannot get valid component data from controllerRevision %q"
+	errFmtGetTraitDefinition     = "cannot find trait definition %q"
+	errSetValueForField          = "can not set value %q for fieldPath %q"
 )
+
+const instanceNamePath = "metadata.name"
 
 // A ComponentRenderer renders an ApplicationConfiguration's Components into
 // workloads and traits.
@@ -65,22 +74,24 @@ func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.Application
 }
 
 type components struct {
-	client   client.Reader
-	params   ParameterResolver
-	workload ResourceRenderer
-	trait    ResourceRenderer
+	client     client.Reader
+	appsClient clientappv1.AppsV1Interface
+	params     ParameterResolver
+	workload   ResourceRenderer
+	trait      ResourceRenderer
 }
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
 	workloads := make([]Workload, len(ac.Spec.Components))
 	for i, acc := range ac.Spec.Components {
 
-		c := &v1alpha2.Component{}
-		nn := types.NamespacedName{Namespace: ac.GetNamespace(), Name: acc.ComponentName}
-		if err := r.client.Get(ctx, nn, c); err != nil {
-			return nil, errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+		if acc.RevisionName != "" {
+			acc.ComponentName = ExtractComponentName(acc.RevisionName)
 		}
-
+		c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
+		if err != nil {
+			return nil, err
+		}
 		p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
 		if err != nil {
 			return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
@@ -96,26 +107,117 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		w.SetNamespace(ac.GetNamespace())
 
 		traits := make([]unstructured.Unstructured, len(acc.Traits))
+		traitDefs := make([]v1alpha2.TraitDefinition, len(acc.Traits))
 		for i, ct := range acc.Traits {
 			t, err := r.trait.Render(ct.Trait.Raw)
 			if err != nil {
 				return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
 			}
 
-			// Set metadata name for `Trait` if the metadata name is NOT set.
-			if t.GetName() == "" {
-				t.SetName(acc.ComponentName)
-			}
-
-			t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-			t.SetNamespace(ac.GetNamespace())
+			setTraitProperties(t, acc.ComponentName, ac.GetNamespace(), ref)
 
 			traits[i] = *t
-		}
 
-		workloads[i] = Workload{ComponentName: acc.ComponentName, Workload: w, Traits: traits}
+			traitDef, err := r.getTraitDefinition(ctx, t)
+			if err != nil {
+				return nil, err
+			}
+			traitDefs = append(traitDefs, traitDef)
+		}
+		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
+			return nil, err
+		}
+		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits}
 	}
 	return workloads, nil
+}
+
+func setTraitProperties(t *unstructured.Unstructured, componentName, namespace string, ref *metav1.OwnerReference) {
+	// Set metadata name for `Trait` if the metadata name is NOT set.
+	if t.GetName() == "" {
+		t.SetName(componentName)
+	}
+
+	t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+	t.SetNamespace(namespace)
+}
+
+func (r *components) getTraitDefinition(ctx context.Context, t *unstructured.Unstructured) (v1alpha2.TraitDefinition, error) {
+	traitDefinitionName := getCRDName(t)
+	traitDef := v1alpha2.TraitDefinition{}
+	err := r.client.Get(ctx, types.NamespacedName{
+		Name: traitDefinitionName,
+	}, &traitDef)
+	if err != nil {
+		return traitDef, errors.Wrapf(err, errFmtGetTraitDefinition, traitDefinitionName)
+	}
+	return traitDef, nil
+}
+
+// SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
+func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
+	//Don't override the specified name
+	if w.GetName() != "" {
+		return nil
+	}
+	pv := fieldpath.Pave(w.Object)
+	if IsRevisionEnabled(traitDefs) {
+		// if revisionEnabled, use revisionName as workload name
+		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision.Name); err != nil {
+			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
+		}
+		return nil
+	}
+	// use component name as workload name, which means we will always use one workload for different revisions
+	if err := pv.SetString(instanceNamePath, c.GetName()); err != nil {
+		return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.GetName())
+	}
+	w.Object = pv.UnstructuredContent()
+	return nil
+}
+
+// IsRevisionEnabled will check if any trait has createRevision flag, the appconfig should create a new workload instance
+func IsRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
+	for _, td := range traitDefs {
+		if td.Spec.RevisionEnabled {
+			return true
+		}
+	}
+	return false
+}
+
+func getCRDName(u *unstructured.Unstructured) string {
+	group, _ := addon.ApiVersion2GroupVersion(u.GetAPIVersion())
+	resources := []string{addon.Kind2Resource(u.GetKind())}
+	if group != "" {
+		resources = append(resources, group)
+	}
+	return strings.Join(resources, ".")
+}
+
+func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
+	c := &v1alpha2.Component{}
+	var revisionName string
+	if acc.RevisionName != "" {
+		revision, err := r.appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
+		if err != nil {
+			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
+		}
+		c, err := UnpackRevisionData(revision)
+		if err != nil {
+			return nil, "", errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
+		}
+		revisionName = acc.RevisionName
+		return c, revisionName, nil
+	}
+	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
+	if err := r.client.Get(ctx, nn, c); err != nil {
+		return nil, "", errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+	}
+	if c.Status.LatestRevision != nil {
+		revisionName = c.Status.LatestRevision.Name
+	}
+	return c, revisionName, nil
 }
 
 // A ResourceRenderer renders a Kubernetes-compliant YAML resource into an

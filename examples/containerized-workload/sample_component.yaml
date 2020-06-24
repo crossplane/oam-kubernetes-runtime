@@ -16,11 +16,6 @@ spec:
           ports:
             - containerPort: 80
               name: wordpress
-  parameters:
-    - name: instance-name
-      required: true
-      fieldPaths:
-        - metadata.name
-    - name: image
-      fieldPaths:
-        - spec.containers[0].image
+          env:
+            - name: TEST_ENV
+              value: test

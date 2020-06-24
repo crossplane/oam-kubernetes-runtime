@@ -20,9 +20,16 @@ import (
 	"context"
 	"testing"
 
+	v1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+
+	"k8s.io/client-go/kubernetes/fake"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -43,6 +50,8 @@ func TestRenderComponents(t *testing.T) {
 	componentName := "coolcomponent"
 	workloadName := "coolworkload"
 	traitName := "coolTrait"
+	revisionName := "coolcomponent-aa1111"
+	revisionName2 := "coolcomponent-bb2222"
 
 	ac := &v1alpha2.ApplicationConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -59,14 +68,43 @@ func TestRenderComponents(t *testing.T) {
 			},
 		},
 	}
+	revAC := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      acName,
+			UID:       acUID,
+		},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{
+				{
+					RevisionName: revisionName,
+					Traits:       []v1alpha2.ComponentTrait{{}},
+				},
+			},
+		},
+	}
+	fakeAppClient := fake.NewSimpleClientset().AppsV1()
+	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+		Data: runtime.RawExtension{Object: &v1alpha2.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      componentName,
+				Namespace: namespace,
+			},
+			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+			Status: v1alpha2.ComponentStatus{},
+		}},
+		Revision: 1,
+	}, metav1.CreateOptions{})
 
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 
 	type fields struct {
-		client   client.Reader
-		params   ParameterResolver
-		workload ResourceRenderer
-		trait    ResourceRenderer
+		client    client.Reader
+		appclient clientappv1.AppsV1Interface
+		params    ParameterResolver
+		workload  ResourceRenderer
+		trait     ResourceRenderer
 	}
 	type args struct {
 		ctx context.Context
@@ -183,10 +221,107 @@ func TestRenderComponents(t *testing.T) {
 				},
 			},
 		},
+		"Success-With-RevisionName": {
+			reason: "Workload should successfully be rendered with fixed componentRevision",
+			fields: fields{
+				client:    &test.MockClient{MockGet: test.NewMockGetFn(nil)},
+				appclient: fakeAppClient,
+				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+					return nil, nil
+				}),
+				workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					w := &unstructured.Unstructured{}
+					return w, nil
+				}),
+				trait: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					t := &unstructured.Unstructured{}
+					t.SetName(traitName)
+					return t, nil
+				}),
+			},
+			args: args{ac: revAC},
+			want: want{
+				w: []Workload{
+					{
+						ComponentName:         componentName,
+						ComponentRevisionName: revisionName,
+						Workload: func() *unstructured.Unstructured {
+							w := &unstructured.Unstructured{}
+							w.SetNamespace(namespace)
+							w.SetName(componentName)
+							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							return w
+						}(),
+						Traits: []unstructured.Unstructured{
+							func() unstructured.Unstructured {
+								t := &unstructured.Unstructured{}
+								t.SetNamespace(namespace)
+								t.SetName(traitName)
+								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								return *t
+							}(),
+						},
+					},
+				},
+			},
+		},
+		"Success-With-RevisionEnabledTrait": {
+			reason: "Workload name should successfully be rendered with revisionName",
+			fields: fields{
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+					switch robj := obj.(type) {
+					case *v1alpha2.Component:
+						ccomp := v1alpha2.Component{Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: revisionName2}}}
+						ccomp.DeepCopyInto(robj)
+					case *v1alpha2.TraitDefinition:
+						ttrait := v1alpha2.TraitDefinition{ObjectMeta: metav1.ObjectMeta{Name: traitName}, Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true}}
+						ttrait.DeepCopyInto(robj)
+					}
+					return nil
+				})},
+				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+					return nil, nil
+				}),
+				workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					w := &unstructured.Unstructured{}
+					return w, nil
+				}),
+				trait: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					t := &unstructured.Unstructured{}
+					t.SetName(traitName)
+					return t, nil
+				}),
+			},
+			args: args{ac: ac},
+			want: want{
+				w: []Workload{
+					{
+						ComponentName:         componentName,
+						ComponentRevisionName: revisionName2,
+						Workload: func() *unstructured.Unstructured {
+							w := &unstructured.Unstructured{}
+							w.SetNamespace(namespace)
+							w.SetName(revisionName2)
+							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							return w
+						}(),
+						Traits: []unstructured.Unstructured{
+							func() unstructured.Unstructured {
+								t := &unstructured.Unstructured{}
+								t.SetNamespace(namespace)
+								t.SetName(traitName)
+								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								return *t
+							}(),
+						},
+					},
+				},
+			},
+		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			r := &components{tc.fields.client, tc.fields.appclient, tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, err := r.Render(tc.args.ctx, tc.args.ac)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, diff)
@@ -532,7 +667,7 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			r := &components{tc.fields.client, nil, tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _ := r.Render(tc.args.ctx, tc.args.ac)
 			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].GetName() != componentName {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
@@ -540,4 +675,232 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetCRDName(t *testing.T) {
+	tests := map[string]struct {
+		u      *unstructured.Unstructured
+		exp    string
+		reason string
+	}{
+		"native resource": {
+			u: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "apps/v1",
+				"kind":       "Deployment",
+			}},
+			exp:    "deployments.apps",
+			reason: "native resource match",
+		},
+		"extended resource": {
+			u: &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "extend.oam.dev/v1alpha2",
+				"kind":       "SimpleRolloutTrait",
+			}},
+			exp:    "simplerollouttraits.extend.oam.dev",
+			reason: "extend resource match",
+		},
+	}
+	for name, ti := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := getCRDName(ti.u)
+			if got != ti.exp {
+				t.Errorf("%s getCRDName want %s got %s ", ti.reason, ti.exp, got)
+			}
+		})
+	}
+}
+
+func TestSetWorkloadInstanceName(t *testing.T) {
+	tests := map[string]struct {
+		traitDefs []v1alpha2.TraitDefinition
+		u         *unstructured.Unstructured
+		c         *v1alpha2.Component
+		exp       *unstructured.Unstructured
+		expErr    error
+		reason    string
+	}{
+		"with a name, no change": {
+			u: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "myname",
+				},
+			}},
+			c: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
+			exp: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "myname",
+				},
+			}},
+			reason: "workloadName should not change if already set",
+		},
+		"revisionEnabled true, set revisionName": {
+			traitDefs: []v1alpha2.TraitDefinition{
+				{
+					Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true},
+				},
+			},
+			u: &unstructured.Unstructured{Object: map[string]interface{}{}},
+			c: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
+			exp: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "rev-1",
+				},
+			}},
+			reason: "workloadName should align with revisionName",
+		},
+		"revisionEnabled false, set componentName": {
+			traitDefs: []v1alpha2.TraitDefinition{
+				{
+					Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: false},
+				},
+			},
+			u: &unstructured.Unstructured{Object: map[string]interface{}{}},
+			c: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
+			exp: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "comp",
+				},
+			}},
+			reason: "workloadName should align with componentName",
+		},
+		"set value error": {
+			u: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": []string{},
+			}},
+			c:      &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
+			expErr: errors.Wrapf(errors.New("metadata is not an object"), errSetValueForField, instanceNamePath, "comp"),
+		},
+		"set value error for trait revisionEnabled": {
+			u: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": []string{},
+			}},
+			traitDefs: []v1alpha2.TraitDefinition{
+				{
+					Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: false},
+				},
+			},
+			c:      &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
+			expErr: errors.Wrapf(errors.New("metadata is not an object"), errSetValueForField, instanceNamePath, "comp"),
+		},
+	}
+	for name, ti := range tests {
+		t.Run(name, func(t *testing.T) {
+			if ti.expErr != nil {
+				assert.Equal(t, ti.expErr.Error(), SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c).Error())
+			} else {
+				err := SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c)
+				assert.NoError(t, err)
+				assert.Equal(t, ti.exp, ti.u, ti.reason)
+			}
+		})
+	}
+}
+
+func TestSetTraitProperties(t *testing.T) {
+	u := &unstructured.Unstructured{}
+	u.SetName("hasName")
+	setTraitProperties(u, "comp1", "ns", &metav1.OwnerReference{Name: "comp1"})
+	expU := &unstructured.Unstructured{}
+	expU.SetName("hasName")
+	expU.SetNamespace("ns")
+	expU.SetOwnerReferences([]metav1.OwnerReference{{Name: "comp1"}})
+	assert.Equal(t, expU, u)
+
+	u = &unstructured.Unstructured{}
+	setTraitProperties(u, "comp1", "ns", &metav1.OwnerReference{Name: "comp1"})
+	expU = &unstructured.Unstructured{}
+	expU.SetName("comp1")
+	expU.SetNamespace("ns")
+	expU.SetOwnerReferences([]metav1.OwnerReference{{Name: "comp1"}})
+}
+
+func TestGetComponent(t *testing.T) {
+	type Fields struct {
+		client    client.Reader
+		appclient clientappv1.AppsV1Interface
+		params    ParameterResolver
+		workload  ResourceRenderer
+		trait     ResourceRenderer
+	}
+	namespace := "ns"
+	componentName := "newcomponent"
+	revisionName := "newcomponent-aa1111"
+	revisionName2 := "newcomponent-bb1111"
+
+	fakeAppClient := fake.NewSimpleClientset().AppsV1()
+	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+		Data: runtime.RawExtension{Object: &v1alpha2.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      componentName,
+				Namespace: namespace,
+			},
+			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+			Status: v1alpha2.ComponentStatus{},
+		}},
+		Revision: 1,
+	}, metav1.CreateOptions{})
+	var fields = Fields{
+		client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+			objc, ok := obj.(*v1alpha2.Component)
+			if !ok {
+				return nil
+			}
+
+			c := &v1alpha2.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      componentName,
+					Namespace: namespace,
+				},
+				Spec: v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"apiVersion": "New",
+					},
+				}}}},
+				Status: v1alpha2.ComponentStatus{
+					LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
+				},
+			}
+			c.DeepCopyInto(objc)
+			return nil
+		})},
+		appclient: fakeAppClient,
+		params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+			return nil, nil
+		}),
+		workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+			w := &unstructured.Unstructured{}
+			return w, nil
+		}),
+	}
+	r := &components{fields.client, fields.appclient, fields.params, fields.workload, fields.trait}
+	c, revision, err := r.getComponent(context.Background(), v1alpha2.ApplicationConfigurationComponent{RevisionName: revisionName}, namespace)
+	assert.NoError(t, err)
+	assert.Equal(t, revisionName, revision)
+	assert.Equal(t, &v1alpha2.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      componentName,
+			Namespace: namespace,
+		},
+		Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+		Status: v1alpha2.ComponentStatus{},
+	}, c)
+
+	c, revision, err = r.getComponent(context.Background(), v1alpha2.ApplicationConfigurationComponent{ComponentName: componentName}, namespace)
+	assert.NoError(t, err)
+	assert.Equal(t, revisionName2, revision)
+	assert.Equal(t, &v1alpha2.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      componentName,
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"apiVersion": "New",
+			},
+		}}}},
+		Status: v1alpha2.ComponentStatus{
+			LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
+		},
+	}, c)
 }
