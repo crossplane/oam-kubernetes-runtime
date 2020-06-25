@@ -375,7 +375,10 @@ type DataMatcherRequirement struct {
 type DataMatcherOperator string
 
 const (
-	DataMatcherOperatorEqual    DataMatcherOperator = "eq"
+	// DataMatcherOperatorEqual indicates equal to given value
+	DataMatcherOperatorEqual DataMatcherOperator = "eq"
+	// DataMatcherOperatorNotEqual indicates not equal to given value
 	DataMatcherOperatorNotEqual DataMatcherOperator = "notEq"
+	// DataMatcherOperatorNotEmpty indicates given value not empty
 	DataMatcherOperatorNotEmpty DataMatcherOperator = "notEmpty"
 )

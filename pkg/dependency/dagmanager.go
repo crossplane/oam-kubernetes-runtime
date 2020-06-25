@@ -14,6 +14,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
