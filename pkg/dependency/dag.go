@@ -3,6 +3,8 @@ package dependency
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 // DAG is the dependency graph for an AppConfig.
@@ -25,6 +27,8 @@ type Sink struct {
 
 	// ToFieldPaths specifies the field paths the passed value to fill into.
 	ToFieldPaths []string
+
+	Matchers []v1alpha2.DataMatcherRequirement
 }
 
 // NewDAG creates a fresh DAG.
@@ -41,15 +45,17 @@ func (d *DAG) AddSource(sourceName string, ref *corev1.ObjectReference) {
 }
 
 // AddSink adds a data input sink into the DAG.
-func (d *DAG) AddSink(sourceName string, obj *unstructured.Unstructured, toFieldPaths []string) {
-	m, ok := d.Sinks[sourceName]
+func (d *DAG) AddSink(sourceName string, obj *unstructured.Unstructured, f []string, m []v1alpha2.DataMatcherRequirement) {
+	sm, ok := d.Sinks[sourceName]
 	if !ok {
-		m = make(map[string]*Sink)
-		d.Sinks[sourceName] = m
+		sm = make(map[string]*Sink)
+		d.Sinks[sourceName] = sm
 	}
+	// TODO: This is not uniqie across different resources. Need to pick another method.
 	key := obj.GetNamespace() + "/" + obj.GetName()
-	m[key] = &Sink{
+	sm[key] = &Sink{
 		Object:       obj,
-		ToFieldPaths: toFieldPaths,
+		ToFieldPaths: f,
+		Matchers:     m,
 	}
 }

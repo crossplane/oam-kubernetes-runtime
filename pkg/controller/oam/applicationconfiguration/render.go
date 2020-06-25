@@ -163,7 +163,7 @@ func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *u
 
 func addDataInputsToDAG(dag *dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured) {
 	for _, in := range ins {
-		dag.AddSink(in.ValueFrom.DataOutputName, obj, in.ToFieldPaths)
+		dag.AddSink(in.ValueFrom.DataOutputName, obj, in.ToFieldPaths, in.ValueFrom.Matchers)
 	}
 }
 

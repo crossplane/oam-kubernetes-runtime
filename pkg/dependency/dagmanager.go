@@ -14,6 +14,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 // GlobalManager is the singleton instance of DAGManager.
@@ -71,19 +72,26 @@ func (dm *dagManagerImpl) scan(ctx context.Context) {
 				dm.log.Info("checkSourceReady failed", "errmsg", err)
 				continue
 			}
-			if val == "" { // not ready
-				continue
-			}
 
 			for sinkName, sink := range dag.Sinks[sourceName] {
+				if !matchValue(sink.Matchers, val) {
+					continue // not ready
+				}
+
 				dm.log.Debug("triggering sinks", "app", app, "source", sourceName, "sink", sinkName)
+
 				err := dm.trigger(ctx, sink, val)
 				if err != nil {
 					dm.log.Info("triggering sink failed", "errmsg", err)
+					continue
 				}
+
+				delete(dag.Sinks, sinkName)
 			}
 
-			delete(dag.Sources, sourceName)
+			if len(dag.Sinks) == 0 {
+				delete(dag.Sources, sourceName)
+			}
 		}
 
 		if len(dag.Sources) == 0 {
@@ -91,6 +99,34 @@ func (dm *dagManagerImpl) scan(ctx context.Context) {
 			delete(dm.app2dag, app)
 		}
 	}
+}
+
+func matchValue(ms []v1alpha2.DataMatcherRequirement, val string) bool {
+	// If no matcher is specified, it is by default to check value not empty.
+	if len(ms) == 0 {
+		if val == "" {
+			return false
+		}
+	}
+
+	for _, m := range ms {
+		switch m.Operator {
+		case v1alpha2.DataMatcherOperatorEqual:
+			if m.Value != val {
+				return false
+			}
+		case v1alpha2.DataMatcherOperatorNotEqual:
+			if m.Value == val {
+				return false
+			}
+		case v1alpha2.DataMatcherOperatorNotEmpty:
+			if val == "" {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 func (dm *dagManagerImpl) checkSourceReady(ctx context.Context, s *Source) (string, error) {

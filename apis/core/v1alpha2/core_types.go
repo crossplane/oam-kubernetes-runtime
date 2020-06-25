@@ -357,5 +357,25 @@ type DataInput struct {
 
 // DataInputValueFrom specifies the value source for a data input.
 type DataInputValueFrom struct {
-	DataOutputName string `json:"dataOutputName,omitempty"`
+	DataOutputName string `json:"dataOutputName"`
+
+	// Matchers specify the requirements to match a value.
+	// Different requirements are AND-ed together.
+	// If no matcher is specified, it is by default to check not empty.
+	Matchers []DataMatcherRequirement `json:"matchers,omitempty"`
 }
+
+// DataMatcherRequirement specifies the requirement to match a value.
+type DataMatcherRequirement struct {
+	Operator DataMatcherOperator `json:"op"`
+	Value    string              `json:"value"`
+}
+
+// DataMatcherOperator specifies the operator to match a value.
+type DataMatcherOperator string
+
+const (
+	DataMatcherOperatorEqual    DataMatcherOperator = "eq"
+	DataMatcherOperatorNotEqual DataMatcherOperator = "notEq"
+	DataMatcherOperatorNotEmpty DataMatcherOperator = "notEmpty"
+)
