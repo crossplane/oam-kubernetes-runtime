@@ -2,8 +2,9 @@ package main
 
 import (
 	"flag"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"os"
+
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"k8s.io/apimachinery/pkg/runtime"

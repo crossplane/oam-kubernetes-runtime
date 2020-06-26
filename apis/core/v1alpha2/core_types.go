@@ -305,6 +305,12 @@ type WorkloadTrait struct {
 	Reference runtimev1alpha1.TypedReference `json:"traitRef"`
 }
 
+// A WorkloadScope represents a trait associated with a workload.
+type WorkloadScope struct {
+	// Reference to a scope created by an ApplicationConfiguration.
+	Reference runtimev1alpha1.TypedReference `json:"scopeRef"`
+}
+
 // A WorkloadStatus represents the status of a workload.
 type WorkloadStatus struct {
 	// ComponentName that produced this workload.
@@ -318,6 +324,9 @@ type WorkloadStatus struct {
 
 	// Traits associated with this workload.
 	Traits []WorkloadTrait `json:"traits,omitempty"`
+
+	// Scopes associated with this workload.
+	Scopes []WorkloadScope `json:"scopes,omitempty"`
 }
 
 // An ApplicationConfigurationStatus represents the observed state of a

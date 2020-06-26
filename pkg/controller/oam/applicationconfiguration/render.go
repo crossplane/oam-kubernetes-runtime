@@ -44,6 +44,7 @@ const (
 // Render error format strings.
 const (
 	errFmtGetComponent           = "cannot get component %q"
+	errFmtGetScope               = "cannot get scope %q"
 	errFmtGetComponentRevision   = "cannot get component revision %q"
 	errFmtResolveParams          = "cannot resolve parameter values for component %q"
 	errFmtRenderWorkload         = "cannot render workload for component %q"
@@ -127,7 +128,22 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 			return nil, err
 		}
-		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits}
+
+		scopes := make([]unstructured.Unstructured, len(acc.Scopes))
+		for i, cs := range acc.Scopes {
+			// Get Scope instance from k8s, since it is global and not a child resource of workflow.
+			scopeObject := unstructured.Unstructured{}
+			scopeObject.SetAPIVersion(cs.ScopeReference.APIVersion)
+			scopeObject.SetKind(cs.ScopeReference.Kind)
+			scopeObjectRef := types.NamespacedName{Namespace: ac.GetNamespace(), Name: cs.ScopeReference.Name}
+			if err := r.client.Get(ctx, scopeObjectRef, &scopeObject); err != nil {
+				return nil, errors.Wrapf(err, errFmtGetScope, cs.ScopeReference.Name)
+			}
+
+			scopes[i] = scopeObject
+		}
+
+		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}
 	}
 	return workloads, nil
 }

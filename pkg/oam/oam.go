@@ -27,6 +27,9 @@ import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )
 
+// ScopeKind contains the type metadata for a kind of an OAM scope resource.
+type ScopeKind schema.GroupVersionKind
+
 // TraitKind contains the type metadata for a kind of an OAM trait resource.
 type TraitKind schema.GroupVersionKind
 
@@ -44,6 +47,12 @@ type Conditioned interface {
 type WorkloadReferencer interface {
 	GetWorkloadReference() runtimev1alpha1.TypedReference
 	SetWorkloadReference(runtimev1alpha1.TypedReference)
+}
+
+// A WorkloadsReferencer may reference an OAM workload.
+type WorkloadsReferencer interface {
+	GetWorkloadReferences() []runtimev1alpha1.TypedReference
+	AddWorkloadReference(runtimev1alpha1.TypedReference)
 }
 
 // A Finalizer manages the finalizers on the resource.
@@ -64,6 +73,14 @@ type Trait interface {
 
 	Conditioned
 	WorkloadReferencer
+}
+
+// A Scope is a type of OAM scope.
+type Scope interface {
+	Object
+
+	Conditioned
+	WorkloadsReferencer
 }
 
 // A Workload is a type of OAM workload.

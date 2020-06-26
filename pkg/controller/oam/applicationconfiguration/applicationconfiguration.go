@@ -152,7 +152,8 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *Reconciler {
 			trait:      ResourceRenderFn(renderTrait),
 		},
 		workloads: &workloads{
-			client: resource.NewAPIPatchingApplicator(m.GetClient()),
+			client:    resource.NewAPIPatchingApplicator(m.GetClient()),
+			rawClient: m.GetClient(),
 		},
 		gc:     GarbageCollectorFn(eligible),
 		log:    logging.NewNopLogger(),
@@ -196,7 +197,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	log.Debug("Successfully rendered components", "workloads", len(workloads))
 	r.record.Event(ac, event.Normal(reasonRenderComponents, "Successfully rendered components", "workloads", strconv.Itoa(len(workloads))))
 
-	if err := r.workloads.Apply(ctx, workloads, resource.MustBeControllableBy(ac.GetUID())); err != nil {
+	if err := r.workloads.Apply(ctx, req.Namespace, ac.Status.Workloads, workloads, resource.MustBeControllableBy(ac.GetUID())); err != nil {
 		log.Debug("Cannot apply components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotApplyComponents, err))
 		ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errApplyComponents)))
@@ -248,6 +249,9 @@ type Workload struct {
 
 	// Traits associated with this workload.
 	Traits []unstructured.Unstructured
+
+	// Scopes associated with this workload.
+	Scopes []unstructured.Unstructured
 }
 
 // Status produces the status of this workload and its traits, suitable for use
@@ -262,12 +266,20 @@ func (w Workload) Status() v1alpha2.WorkloadStatus {
 			Name:       w.Workload.GetName(),
 		},
 		Traits: make([]v1alpha2.WorkloadTrait, len(w.Traits)),
+		Scopes: make([]v1alpha2.WorkloadScope, len(w.Scopes)),
 	}
 	for i := range w.Traits {
 		acw.Traits[i].Reference = runtimev1alpha1.TypedReference{
 			APIVersion: w.Traits[i].GetAPIVersion(),
 			Kind:       w.Traits[i].GetKind(),
 			Name:       w.Traits[i].GetName(),
+		}
+	}
+	for i, s := range w.Scopes {
+		acw.Scopes[i].Reference = runtimev1alpha1.TypedReference{
+			APIVersion: s.GetAPIVersion(),
+			Kind:       s.GetKind(),
+			Name:       s.GetName(),
 		}
 	}
 	return acw

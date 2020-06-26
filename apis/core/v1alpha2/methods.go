@@ -24,6 +24,7 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
+var _ oam.Scope = &HealthScope{}
 var _ oam.Trait = &ManualScalerTrait{}
 var _ oam.Workload = &ContainerizedWorkload{}
 
@@ -75,4 +76,24 @@ func (wl *ContainerizedWorkload) GetCondition(ct runtimev1alpha1.ConditionType) 
 // SetConditions of this ContainerizedWorkload.
 func (wl *ContainerizedWorkload) SetConditions(c ...runtimev1alpha1.Condition) {
 	wl.Status.SetConditions(c...)
+}
+
+// GetCondition of this HealthScope.
+func (hs *HealthScope) GetCondition(ct runtimev1alpha1.ConditionType) runtimev1alpha1.Condition {
+	return hs.Status.GetCondition(ct)
+}
+
+// SetConditions of this HealthScope.
+func (hs *HealthScope) SetConditions(c ...runtimev1alpha1.Condition) {
+	hs.Status.SetConditions(c...)
+}
+
+// GetWorkloadReferences to get all workload references for scope.
+func (hs *HealthScope) GetWorkloadReferences() []runtimev1alpha1.TypedReference {
+	return hs.Spec.WorkloadReferences
+}
+
+// AddWorkloadReference to add a workload reference to this scope.
+func (hs *HealthScope) AddWorkloadReference(r runtimev1alpha1.TypedReference) {
+	hs.Spec.WorkloadReferences = append(hs.Spec.WorkloadReferences, r)
 }

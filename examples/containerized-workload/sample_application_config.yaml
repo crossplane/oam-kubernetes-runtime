@@ -15,3 +15,8 @@ spec:
               name:  example-appconfig-trait
             spec:
               replicaCount: 3
+      scopes:
+        - scopeRef:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: HealthScope
+            name: example-health-scope
