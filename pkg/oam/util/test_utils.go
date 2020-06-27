@@ -44,12 +44,12 @@ func (matcher NotFoundMatcher) Match(actual interface{}) (success bool, err erro
 
 //FailureMessage builds an error message.
 func (matcher NotFoundMatcher) FailureMessage(actual interface{}) (message string) {
-	return format.Message(actual, "to be already exist")
+	return format.Message(actual, "to be not found")
 }
 
 //NegatedFailureMessage builds an error message.
 func (matcher NotFoundMatcher) NegatedFailureMessage(actual interface{}) (message string) {
-	return format.Message(actual, "not to be already exist")
+	return format.Message(actual, "not to be not found")
 }
 
 //BeEquivalentToError matches the error to take care of nil.
@@ -77,14 +77,38 @@ func (matcher ErrorMatcher) Match(actual interface{}) (success bool, err error) 
 func (matcher ErrorMatcher) FailureMessage(actual interface{}) (message string) {
 	actualError, actualOK := actual.(error)
 	expectedError, expectedOK := matcher.ExpectedError.(error)
+
 	if actualOK && expectedOK {
 		return format.MessageWithDiff(actualError.Error(), "to equal", expectedError.Error())
 	}
 
-	return format.Message(actual, "to equal", matcher.ExpectedError)
+	if actualOK && !expectedOK {
+		return format.Message(actualError.Error(), "to equal", expectedError.Error())
+	}
+
+	if !actualOK && expectedOK {
+		return format.Message(actual, "to equal", expectedError.Error())
+	}
+
+	return format.Message(actual, "to equal", expectedError)
 }
 
 //NegatedFailureMessage builds an error message.
 func (matcher ErrorMatcher) NegatedFailureMessage(actual interface{}) (message string) {
-	return format.Message(actual, "not to equal", matcher.ExpectedError)
+	actualError, actualOK := actual.(error)
+	expectedError, expectedOK := matcher.ExpectedError.(error)
+
+	if actualOK && expectedOK {
+		return format.MessageWithDiff(actualError.Error(), "not to equal", expectedError.Error())
+	}
+
+	if actualOK && !expectedOK {
+		return format.Message(actualError.Error(), "not to equal", expectedError.Error())
+	}
+
+	if !actualOK && expectedOK {
+		return format.Message(actual, "not to equal", expectedError.Error())
+	}
+
+	return format.Message(actual, "not to equal", expectedError)
 }
