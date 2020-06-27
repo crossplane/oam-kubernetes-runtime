@@ -30,9 +30,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-	addon "github.com/crossplane/oam-controllers/pkg/oam/util"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 // Render error strings.
@@ -203,8 +203,8 @@ func IsRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
 }
 
 func getCRDName(u *unstructured.Unstructured) string {
-	group, _ := addon.ApiVersion2GroupVersion(u.GetAPIVersion())
-	resources := []string{addon.Kind2Resource(u.GetKind())}
+	group, _ := util.APIVersion2GroupVersion(u.GetAPIVersion())
+	resources := []string{util.Kind2Resource(u.GetKind())}
 	if group != "" {
 		resources = append(resources, group)
 	}
