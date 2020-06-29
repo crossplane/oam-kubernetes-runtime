@@ -71,16 +71,16 @@ func (dm *dagManagerImpl) scan(ctx context.Context) {
 	for app, dag := range dm.app2dag {
 		for sourceName, sps := range dag.SourceMap {
 			// TODO: avoid repeating processing the same source by marking done in AppConfig status
-			val, err := dm.checkSourceReady(ctx, sps.Source)
+			val, ready, err := dm.checkSourceReady(ctx, sps.Source)
 			if err != nil {
 				dm.log.Info("checkSourceReady failed", "errmsg", err)
 				continue
 			}
+			if !ready {
+				continue
+			}
 
 			for sinkName, sink := range sps.Sinks {
-				if !matchValue(sink.Matchers, val) {
-					continue // not ready
-				}
 
 				dm.log.Debug("triggering sinks", "app", app, "source", sourceName, "sink", sinkName)
 
@@ -135,34 +135,44 @@ func (dm *dagManagerImpl) markDependencyDone(ctx context.Context, ac *v1alpha2.A
 		"cannot apply status")
 }
 
-func matchValue(ms []v1alpha2.DataMatcherRequirement, val string) bool {
+func matchValue(ms []v1alpha2.DataMatcherRequirement, val string, paved *fieldpath.Paved) bool {
 	// If no matcher is specified, it is by default to check value not empty.
 	if len(ms) == 0 {
 		return val != ""
 	}
 
 	for _, m := range ms {
+		var checkVal string
+		var err error
+		if m.FieldPath != "" {
+			checkVal, err = paved.GetString(m.FieldPath)
+			if err != nil {
+				// can not get value from field path, it's not ready
+				return false
+			}
+		} else {
+			checkVal = val
+		}
 		switch m.Operator {
 		case v1alpha2.DataMatcherOperatorEqual:
-			if m.Value != val {
+			if m.Value != checkVal {
 				return false
 			}
 		case v1alpha2.DataMatcherOperatorNotEqual:
-			if m.Value == val {
+			if m.Value == checkVal {
 				return false
 			}
 		case v1alpha2.DataMatcherOperatorNotEmpty:
-			if val == "" {
+			if checkVal == "" {
 				return false
 			}
 		}
 	}
-
 	return true
 }
 
 // TODO: This logic had better belongs to the source itself.
-func (dm *dagManagerImpl) checkSourceReady(ctx context.Context, s *Source) (string, error) {
+func (dm *dagManagerImpl) checkSourceReady(ctx context.Context, s *Source) (string, bool, error) {
 	// TODO: avoid repeating check by marking ready in AppConfig status
 	obj := s.ObjectRef
 	key := types.NamespacedName{
@@ -173,17 +183,21 @@ func (dm *dagManagerImpl) checkSourceReady(ctx context.Context, s *Source) (stri
 	u.SetGroupVersionKind(obj.GroupVersionKind())
 	err := dm.client.Get(ctx, key, u)
 	if err != nil {
-		return "", fmt.Errorf("failed to get object (%s): %w", key.String(), err)
+		return "", false, fmt.Errorf("failed to get object (%s): %w", key.String(), err)
 	}
 	paved := fieldpath.Pave(u.UnstructuredContent())
 
 	// TODO: Currently only string value supported. Support more types in the future.
 	val, err := paved.GetString(obj.FieldPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
+		return "", false, fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
 	}
 
-	return val, nil
+	if !matchValue(s.Matchers, val, paved) {
+		return val, false, nil // not ready
+	}
+
+	return val, true, nil
 }
 
 func (dm *dagManagerImpl) trigger(ctx context.Context, s *Sink, val string) error {

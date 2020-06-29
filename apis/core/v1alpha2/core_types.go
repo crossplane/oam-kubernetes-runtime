@@ -261,9 +261,11 @@ type ComponentTrait struct {
 	Trait runtime.RawExtension `json:"trait"`
 
 	// DataOutputs specify the data output sources from this trait.
+	// +optional
 	DataOutputs []DataOutput `json:"dataOutputs,omitempty"`
 
 	// DataInputs specify the data input sinks into this trait.
+	// +optional
 	DataInputs []DataInput `json:"dataInputs,omitempty"`
 }
 
@@ -388,6 +390,12 @@ type DataOutput struct {
 
 	// FieldPath refers to the value of an object's field.
 	FieldPath string `json:"fieldPath,omitempty"`
+
+	// Matchers specify the requirements to match a value.
+	// Different requirements are AND-ed together.
+	// If no matcher is specified, it is by default to check not empty.
+	// +optional
+	Matchers []DataMatcherRequirement `json:"matchers,omitempty"`
 }
 
 // DataInput specifies a data input sink to an object.
@@ -403,17 +411,14 @@ type DataInput struct {
 type DataInputValueFrom struct {
 	// DataOutputName matches a name of a DataOutput in the same AppConfig.
 	DataOutputName string `json:"dataOutputName"`
-
-	// Matchers specify the requirements to match a value.
-	// Different requirements are AND-ed together.
-	// If no matcher is specified, it is by default to check not empty.
-	Matchers []DataMatcherRequirement `json:"matchers,omitempty"`
 }
 
 // DataMatcherRequirement specifies the requirement to match a value.
 type DataMatcherRequirement struct {
 	Operator DataMatcherOperator `json:"op"`
 	Value    string              `json:"value"`
+	// +optional
+	FieldPath string `json:"fieldPath,omitempty"`
 }
 
 // DataMatcherOperator specifies the operator to match a value.

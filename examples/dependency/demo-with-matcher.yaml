@@ -8,6 +8,10 @@ spec:
     kind: Foo
     metadata:
       name: source
+    spec:
+      key: test-value
+    status: # comment this part to mimic dependency wait time.
+      state: pending
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component
@@ -28,11 +32,15 @@ spec:
   components:
     - componentName: source
       dataOutputs:
-      - name: example-key
-        fieldPath: "status.key"
+        - name: example-key
+          fieldPath: "spec.key"
+          matchers:
+            - op: eq
+              value: running
+              fieldPath: "status.state"
     - componentName: sink
       dataInputs:
-      - valueFrom:
-          dataOutputName: example-key
-        toFieldPaths:
-        - "spec.key"
+        - valueFrom:
+            dataOutputName: example-key
+          toFieldPaths:
+            - "spec.key"
