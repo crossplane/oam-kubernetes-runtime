@@ -3,7 +3,7 @@ Run the following commands to prepare demo AppConfig and Components, and start o
 ```shell
 kubectl delete -f examples/dependency/demo.yaml
 kubectl delete foo --all
-kubectl apply -f examples/dependency/demo.yaml
+kubectl apply -f examples/dependency/
 go run examples/containerized-workload/main.go
 ```
 

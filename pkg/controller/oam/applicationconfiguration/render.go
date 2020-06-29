@@ -86,7 +86,7 @@ type components struct {
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
 	workloads := make([]Workload, 0, len(ac.Spec.Components))
-	dag := dependency.NewDAG()
+	dag := dependency.NewDAG(ac.DeepCopy())
 	for _, acc := range ac.Spec.Components {
 		w, err := r.renderComponent(ctx, acc, ac, dag)
 		if err != nil {
@@ -104,7 +104,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 	return workloads, nil
 }
 
-func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag dependency.DAG) (*Workload, error) {
+func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag *dependency.DAG) (*Workload, error) {
 	if acc.RevisionName != "" {
 		acc.ComponentName = ExtractComponentName(acc.RevisionName)
 	}
@@ -161,7 +161,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}, nil
 }
 
-func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, namespace, componentName string, ref *metav1.OwnerReference, dag dependency.DAG) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
+func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, namespace, componentName string, ref *metav1.OwnerReference, dag *dependency.DAG) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
 	t, err := r.trait.Render(ct.Trait.Raw)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
@@ -397,7 +397,7 @@ func resolve(cp []v1alpha2.ComponentParameter, cpv []v1alpha2.ComponentParameter
 	return params, nil
 }
 
-func addDataOutputsToDAG(dag dependency.DAG, outs []v1alpha2.DataOutput, obj *unstructured.Unstructured) {
+func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *unstructured.Unstructured) {
 	for _, out := range outs {
 		r := &corev1.ObjectReference{
 			APIVersion: obj.GetAPIVersion(),
@@ -410,7 +410,7 @@ func addDataOutputsToDAG(dag dependency.DAG, outs []v1alpha2.DataOutput, obj *un
 	}
 }
 
-func addDataInputsToDAG(dag dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured) {
+func addDataInputsToDAG(dag *dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured) {
 	for _, in := range ins {
 		dag.AddSink(in.ValueFrom.DataOutputName, obj, in.ToFieldPaths, in.ValueFrom.Matchers)
 	}

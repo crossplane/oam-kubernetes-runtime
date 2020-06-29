@@ -24,6 +24,11 @@ import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )
 
+const (
+	// ReasonDependencyDone indicates that all dependencies are satisfied
+	ReasonDependencyDone = "All dependencies satisfied"
+)
+
 // A DefinitionReference refers to a CustomResourceDefinition by name.
 type DefinitionReference struct {
 	// Name of the referenced CustomResourceDefinition.

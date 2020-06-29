@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
@@ -29,7 +32,7 @@ type DAGManager interface {
 	Start(context.Context)
 
 	// AddDAG adds a dag of an AppConfig into DAGManager.
-	AddDAG(appKey string, dag DAG)
+	AddDAG(appKey string, dag *DAG)
 }
 
 // SetupGlobalDAGManager sets up the global dagManager.
@@ -37,7 +40,7 @@ func SetupGlobalDAGManager(l logging.Logger, c client.Client) {
 	GlobalManager = &dagManagerImpl{
 		client:  c,
 		log:     l.WithValues("manager", "dag"),
-		app2dag: make(map[string]DAG),
+		app2dag: make(map[string]*DAG),
 	}
 }
 
@@ -46,7 +49,7 @@ type dagManagerImpl struct {
 	log    logging.Logger
 	client client.Client
 
-	app2dag map[string]DAG
+	app2dag map[string]*DAG
 }
 
 func (dm *dagManagerImpl) Start(ctx context.Context) {
@@ -66,7 +69,7 @@ func (dm *dagManagerImpl) scan(ctx context.Context) {
 	defer dm.mu.Unlock()
 
 	for app, dag := range dm.app2dag {
-		for sourceName, sps := range dag {
+		for sourceName, sps := range dag.SourceMap {
 			// TODO: avoid repeating processing the same source by marking done in AppConfig status
 			val, err := dm.checkSourceReady(ctx, sps.Source)
 			if err != nil {
@@ -93,17 +96,43 @@ func (dm *dagManagerImpl) scan(ctx context.Context) {
 
 			if len(sps.Sinks) == 0 {
 				// TODO: report status and send event.
-				delete(dag, sourceName)
+				delete(dag.SourceMap, sourceName)
 			}
 		}
 
 		// Only handles startup dependency scenario now.
-		if len(dag) == 0 {
+		if len(dag.SourceMap) == 0 {
+			err := dm.markDependencyDone(ctx, dag.AppConfig)
+			if err != nil {
+				dm.log.Info("markDependencyDone failed", "err", err)
+				continue
+			}
 			dm.log.Debug("all dependencies satisfied", "app", app)
-			// TODO: report status and send event.
 			delete(dm.app2dag, app)
 		}
 	}
+}
+
+func (dm *dagManagerImpl) markDependencyDone(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) error {
+	key := types.NamespacedName{
+		Namespace: ac.Namespace,
+		Name:      ac.Name,
+	}
+	err := dm.client.Get(ctx, key, ac)
+	if err != nil {
+		return err
+	}
+	acPatch := client.MergeFrom(ac.DeepCopyObject())
+	depDone := cpv1alpha1.Condition{
+		Type:               cpv1alpha1.TypeReady,
+		Status:             corev1.ConditionTrue,
+		Reason:             v1alpha2.ReasonDependencyDone,
+		LastTransitionTime: metav1.Now(),
+	}
+	ac.SetConditions(depDone)
+	return errors.Wrap(
+		dm.client.Status().Patch(ctx, ac, acPatch, client.FieldOwner(ac.GetUID())),
+		"cannot apply status")
 }
 
 func matchValue(ms []v1alpha2.DataMatcherRequirement, val string) bool {
@@ -187,7 +216,7 @@ func (dm *dagManagerImpl) trigger(ctx context.Context, s *Sink, val string) erro
 	return errors.Wrap(dm.client.Create(ctx, &unstructured.Unstructured{Object: paved.UnstructuredContent()}), "create sink object failed")
 }
 
-func (dm *dagManagerImpl) AddDAG(appKey string, dag DAG) {
+func (dm *dagManagerImpl) AddDAG(appKey string, dag *DAG) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 

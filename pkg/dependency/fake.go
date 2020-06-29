@@ -18,5 +18,5 @@ func (dm *FakeDAGManager) Start(ctx context.Context) {
 }
 
 // AddDAG implements the DAGManager.AddDAG method.
-func (dm *FakeDAGManager) AddDAG(appKey string, dag DAG) {
+func (dm *FakeDAGManager) AddDAG(appKey string, dag *DAG) {
 }

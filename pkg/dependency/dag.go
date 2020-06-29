@@ -10,8 +10,12 @@ import (
 )
 
 // DAG is the dependency graph for an AppConfig.
-// The key is the SourceName (aka DataOutputName)
-type DAG map[string]*SinksPerSource
+type DAG struct {
+	AppConfig *v1alpha2.ApplicationConfiguration
+
+	// The key is the SourceName (aka DataOutputName)
+	SourceMap map[string]*SinksPerSource
+}
 
 // SinksPerSource represents the sinks that belong to a source.
 type SinksPerSource struct {
@@ -39,8 +43,11 @@ type Sink struct {
 }
 
 // NewDAG creates a fresh DAG.
-func NewDAG() DAG {
-	return DAG{}
+func NewDAG(ac *v1alpha2.ApplicationConfiguration) *DAG {
+	return &DAG{
+		AppConfig: ac,
+		SourceMap: make(map[string]*SinksPerSource),
+	}
 }
 
 func newSinksPerSource() *SinksPerSource {
@@ -50,13 +57,13 @@ func newSinksPerSource() *SinksPerSource {
 }
 
 // AddSource adds a data output source into the DAG.
-func (d DAG) AddSource(sourceName string, ref *corev1.ObjectReference) {
+func (d *DAG) AddSource(sourceName string, ref *corev1.ObjectReference) {
 	sps := d.getOrCreateSinksPerSource(sourceName)
 	sps.Source = &Source{ObjectRef: ref}
 }
 
 // AddSink adds a data input sink into the DAG.
-func (d DAG) AddSink(sourceName string, obj *unstructured.Unstructured, f []string, m []v1alpha2.DataMatcherRequirement) {
+func (d *DAG) AddSink(sourceName string, obj *unstructured.Unstructured, f []string, m []v1alpha2.DataMatcherRequirement) {
 	sps := d.getOrCreateSinksPerSource(sourceName)
 
 	// Assuming 'kind:namespace/name' is unique. E.g, 'trait:default/app1-ingress'.
@@ -68,11 +75,11 @@ func (d DAG) AddSink(sourceName string, obj *unstructured.Unstructured, f []stri
 	}
 }
 
-func (d DAG) getOrCreateSinksPerSource(sourceName string) *SinksPerSource {
-	sps, ok := d[sourceName]
+func (d *DAG) getOrCreateSinksPerSource(sourceName string) *SinksPerSource {
+	sps, ok := d.SourceMap[sourceName]
 	if !ok {
 		sps = newSinksPerSource()
-		d[sourceName] = sps
+		d.SourceMap[sourceName] = sps
 	}
 	return sps
 }

@@ -551,14 +551,14 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 	obj.SetNamespace("test-ns")
 	obj.SetName("test-name")
 
-	dag := dependency.NewDAG()
+	dag := dependency.NewDAG(&v1alpha2.ApplicationConfiguration{})
 	outs := []v1alpha2.DataOutput{{
 		Name:      "test-output",
 		FieldPath: "spec.replica",
 	}}
 	addDataOutputsToDAG(dag, outs, obj)
 
-	sps, ok := dag["test-output"]
+	sps, ok := dag.SourceMap["test-output"]
 	if !ok {
 		t.Fatal("didn't add source correctly")
 	}
@@ -583,14 +583,14 @@ func TestAddDataInputsToDAG(t *testing.T) {
 	obj.SetNamespace("test-ns")
 	obj.SetName("test-name")
 
-	dag := dependency.NewDAG()
+	dag := dependency.NewDAG(&v1alpha2.ApplicationConfiguration{})
 	ins := []v1alpha2.DataInput{{
 		ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
 		ToFieldPaths: []string{"spec.replica"},
 	}}
 	addDataInputsToDAG(dag, ins, obj)
 
-	sps, ok := dag["test-output"]
+	sps, ok := dag.SourceMap["test-output"]
 	if !ok {
 		t.Fatal("didn't add sinks to specified output correctly")
 	}
