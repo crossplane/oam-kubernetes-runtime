@@ -137,6 +137,9 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 			return nil, err
 		}
 
+		if t == nil { // Depends on other resources. Not creating it now.
+			continue
+		}
 		traits = append(traits, *t)
 		traitDefs = append(traitDefs, *traitDef)
 	}
