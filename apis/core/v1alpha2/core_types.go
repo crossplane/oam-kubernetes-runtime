@@ -397,6 +397,7 @@ type DataInput struct {
 
 // DataInputValueFrom specifies the value source for a data input.
 type DataInputValueFrom struct {
+	// DataOutputName matches a name of a DataOutput in the same AppConfig.
 	DataOutputName string `json:"dataOutputName"`
 
 	// Matchers specify the requirements to match a value.
