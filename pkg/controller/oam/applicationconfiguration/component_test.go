@@ -87,7 +87,11 @@ func TestComponentHandler(t *testing.T) {
 	assert.Equal(t, 1, len(revisions.Items))
 	assert.Equal(t, true, strings.HasPrefix(revisions.Items[0].Name, "comp1-"))
 	gotComp := revisions.Items[0].Data.Object.(*v1alpha2.Component)
+	// check component's spec saved in corresponding controllerRevision
 	assert.Equal(t, comp.Spec, gotComp.Spec)
+	// check component's status saved in corresponding controllerRevision
+	assert.Equal(t, gotComp.Status.LatestRevision.Name, revisions.Items[0].Name)
+	assert.Equal(t, gotComp.Status.LatestRevision.Revision, revisions.Items[0].Revision)
 	q.Done(item)
 	// ============ Test Create Event End ===================
 
@@ -120,7 +124,11 @@ func TestComponentHandler(t *testing.T) {
 		assert.Equal(t, true, strings.HasPrefix(v.Name, "comp1-"))
 		if v.Revision == 2 {
 			gotComp := v.Data.Object.(*v1alpha2.Component)
+			// check component's spec saved in corresponding controllerRevision
 			assert.Equal(t, comp2.Spec, gotComp.Spec)
+			// check component's status saved in corresponding controllerRevision
+			assert.Equal(t, gotComp.Status.LatestRevision.Name, v.Name)
+			assert.Equal(t, gotComp.Status.LatestRevision.Revision, v.Revision)
 		}
 	}
 	q.Done(item)
