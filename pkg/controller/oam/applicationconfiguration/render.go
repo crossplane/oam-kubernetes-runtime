@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +33,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/dependency"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -83,69 +85,118 @@ type components struct {
 }
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-	workloads := make([]Workload, len(ac.Spec.Components))
-	for i, acc := range ac.Spec.Components {
-
-		if acc.RevisionName != "" {
-			acc.ComponentName = ExtractComponentName(acc.RevisionName)
-		}
-		c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
+	workloads := make([]Workload, 0, len(ac.Spec.Components))
+	dag := dependency.NewDAG(ac.DeepCopy())
+	for _, acc := range ac.Spec.Components {
+		w, err := r.renderComponent(ctx, acc, ac, dag)
 		if err != nil {
 			return nil, err
 		}
-		p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
-		if err != nil {
-			return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
+		if w == nil { // depends on other resources. Not creating now.
+			continue
 		}
+		workloads = append(workloads, *w)
+	}
 
-		w, err := r.workload.Render(c.Spec.Workload.Raw, p...)
-		if err != nil {
-			return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
-		}
-
-		ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
-		w.SetOwnerReferences([]metav1.OwnerReference{*ref})
-		w.SetNamespace(ac.GetNamespace())
-
-		traits := make([]unstructured.Unstructured, len(acc.Traits))
-		traitDefs := make([]v1alpha2.TraitDefinition, len(acc.Traits))
-		for i, ct := range acc.Traits {
-			t, err := r.trait.Render(ct.Trait.Raw)
-			if err != nil {
-				return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
-			}
-
-			setTraitProperties(t, acc.ComponentName, ac.GetNamespace(), ref)
-
-			traits[i] = *t
-
-			traitDef, err := r.getTraitDefinition(ctx, t)
-			if err != nil {
-				return nil, err
-			}
-			traitDefs = append(traitDefs, traitDef)
-		}
-		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
-			return nil, err
-		}
-
-		scopes := make([]unstructured.Unstructured, len(acc.Scopes))
-		for i, cs := range acc.Scopes {
-			// Get Scope instance from k8s, since it is global and not a child resource of workflow.
-			scopeObject := unstructured.Unstructured{}
-			scopeObject.SetAPIVersion(cs.ScopeReference.APIVersion)
-			scopeObject.SetKind(cs.ScopeReference.Kind)
-			scopeObjectRef := types.NamespacedName{Namespace: ac.GetNamespace(), Name: cs.ScopeReference.Name}
-			if err := r.client.Get(ctx, scopeObjectRef, &scopeObject); err != nil {
-				return nil, errors.Wrapf(err, errFmtGetScope, cs.ScopeReference.Name)
-			}
-
-			scopes[i] = scopeObject
-		}
-
-		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}
+	if dependency.GlobalManager != nil { // Some unit test might not setup the global DAGManager.
+		dependency.GlobalManager.AddDAG(ac.GetNamespace()+"/"+ac.GetName(), dag)
 	}
 	return workloads, nil
+}
+
+func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag *dependency.DAG) (*Workload, error) {
+	if acc.RevisionName != "" {
+		acc.ComponentName = ExtractComponentName(acc.RevisionName)
+	}
+	c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
+	if err != nil {
+		return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
+	}
+
+	w, err := r.workload.Render(c.Spec.Workload.Raw, p...)
+	if err != nil {
+		return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
+	}
+
+	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
+	w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+	w.SetNamespace(ac.GetNamespace())
+
+	addDataOutputsToDAG(dag, acc.DataOutputs, w)
+	addDataInputsToDAG(dag, acc.DataInputs, w)
+
+	traits := make([]unstructured.Unstructured, 0, len(acc.Traits))
+	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
+	for _, ct := range acc.Traits {
+		t, traitDef, err := r.renderTrait(ctx, ct, ac.GetNamespace(), acc.ComponentName, ref, dag)
+		if err != nil {
+			return nil, err
+		}
+
+		if t == nil { // Depends on other resources. Not creating it now.
+			continue
+		}
+		traits = append(traits, *t)
+		traitDefs = append(traitDefs, *traitDef)
+	}
+	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
+		return nil, err
+	}
+
+	scopes := make([]unstructured.Unstructured, 0, len(acc.Scopes))
+	for _, cs := range acc.Scopes {
+		scopeObject, err := r.renderScope(ctx, cs, ac.GetNamespace())
+		if err != nil {
+			return nil, err
+		}
+
+		scopes = append(scopes, *scopeObject)
+	}
+
+	if len(acc.DataInputs) != 0 { // Depends on other resources. Not creating it now.
+		return nil, nil
+	}
+
+	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}, nil
+}
+
+func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, namespace, componentName string, ref *metav1.OwnerReference, dag *dependency.DAG) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
+	t, err := r.trait.Render(ct.Trait.Raw)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
+	}
+
+	setTraitProperties(t, componentName, namespace, ref)
+
+	traitDef, err := r.getTraitDefinition(ctx, t)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	addDataOutputsToDAG(dag, ct.DataOutputs, t)
+	addDataInputsToDAG(dag, ct.DataInputs, t)
+
+	// Depends on other resources. Not creating it now.
+	if len(ct.DataInputs) != 0 {
+		return nil, nil, nil
+	}
+	return t, &traitDef, nil
+}
+
+func (r *components) renderScope(ctx context.Context, cs v1alpha2.ComponentScope, ns string) (*unstructured.Unstructured, error) {
+	// Get Scope instance from k8s, since it is global and not a child resource of workflow.
+	scopeObject := &unstructured.Unstructured{}
+	scopeObject.SetAPIVersion(cs.ScopeReference.APIVersion)
+	scopeObject.SetKind(cs.ScopeReference.Kind)
+	scopeObjectRef := types.NamespacedName{Namespace: ns, Name: cs.ScopeReference.Name}
+	if err := r.client.Get(ctx, scopeObjectRef, scopeObject); err != nil {
+		return nil, errors.Wrapf(err, errFmtGetScope, cs.ScopeReference.Name)
+	}
+	return scopeObject, nil
 }
 
 func setTraitProperties(t *unstructured.Unstructured, componentName, namespace string, ref *metav1.OwnerReference) {
@@ -347,4 +398,23 @@ func resolve(cp []v1alpha2.ComponentParameter, cpv []v1alpha2.ComponentParameter
 	}
 
 	return params, nil
+}
+
+func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *unstructured.Unstructured) {
+	for _, out := range outs {
+		r := &corev1.ObjectReference{
+			APIVersion: obj.GetAPIVersion(),
+			Kind:       obj.GetKind(),
+			Name:       obj.GetName(),
+			Namespace:  obj.GetNamespace(),
+			FieldPath:  out.FieldPath,
+		}
+		dag.AddSource(out.Name, r)
+	}
+}
+
+func addDataInputsToDAG(dag *dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured) {
+	for _, in := range ins {
+		dag.AddSink(in.ValueFrom.DataOutputName, obj, in.ToFieldPaths, in.ValueFrom.Matchers)
+	}
 }

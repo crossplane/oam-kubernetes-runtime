@@ -120,6 +120,14 @@ And a `Manualscalertrait` looking like below
 kubectl get manualscalertraits.core.oam.dev
 NAME                      AGE
 example-appconfig-trait   54s
+
+```
+
+And a `HealthScope` looking like below
+```
+kubectl get healthscopes.core.oam.dev
+NAME                   AGE
+example-health-scope   23s
 ```
 
 ## Prepare for Pull Request

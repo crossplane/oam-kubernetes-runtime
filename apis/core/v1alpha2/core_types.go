@@ -24,6 +24,11 @@ import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )
 
+const (
+	// ReasonDependencyDone indicates that all dependencies are satisfied
+	ReasonDependencyDone = "All dependencies satisfied"
+)
+
 // A DefinitionReference refers to a CustomResourceDefinition by name.
 type DefinitionReference struct {
 	// Name of the referenced CustomResourceDefinition.
@@ -250,6 +255,12 @@ type ComponentTrait struct {
 	// +kubebuilder:validation:EmbeddedResource
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Trait runtime.RawExtension `json:"trait"`
+
+	// DataOutputs specify the data output sources from this trait.
+	DataOutputs []DataOutput `json:"dataOutputs,omitempty"`
+
+	// DataInputs specify the data input sinks into this trait.
+	DataInputs []DataInput `json:"dataInputs,omitempty"`
 }
 
 // A ComponentScope specifies a scope in which a component should exist.
@@ -273,6 +284,12 @@ type ApplicationConfigurationComponent struct {
 	// ApplicationConfiguration. This is mutually exclusive with componentName.
 	// +optional
 	RevisionName string `json:"revisionName,omitempty"`
+
+	// DataOutputs specify the data output sources from this component.
+	DataOutputs []DataOutput `json:"dataOutputs,omitempty"`
+
+	// DataInputs specify the data input sinks into this component.
+	DataInputs []DataInput `json:"dataInputs,omitempty"`
 
 	// ParameterValues specify values for the the specified component's
 	// parameters. Any parameter required by the component must be specified.
@@ -359,3 +376,50 @@ type ApplicationConfigurationList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ApplicationConfiguration `json:"items"`
 }
+
+// DataOutput specifies a data output source from an object.
+type DataOutput struct {
+	// Name is the unique name of a DataOutput in an ApplicationConfiguration.
+	Name string `json:"name,omitempty"`
+
+	// FieldPath refers to the value of an object's field.
+	FieldPath string `json:"fieldPath,omitempty"`
+}
+
+// DataInput specifies a data input sink to an object.
+type DataInput struct {
+	// ValueFrom specifies the value source.
+	ValueFrom DataInputValueFrom `json:"valueFrom,omitempty"`
+
+	// ToFieldPaths specifies the field paths of an object to fill passed value.
+	ToFieldPaths []string `json:"toFieldPaths,omitempty"`
+}
+
+// DataInputValueFrom specifies the value source for a data input.
+type DataInputValueFrom struct {
+	// DataOutputName matches a name of a DataOutput in the same AppConfig.
+	DataOutputName string `json:"dataOutputName"`
+
+	// Matchers specify the requirements to match a value.
+	// Different requirements are AND-ed together.
+	// If no matcher is specified, it is by default to check not empty.
+	Matchers []DataMatcherRequirement `json:"matchers,omitempty"`
+}
+
+// DataMatcherRequirement specifies the requirement to match a value.
+type DataMatcherRequirement struct {
+	Operator DataMatcherOperator `json:"op"`
+	Value    string              `json:"value"`
+}
+
+// DataMatcherOperator specifies the operator to match a value.
+type DataMatcherOperator string
+
+const (
+	// DataMatcherOperatorEqual indicates equal to given value
+	DataMatcherOperatorEqual DataMatcherOperator = "eq"
+	// DataMatcherOperatorNotEqual indicates not equal to given value
+	DataMatcherOperatorNotEqual DataMatcherOperator = "notEq"
+	// DataMatcherOperatorNotEmpty indicates given value not empty
+	DataMatcherOperatorNotEmpty DataMatcherOperator = "notEmpty"
+)

@@ -17,13 +17,6 @@ In addition, we created this library with the following goals in mind
 ## Getting started
 Check out [DEVELOPMENT.md](./DEVELOPMENT.md) to see how to develop with OAM Kubernetes runtime
 
-And a `HealthScope` looking like below
-```
-kubectl get healthscopes.core.oam.dev
-NAME                   AGE
-example-health-scope   23s
-```
-
 ## Community, discussion, contribution
 You can reach the maintainers of this project at:
 * Slack channel: [crossplane#oam](https://crossplane.slack.com/#oam)

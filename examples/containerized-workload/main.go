@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/dependency"
 )
 
 var scheme = runtime.NewScheme()
@@ -35,7 +37,7 @@ func main() {
 		o.Development = true
 	}))
 
-	oamLog := ctrl.Log.WithName("oam kubernetes runtime example")
+	oamLog := ctrl.Log.WithName("oam-runtime")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
@@ -48,10 +50,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	l := logging.NewLogrLogger(oamLog)
+	dependency.SetupGlobalDAGManager(l, mgr.GetClient())
 	if err = oam.Setup(mgr, logging.NewLogrLogger(oamLog)); err != nil {
 		oamLog.Error(err, "unable to setup oam core controller")
 		os.Exit(1)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go dependency.GlobalManager.Start(ctx)
 
 	oamLog.Info("starting the controller manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
