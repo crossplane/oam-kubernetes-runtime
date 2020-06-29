@@ -146,6 +146,11 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	}
 	nextRevision := curRevision + 1
 	revisionName := ConstructRevisionName(mt.GetName())
+
+	curComp.Status.LatestRevision = &v1alpha2.Revision{
+		Name:     revisionName,
+		Revision: nextRevision,
+	}
 	// set annotation to component
 	revision := appsv1.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -167,10 +172,6 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	if err != nil {
 		c.l.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
 		return false
-	}
-	curComp.Status.LatestRevision = &v1alpha2.Revision{
-		Name:     revisionName,
-		Revision: nextRevision,
 	}
 	err = c.client.Status().Update(context.Background(), curComp)
 	if err != nil {
