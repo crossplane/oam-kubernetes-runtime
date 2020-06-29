@@ -23,6 +23,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -33,6 +35,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/dependency"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/fake"
 )
 
@@ -429,5 +432,178 @@ func TestEligible(t *testing.T) {
 func TestIsRevisionWorkload(t *testing.T) {
 	if true != IsRevisionWorkload(v1alpha2.WorkloadStatus{ComponentName: "compName", Reference: runtimev1alpha1.TypedReference{Name: "compName-rev1"}}) {
 		t.Error("workloadName has componentName as prefix is revisionWorkload")
+	}
+}
+
+func TestDependentComponentShouldNotReturn(t *testing.T) {
+	dependency.GlobalManager = dependency.NewFakeDAGManager()
+
+	workload := &unstructured.Unstructured{}
+	workload.SetAPIVersion("v1")
+	workload.SetKind("workload")
+	workload.SetNamespace("test-ns")
+	workload.SetName("workload")
+
+	trait := &unstructured.Unstructured{}
+	trait.SetAPIVersion("v1")
+	trait.SetKind("trait")
+	trait.SetNamespace("test-ns")
+	trait.SetName("trait")
+
+	c := components{
+		client: &test.MockClient{
+			MockGet: test.NewMockGetFn(nil),
+		},
+		params: ParameterResolveFn(resolve),
+		workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
+			return workload, nil
+		}),
+		trait: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
+			return trait, nil
+
+		}),
+	}
+
+	ac := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-app",
+			Namespace: "test-ns",
+		},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{{
+				ComponentName: "test-component",
+				DataInputs: []v1alpha2.DataInput{{
+					ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+					ToFieldPaths: []string{"spec.replica"},
+				}},
+			}},
+		},
+	}
+	got, err := c.Render(context.Background(), ac)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) > 0 {
+		t.Error("should not return any workload")
+	}
+}
+
+func TestDependentTraitShouldNotReturn(t *testing.T) {
+	dependency.GlobalManager = dependency.NewFakeDAGManager()
+
+	workload := &unstructured.Unstructured{}
+	workload.SetAPIVersion("v1")
+	workload.SetKind("workload")
+	workload.SetNamespace("test-ns")
+	workload.SetName("workload")
+
+	trait := &unstructured.Unstructured{}
+	trait.SetAPIVersion("v1")
+	trait.SetKind("trait")
+	trait.SetNamespace("test-ns")
+	trait.SetName("trait")
+
+	c := components{
+		client: &test.MockClient{
+			MockGet: test.NewMockGetFn(nil),
+		},
+		params: ParameterResolveFn(resolve),
+		workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
+			return workload, nil
+		}),
+		trait: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
+			return trait, nil
+
+		}),
+	}
+
+	ac := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-app",
+			Namespace: "test-ns",
+		},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{{
+				ComponentName: "test-component",
+				Traits: []v1alpha2.ComponentTrait{{
+					Trait: runtime.RawExtension{},
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.replica"},
+					}},
+				}},
+			}},
+		},
+	}
+	got, err := c.Render(context.Background(), ac)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got[0].Traits) > 0 {
+		t.Error("should not return any trait")
+	}
+}
+
+func TestAddDataOutputsToDAG(t *testing.T) {
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("v1")
+	obj.SetKind("TestKind")
+	obj.SetNamespace("test-ns")
+	obj.SetName("test-name")
+
+	dag := dependency.NewDAG()
+	outs := []v1alpha2.DataOutput{{
+		Name:      "test-output",
+		FieldPath: "spec.replica",
+	}}
+	addDataOutputsToDAG(dag, outs, obj)
+
+	sps, ok := dag["test-output"]
+	if !ok {
+		t.Fatal("didn't add source correctly")
+	}
+
+	r := &corev1.ObjectReference{
+		APIVersion: obj.GetAPIVersion(),
+		Kind:       obj.GetKind(),
+		Name:       obj.GetName(),
+		Namespace:  obj.GetNamespace(),
+		FieldPath:  outs[0].FieldPath,
+	}
+
+	if diff := cmp.Diff(sps.Source.ObjectRef, r); diff != "" {
+		t.Errorf("didn't add objectRef to source correctly: %s", diff)
+	}
+}
+
+func TestAddDataInputsToDAG(t *testing.T) {
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("v1")
+	obj.SetKind("Trait")
+	obj.SetNamespace("test-ns")
+	obj.SetName("test-name")
+
+	dag := dependency.NewDAG()
+	ins := []v1alpha2.DataInput{{
+		ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+		ToFieldPaths: []string{"spec.replica"},
+	}}
+	addDataInputsToDAG(dag, ins, obj)
+
+	sps, ok := dag["test-output"]
+	if !ok {
+		t.Fatal("didn't add sinks to specified output correctly")
+	}
+
+	s, ok := sps.Sinks["Trait:test-ns/test-name"]
+	if !ok {
+		t.Fatal("didn't add object as sink correctly")
+	}
+
+	if diff := cmp.Diff(s.Object, obj); diff != "" {
+		t.Errorf("didn't add raw object to sink correctly: %s", diff)
+	}
+	if diff := cmp.Diff(s.ToFieldPaths, ins[0].ToFieldPaths); diff != "" {
+		t.Errorf("didn't add ToFieldPaths correctly: %s", diff)
 	}
 }

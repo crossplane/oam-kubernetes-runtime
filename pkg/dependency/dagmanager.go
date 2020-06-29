@@ -109,10 +109,7 @@ func (dm *dagManagerImpl) scan(ctx context.Context) {
 func matchValue(ms []v1alpha2.DataMatcherRequirement, val string) bool {
 	// If no matcher is specified, it is by default to check value not empty.
 	if len(ms) == 0 {
-		if val == "" {
-			return false
-		}
-		return true
+		return val != ""
 	}
 
 	for _, m := range ms {
