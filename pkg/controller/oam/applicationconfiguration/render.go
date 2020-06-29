@@ -83,69 +83,76 @@ type components struct {
 }
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-	workloads := make([]Workload, len(ac.Spec.Components))
-	for i, acc := range ac.Spec.Components {
-
-		if acc.RevisionName != "" {
-			acc.ComponentName = ExtractComponentName(acc.RevisionName)
-		}
-		c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
+	workloads := make([]Workload, 0, len(ac.Spec.Components))
+	for _, acc := range ac.Spec.Components {
+		w, err := r.renderComponent(ctx, acc, ac)
 		if err != nil {
 			return nil, err
 		}
-		p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
-		if err != nil {
-			return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
-		}
-
-		w, err := r.workload.Render(c.Spec.Workload.Raw, p...)
-		if err != nil {
-			return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
-		}
-
-		ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
-		w.SetOwnerReferences([]metav1.OwnerReference{*ref})
-		w.SetNamespace(ac.GetNamespace())
-
-		traits := make([]unstructured.Unstructured, len(acc.Traits))
-		traitDefs := make([]v1alpha2.TraitDefinition, len(acc.Traits))
-		for i, ct := range acc.Traits {
-			t, err := r.trait.Render(ct.Trait.Raw)
-			if err != nil {
-				return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
-			}
-
-			setTraitProperties(t, acc.ComponentName, ac.GetNamespace(), ref)
-
-			traits[i] = *t
-
-			traitDef, err := r.getTraitDefinition(ctx, t)
-			if err != nil {
-				return nil, err
-			}
-			traitDefs = append(traitDefs, traitDef)
-		}
-		if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
-			return nil, err
-		}
-
-		scopes := make([]unstructured.Unstructured, len(acc.Scopes))
-		for i, cs := range acc.Scopes {
-			// Get Scope instance from k8s, since it is global and not a child resource of workflow.
-			scopeObject := unstructured.Unstructured{}
-			scopeObject.SetAPIVersion(cs.ScopeReference.APIVersion)
-			scopeObject.SetKind(cs.ScopeReference.Kind)
-			scopeObjectRef := types.NamespacedName{Namespace: ac.GetNamespace(), Name: cs.ScopeReference.Name}
-			if err := r.client.Get(ctx, scopeObjectRef, &scopeObject); err != nil {
-				return nil, errors.Wrapf(err, errFmtGetScope, cs.ScopeReference.Name)
-			}
-
-			scopes[i] = scopeObject
-		}
-
-		workloads[i] = Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}
+		workloads = append(workloads, *w)
 	}
 	return workloads, nil
+}
+
+func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration) (*Workload, error) {
+	if acc.RevisionName != "" {
+		acc.ComponentName = ExtractComponentName(acc.RevisionName)
+	}
+	c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	p, err := r.params.Resolve(c.Spec.Parameters, acc.ParameterValues)
+	if err != nil {
+		return nil, errors.Wrapf(err, errFmtResolveParams, acc.ComponentName)
+	}
+
+	w, err := r.workload.Render(c.Spec.Workload.Raw, p...)
+	if err != nil {
+		return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
+	}
+
+	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
+	w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+	w.SetNamespace(ac.GetNamespace())
+
+	traits := make([]unstructured.Unstructured, len(acc.Traits))
+	traitDefs := make([]v1alpha2.TraitDefinition, len(acc.Traits))
+	for i, ct := range acc.Traits {
+		t, err := r.trait.Render(ct.Trait.Raw)
+		if err != nil {
+			return nil, errors.Wrapf(err, errFmtRenderTrait, acc.ComponentName)
+		}
+
+		setTraitProperties(t, acc.ComponentName, ac.GetNamespace(), ref)
+
+		traits[i] = *t
+
+		traitDef, err := r.getTraitDefinition(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		traitDefs = append(traitDefs, traitDef)
+	}
+	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
+		return nil, err
+	}
+
+	scopes := make([]unstructured.Unstructured, len(acc.Scopes))
+	for i, cs := range acc.Scopes {
+		// Get Scope instance from k8s, since it is global and not a child resource of workflow.
+		scopeObject := unstructured.Unstructured{}
+		scopeObject.SetAPIVersion(cs.ScopeReference.APIVersion)
+		scopeObject.SetKind(cs.ScopeReference.Kind)
+		scopeObjectRef := types.NamespacedName{Namespace: ac.GetNamespace(), Name: cs.ScopeReference.Name}
+		if err := r.client.Get(ctx, scopeObjectRef, &scopeObject); err != nil {
+			return nil, errors.Wrapf(err, errFmtGetScope, cs.ScopeReference.Name)
+		}
+
+		scopes[i] = scopeObject
+	}
+
+	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}, nil
 }
 
 func setTraitProperties(t *unstructured.Unstructured, componentName, namespace string, ref *metav1.OwnerReference) {
