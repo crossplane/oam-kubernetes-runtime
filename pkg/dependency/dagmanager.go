@@ -25,7 +25,7 @@ import (
 var GlobalManager DAGManager
 
 // DAGManager manages the dependency graphs (DAG) of all AppConfigs.
-// Each AppConfig has its own DAG where its components and traits depends on others unidirectionally.
+// Each AppConfig has its own DAG where its components and attaches depends on others unidirectionally.
 type DAGManager interface {
 	// Start is blocking call that bootstraps the manager code.
 	// It should be called in initialization stage.
@@ -56,6 +56,8 @@ func (dm *dagManagerImpl) Start(ctx context.Context) {
 	dm.log.Info("starting DAG manager...")
 	for {
 		select {
+		// TODO(wonderflow): we'd better use controller event queue to do periodically check.
+		// TODO(wonderflow): store workload state into a configMap outside, then ownerreference will help do garbage collection if AppConfig is deleted before dag finish.
 		case <-time.After(5 * time.Second):
 			dm.scan(ctx)
 		case <-ctx.Done():
@@ -227,7 +229,16 @@ func (dm *dagManagerImpl) trigger(ctx context.Context, s *Sink, val string) erro
 		}
 	}
 
-	return errors.Wrap(dm.client.Create(ctx, &unstructured.Unstructured{Object: paved.UnstructuredContent()}), "create sink object failed")
+	if err := dm.client.Create(ctx, &unstructured.Unstructured{Object: paved.UnstructuredContent()}); err != nil {
+		return errors.Wrap(err, "create sink object failed")
+	}
+	for _, t := range s.attaches {
+		t := t
+		if err := dm.client.Create(ctx, &t); err != nil {
+			return errors.Wrap(err, "create sink attach object failed")
+		}
+	}
+	return nil
 }
 
 func (dm *dagManagerImpl) AddDAG(appKey string, dag *DAG) {

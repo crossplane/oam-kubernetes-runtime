@@ -38,6 +38,8 @@ type Sink struct {
 	// once the source is ready.
 	Object *unstructured.Unstructured
 
+	attaches []unstructured.Unstructured
+
 	// ToFieldPaths specifies the field paths the passed value to fill into.
 	ToFieldPaths []string
 }
@@ -56,6 +58,11 @@ func newSinksPerSource() *SinksPerSource {
 	}
 }
 
+// IsEmpty checks whether the DAG empty or not
+func (d *DAG) IsEmpty() bool {
+	return len(d.SourceMap) == 0
+}
+
 // AddSource adds a data output source into the DAG.
 func (d *DAG) AddSource(sourceName string, ref *corev1.ObjectReference, m []v1alpha2.ConditionRequirement) {
 	sps := d.getOrCreateSinksPerSource(sourceName)
@@ -63,13 +70,14 @@ func (d *DAG) AddSource(sourceName string, ref *corev1.ObjectReference, m []v1al
 }
 
 // AddSink adds a data input sink into the DAG.
-func (d *DAG) AddSink(sourceName string, obj *unstructured.Unstructured, f []string) {
+func (d *DAG) AddSink(sourceName string, obj *unstructured.Unstructured, attaches []unstructured.Unstructured, f []string) {
 	sps := d.getOrCreateSinksPerSource(sourceName)
 
 	// Assuming 'kind:namespace/name' is unique. E.g, 'trait:default/app1-ingress'.
 	key := obj.GetKind() + ":" + path.Join(obj.GetNamespace(), obj.GetName())
 	sps.Sinks[key] = &Sink{
 		Object:       obj,
+		attaches:     attaches,
 		ToFieldPaths: f,
 	}
 }

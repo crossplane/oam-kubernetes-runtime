@@ -588,7 +588,7 @@ func TestAddDataInputsToDAG(t *testing.T) {
 		ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
 		ToFieldPaths: []string{"spec.replica"},
 	}}
-	addDataInputsToDAG(dag, ins, obj)
+	addDataInputsToDAG(dag, ins, obj, nil)
 
 	sps, ok := dag.SourceMap["test-output"]
 	if !ok {
