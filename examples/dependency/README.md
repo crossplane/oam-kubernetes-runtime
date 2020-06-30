@@ -49,16 +49,7 @@ metadata:
   namespace: default
 ```
 
-And the workload of `sink` component also don't have `spec.key`:
-
-```shell script
-$ kubectl get foo.example.com  -o yaml
-apiVersion: example.com/v1
-kind: Foo
-metadata:
-  name: sink
-  namespace: default
-```
+And the workload of `sink` component not exist yet.
 
 After a while, assuming the controller of this CRD will reconcile and give the status.
 
@@ -74,7 +65,8 @@ Let manually add it by `kubectl edit foo.example.com source`
 +     key: test 
 ```
 
-Then the dependency will meet the requirement. You should see that the field "spec.key" of `sink` workload has been filled:
+Then the dependency will meet the requirement. You should see that the `sink` workload appears and
+the field `spec.key` of `sink` workload has been filled:
 
 ```shell script
 $ kubectl get foo sink -o yaml
@@ -109,7 +101,7 @@ spec:
       dataOutputs:
         - name: example-key
           fieldPath: "spec.key"
-          matchers:
+          conditions:
             - op: eq
               value: running
               fieldPath: "status.state"
@@ -124,7 +116,7 @@ spec:
 Run this command to make this demo work:
 
 ```shell script
-kubectl apply -f examples/dependency/demo-with-matcher
+kubectl apply -f examples/dependency/demo-with-conditions.yaml
 ```
 
 
@@ -171,3 +163,10 @@ status:
 ```
 
 Then the dependency will meet the requirement. You should see that the field "spec.key" of `sink` workload has been filled.
+
+clean resource for next case:
+
+```shell script
+kubectl delete -f examples/dependency/demo-with-conditions.yaml
+kubectl delete foo --all
+```

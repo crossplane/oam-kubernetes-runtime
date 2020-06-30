@@ -385,7 +385,7 @@ func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *u
 			Namespace:  obj.GetNamespace(),
 			FieldPath:  out.FieldPath,
 		}
-		dag.AddSource(out.Name, r, out.Matchers)
+		dag.AddSource(out.Name, r, out.Conditions)
 	}
 }
 

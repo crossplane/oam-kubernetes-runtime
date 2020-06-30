@@ -391,11 +391,11 @@ type DataOutput struct {
 	// FieldPath refers to the value of an object's field.
 	FieldPath string `json:"fieldPath,omitempty"`
 
-	// Matchers specify the requirements to match a value.
-	// Different requirements are AND-ed together.
-	// If no matcher is specified, it is by default to check not empty.
+	// Conditions specify the conditions that should be satisfied before emitting a data output.
+	// Different conditions are AND-ed together.
+	// If no conditions is specified, it is by default to check output value not empty.
 	// +optional
-	Matchers []DataMatcherRequirement `json:"matchers,omitempty"`
+	Conditions []ConditionRequirement `json:"conditions,omitempty"`
 }
 
 // DataInput specifies a data input sink to an object.
@@ -413,22 +413,22 @@ type DataInputValueFrom struct {
 	DataOutputName string `json:"dataOutputName"`
 }
 
-// DataMatcherRequirement specifies the requirement to match a value.
-type DataMatcherRequirement struct {
-	Operator DataMatcherOperator `json:"op"`
-	Value    string              `json:"value"`
+// ConditionRequirement specifies the requirement to match a value.
+type ConditionRequirement struct {
+	Operator ConditionOperator `json:"op"`
+	Value    string            `json:"value"`
 	// +optional
 	FieldPath string `json:"fieldPath,omitempty"`
 }
 
-// DataMatcherOperator specifies the operator to match a value.
-type DataMatcherOperator string
+// ConditionOperator specifies the operator to match a value.
+type ConditionOperator string
 
 const (
-	// DataMatcherOperatorEqual indicates equal to given value
-	DataMatcherOperatorEqual DataMatcherOperator = "eq"
-	// DataMatcherOperatorNotEqual indicates not equal to given value
-	DataMatcherOperatorNotEqual DataMatcherOperator = "notEq"
-	// DataMatcherOperatorNotEmpty indicates given value not empty
-	DataMatcherOperatorNotEmpty DataMatcherOperator = "notEmpty"
+	// ConditionEqual indicates equal to given value
+	ConditionEqual ConditionOperator = "eq"
+	// ConditionNotEqual indicates not equal to given value
+	ConditionNotEqual ConditionOperator = "notEq"
+	// ConditionNotEmpty indicates given value not empty
+	ConditionNotEmpty ConditionOperator = "notEmpty"
 )

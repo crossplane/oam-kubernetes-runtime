@@ -29,7 +29,7 @@ type Source struct {
 	// ObjectRef refers to the object this source come from.
 	ObjectRef *corev1.ObjectReference
 
-	Matchers []v1alpha2.DataMatcherRequirement
+	Matchers []v1alpha2.ConditionRequirement
 }
 
 // Sink represents the object information with DataInput
@@ -57,7 +57,7 @@ func newSinksPerSource() *SinksPerSource {
 }
 
 // AddSource adds a data output source into the DAG.
-func (d *DAG) AddSource(sourceName string, ref *corev1.ObjectReference, m []v1alpha2.DataMatcherRequirement) {
+func (d *DAG) AddSource(sourceName string, ref *corev1.ObjectReference, m []v1alpha2.ConditionRequirement) {
 	sps := d.getOrCreateSinksPerSource(sourceName)
 	sps.Source = &Source{ObjectRef: ref, Matchers: m}
 }

@@ -135,7 +135,7 @@ func (dm *dagManagerImpl) markDependencyDone(ctx context.Context, ac *v1alpha2.A
 		"cannot apply status")
 }
 
-func matchValue(ms []v1alpha2.DataMatcherRequirement, val string, paved *fieldpath.Paved) bool {
+func matchValue(ms []v1alpha2.ConditionRequirement, val string, paved *fieldpath.Paved) bool {
 	// If no matcher is specified, it is by default to check value not empty.
 	if len(ms) == 0 {
 		return val != ""
@@ -154,15 +154,15 @@ func matchValue(ms []v1alpha2.DataMatcherRequirement, val string, paved *fieldpa
 			checkVal = val
 		}
 		switch m.Operator {
-		case v1alpha2.DataMatcherOperatorEqual:
+		case v1alpha2.ConditionEqual:
 			if m.Value != checkVal {
 				return false
 			}
-		case v1alpha2.DataMatcherOperatorNotEqual:
+		case v1alpha2.ConditionNotEqual:
 			if m.Value == checkVal {
 				return false
 			}
-		case v1alpha2.DataMatcherOperatorNotEmpty:
+		case v1alpha2.ConditionNotEmpty:
 			if checkVal == "" {
 				return false
 			}

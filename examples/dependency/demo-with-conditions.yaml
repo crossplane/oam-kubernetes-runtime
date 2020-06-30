@@ -34,7 +34,7 @@ spec:
       dataOutputs:
         - name: example-key
           fieldPath: "spec.key"
-          matchers:
+          conditions:
             - op: eq
               value: running
               fieldPath: "status.state"
