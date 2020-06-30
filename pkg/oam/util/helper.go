@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,9 +72,8 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 // FetchTraitDefinition fetch corresponding traitDefinition given a trait
 func FetchTraitDefinition(ctx context.Context, r client.Reader,
 	trait *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
-	// The name of the traitDefinition CR is the CRD name of the trait which is <purals>.<group>
-	gvr := GetGVResource(trait.Object)
-	trName := gvr.Resource + "." + gvr.Group
+	// The name of the traitDefinition CR is the CRD name of the trait
+	trName := GetCRDName(trait)
 	// the traitDefinition crd is cluster scoped
 	nn := types.NamespacedName{Name: trName}
 	// Fetch the corresponding traitDefinition CR
@@ -89,9 +87,8 @@ func FetchTraitDefinition(ctx context.Context, r client.Reader,
 // FetchWorkloadDefinition fetch corresponding workloadDefinition given a workload
 func FetchWorkloadDefinition(ctx context.Context, r client.Reader,
 	workload *unstructured.Unstructured) (*v1alpha2.WorkloadDefinition, error) {
-	// The name of the workloadDefinition CR is the CRD name of the component which is <purals>.<group>
-	gvr := GetGVResource(workload.Object)
-	wldName := gvr.Resource + "." + gvr.Group
+	// The name of the workloadDefinition CR is the CRD name of the component
+	wldName := GetCRDName(workload)
 	// the workloadDefinition crd is cluster scoped
 	nn := types.NamespacedName{Name: wldName}
 	// Fetch the corresponding workloadDefinition CR
@@ -153,16 +150,15 @@ func PatchCondition(ctx context.Context, r client.StatusClient, workload Conditi
 		ErrUpdateStatus)
 }
 
-//GetGVResource to get groupVersion and resource.
-func GetGVResource(ob map[string]interface{}) metav1.GroupVersionResource {
-	apiVersion, _, _ := unstructured.NestedString(ob, "apiVersion")
-	kind, _, _ := unstructured.NestedString(ob, "kind")
-	g, v := APIVersion2GroupVersion(apiVersion)
-	return metav1.GroupVersionResource{
-		Group:    g,
-		Version:  v,
-		Resource: Kind2Resource(kind),
+// GetCRDName return the CRD name of any resources
+// the format of the CRD of a resource is <kind purals>.<group>
+func GetCRDName(u *unstructured.Unstructured) string {
+	group, _ := APIVersion2GroupVersion(u.GetAPIVersion())
+	resources := []string{Kind2Resource(u.GetKind())}
+	if group != "" {
+		resources = append(resources, group)
 	}
+	return strings.Join(resources, ".")
 }
 
 // APIVersion2GroupVersion turn an apiVersion string into group and version

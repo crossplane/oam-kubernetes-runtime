@@ -20,25 +20,23 @@ import (
 	"context"
 	"testing"
 
-	v1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	"k8s.io/client-go/kubernetes/fake"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
-
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes/fake"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/crossplane/crossplane-runtime/pkg/test"
-
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 func TestRenderComponents(t *testing.T) {
@@ -705,7 +703,7 @@ func TestGetCRDName(t *testing.T) {
 	}
 	for name, ti := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := getCRDName(ti.u)
+			got := util.GetCRDName(ti.u)
 			if got != ti.exp {
 				t.Errorf("%s getCRDName want %s got %s ", ti.reason, ti.exp, got)
 			}

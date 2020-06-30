@@ -19,8 +19,8 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,8 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/dependency"
@@ -55,7 +53,6 @@ const (
 	errFmtUnsupportedParam       = "unsupported parameter %q"
 	errFmtRequiredParam          = "required parameter %q not specified"
 	errFmtControllerRevisionData = "cannot get valid component data from controllerRevision %q"
-	errFmtGetTraitDefinition     = "cannot find trait definition %q"
 	errSetValueForField          = "can not set value %q for fieldPath %q"
 )
 
@@ -172,9 +169,9 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 
 	setTraitProperties(t, componentName, namespace, ref)
 
-	traitDef, err := r.getTraitDefinition(ctx, t)
+	traitDef, err := util.FetchTraitDefinition(ctx, r.client, t)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
 	}
 
 	addDataOutputsToDAG(dag, ct.DataOutputs, t)
@@ -184,7 +181,7 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 	if len(ct.DataInputs) != 0 {
 		return nil, nil, nil
 	}
-	return t, &traitDef, nil
+	return t, traitDef, nil
 }
 
 func (r *components) renderScope(ctx context.Context, cs v1alpha2.ComponentScope, ns string) (*unstructured.Unstructured, error) {
@@ -209,27 +206,15 @@ func setTraitProperties(t *unstructured.Unstructured, componentName, namespace s
 	t.SetNamespace(namespace)
 }
 
-func (r *components) getTraitDefinition(ctx context.Context, t *unstructured.Unstructured) (v1alpha2.TraitDefinition, error) {
-	traitDefinitionName := getCRDName(t)
-	traitDef := v1alpha2.TraitDefinition{}
-	err := r.client.Get(ctx, types.NamespacedName{
-		Name: traitDefinitionName,
-	}, &traitDef)
-	if err != nil {
-		return traitDef, errors.Wrapf(err, errFmtGetTraitDefinition, traitDefinitionName)
-	}
-	return traitDef, nil
-}
-
 // SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
 func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
 	//Don't override the specified name
 	if w.GetName() != "" {
 		return nil
 	}
-	pv := fieldpath.Pave(w.Object)
-	if IsRevisionEnabled(traitDefs) {
-		// if revisionEnabled, use revisionName as workload name
+	pv := fieldpath.Pave(w.UnstructuredContent())
+	if isRevisionEnabled(traitDefs) {
+		// if revisionEnabled, use revisionName as the workload name
 		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision.Name); err != nil {
 			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
 		}
@@ -243,23 +228,14 @@ func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructur
 	return nil
 }
 
-// IsRevisionEnabled will check if any trait has createRevision flag, the appconfig should create a new workload instance
-func IsRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
+// isRevisionEnabled will check if any of the traitDefinitions has a createRevision flag
+func isRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
 	for _, td := range traitDefs {
 		if td.Spec.RevisionEnabled {
 			return true
 		}
 	}
 	return false
-}
-
-func getCRDName(u *unstructured.Unstructured) string {
-	group, _ := util.APIVersion2GroupVersion(u.GetAPIVersion())
-	resources := []string{util.Kind2Resource(u.GetKind())}
-	if group != "" {
-		resources = append(resources, group)
-	}
-	return strings.Join(resources, ".")
 }
 
 func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {

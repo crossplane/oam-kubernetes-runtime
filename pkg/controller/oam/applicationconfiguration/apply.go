@@ -19,39 +19,39 @@ package applicationconfiguration
 import (
 	"context"
 
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-
-	"github.com/pkg/errors"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 // Reconcile error strings.
 const (
-	errFmtApplyWorkload  = "cannot apply workload %q"
-	errFmtSetWorkloadRef = "cannot set trait %q reference to %q"
-	errFmtApplyTrait     = "cannot apply trait %q %q"
-	errFmtApplyScope     = "cannot apply scope %q"
+	errFmtApplyWorkload      = "cannot apply workload %q"
+	errFmtSetWorkloadRef     = "cannot set trait %q reference to %q"
+	errFmtGetTraitDefinition = "cannot find trait definition %q %q %q"
+	errFmtApplyTrait         = "cannot apply trait %q %q %q"
+	errFmtApplyScope         = "cannot apply scope %q %q %q"
 )
 
 // A WorkloadApplicator creates or updates workloads and their traits.
 type WorkloadApplicator interface {
 	// Apply a workload and its traits.
-	Apply(ctx context.Context, namespace string, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error
+	Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error
 }
 
 // A WorkloadApplyFn creates or updates workloads and their traits.
-type WorkloadApplyFn func(ctx context.Context, namespace string, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error
+type WorkloadApplyFn func(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error
 
 // Apply a workload and its traits.
-func (fn WorkloadApplyFn) Apply(ctx context.Context, namespace string, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
-	return fn(ctx, namespace, status, w, ao...)
+func (fn WorkloadApplyFn) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
+	return fn(ctx, status, w, ao...)
 }
 
 type workloads struct {
@@ -59,33 +59,40 @@ type workloads struct {
 	rawClient client.Client
 }
 
-func (a *workloads) Apply(ctx context.Context, namespace string, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
+func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
+	// they are all in the same namespace
+	var namespace = w[0].Workload.GetNamespace()
 	for _, wl := range w {
 		if err := a.client.Apply(ctx, wl.Workload, ao...); err != nil {
 			return errors.Wrapf(err, errFmtApplyWorkload, wl.Workload.GetName())
 		}
-
 		workloadRef := runtimev1alpha1.TypedReference{
 			APIVersion: wl.Workload.GetAPIVersion(),
 			Kind:       wl.Workload.GetKind(),
 			Name:       wl.Workload.GetName(),
 		}
 
-		for i := range wl.Traits {
-			t := &wl.Traits[i]
-
-			// TODO(rz): Need to find a way to make sure that this is compatible with the trait structure.
-			if err := fieldpath.Pave(t.UnstructuredContent()).SetValue("spec.workloadRef", workloadRef); err != nil {
-				return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
+		for _, t := range wl.Traits {
+			//  We only patch a TypedReference object to the trait if it asks for it
+			trait := t
+			if traitDefinition, err := util.FetchTraitDefinition(ctx, a.rawClient, &trait); err == nil {
+				workloadRefPath := traitDefinition.Spec.WorkloadRefPath
+				if len(workloadRefPath) != 0 {
+					if err := fieldpath.Pave(t.UnstructuredContent()).SetValue(workloadRefPath, workloadRef); err != nil {
+						return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
+					}
+				}
+			} else {
+				return errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
 			}
 
-			if err := a.client.Apply(ctx, t, ao...); err != nil {
-				return errors.Wrapf(err, errFmtApplyTrait, t.GetKind(), t.GetName())
+			if err := a.client.Apply(ctx, &trait, ao...); err != nil {
+				return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
 			}
 		}
 
 		for _, s := range wl.Scopes {
-			return a.applyScope(ctx, wl, s)
+			return a.applyScope(ctx, wl, s, workloadRef)
 		}
 	}
 
@@ -134,25 +141,9 @@ func findDereferencedScopes(statusScopes []v1alpha2.WorkloadScope, scopes []unst
 	return toBeDeferenced
 }
 
-func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.Unstructured) error {
-	workloadRef := runtimev1alpha1.TypedReference{
-		APIVersion: wl.Workload.GetAPIVersion(),
-		Kind:       wl.Workload.GetKind(),
-		Name:       wl.Workload.GetName(),
-	}
-
-	// Get Scope again to make sure we work with the most up-to date object.
-	scopeObject := unstructured.Unstructured{}
-	scopeObject.SetAPIVersion(s.GetAPIVersion())
-	scopeObject.SetKind(s.GetKind())
-	scopeObjectRef := types.NamespacedName{Namespace: s.GetNamespace(), Name: s.GetName()}
-	if err := a.rawClient.Get(ctx, scopeObjectRef, &scopeObject); err != nil {
-		return errors.Wrapf(err, errFmtApplyScope, s.GetName())
-	}
-
-	refs := []interface{}{}
-	// TODO(asouza): Need to find a way to make sure that this is compatible with the scope structure.
-	if value, err := fieldpath.Pave(scopeObject.UnstructuredContent()).GetValue("spec.workloadRefs"); err == nil {
+func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.Unstructured, workloadRef runtimev1alpha1.TypedReference) error {
+	var refs []interface{}
+	if value, err := fieldpath.Pave(s.UnstructuredContent()).GetValue("spec.workloadRefs"); err == nil {
 		refs = value.([]interface{})
 
 		for _, item := range refs {
@@ -167,13 +158,13 @@ func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.
 	}
 
 	refs = append(refs, workloadRef)
-	// TODO(asouza): Need to find a way to make sure that this is compatible with the scope structure.
-	if err := fieldpath.Pave(scopeObject.UnstructuredContent()).SetValue("spec.workloadRefs", refs); err != nil {
+	// TODO(rz): Add workloadRef to ScopeDefinition too
+	if err := fieldpath.Pave(s.UnstructuredContent()).SetValue("spec.workloadRefs", refs); err != nil {
 		return errors.Wrapf(err, errFmtSetWorkloadRef, s.GetName(), wl.Workload.GetName())
 	}
 
-	if err := a.rawClient.Update(ctx, &scopeObject); err != nil {
-		return errors.Wrapf(err, errFmtApplyScope, s.GetName())
+	if err := a.rawClient.Update(ctx, &s); err != nil {
+		return errors.Wrapf(err, errFmtApplyScope, s.GetAPIVersion(), s.GetKind(), s.GetName())
 	}
 
 	return nil
@@ -186,16 +177,14 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 		Name:       ws.Reference.Name,
 	}
 
-	// Get Scope again to make sure we work with the most up-to date object.
 	scopeObject := unstructured.Unstructured{}
 	scopeObject.SetAPIVersion(s.Reference.APIVersion)
 	scopeObject.SetKind(s.Reference.Kind)
 	scopeObjectRef := types.NamespacedName{Namespace: namespace, Name: s.Reference.Name}
 	if err := a.rawClient.Get(ctx, scopeObjectRef, &scopeObject); err != nil {
-		return errors.Wrapf(err, errFmtApplyScope, s.Reference.Name)
+		return errors.Wrapf(err, errFmtApplyScope, s.Reference.APIVersion, s.Reference.Kind, s.Reference.Name)
 	}
 
-	// TODO(asouza): Need to find a way to make sure that this is compatible with the scope structure.
 	if value, err := fieldpath.Pave(scopeObject.UnstructuredContent()).GetValue("spec.workloadRefs"); err == nil {
 		refs := value.([]interface{})
 
@@ -215,13 +204,13 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 			refs[workloadRefIndex] = refs[len(refs)-1]
 			refs = refs[:len(refs)-1]
 
-			// TODO(asouza): Need to find a way to make sure that this is compatible with the scope structure.
+			// TODO(rz): Add workloadRef to ScopeDefinition too
 			if err := fieldpath.Pave(scopeObject.UnstructuredContent()).SetValue("spec.workloadRefs", refs); err != nil {
 				return errors.Wrapf(err, errFmtSetWorkloadRef, s.Reference.Name, ws.Reference.Name)
 			}
 
 			if err := a.rawClient.Update(ctx, &scopeObject); err != nil {
-				return errors.Wrapf(err, errFmtApplyScope, s.Reference.Name)
+				return errors.Wrapf(err, errFmtApplyScope, s.Reference.APIVersion, s.Reference.Kind, s.Reference.Name)
 			}
 		}
 	}

@@ -90,10 +90,10 @@ customresourcedefinition.apiextensions.k8s.io/workloaddefinitions.core.oam.dev c
 Make changes and run the following to test it.
 
 If you only change code under [core apis](./apis/core), remember to
-regenerate crds mainifests as the step above.
+regenerate crd manifests as the step above.
 
 ## Run a simple and basic workflow locally
-You can start running OAM Kubernetes runtime to verify your chanes.
+You can start running OAM Kubernetes runtime to verify your changes.
 * Run OAM sample controller
 ```
 go run examples/containerized-workload/main.go

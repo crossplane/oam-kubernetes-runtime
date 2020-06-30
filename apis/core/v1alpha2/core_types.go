@@ -85,9 +85,13 @@ type TraitDefinitionSpec struct {
 	// Reference to the CustomResourceDefinition that defines this trait kind.
 	Reference DefinitionReference `json:"definitionRef"`
 
-	// Revision tells whether a trait is aware of component revision
+	// Revision indicates whether a trait is aware of component revision
 	// +optional
 	RevisionEnabled bool `json:"revisionEnabled,omitempty"`
+
+	// WorkloadRefPath indicates where/if a trait accepts a workloadRef object
+	// +optional
+	WorkloadRefPath string `json:"workloadRefPath,omitempty"`
 
 	// AppliesToWorkloads specifies the list of workload kinds this trait
 	// applies to. Workload kinds are specified in kind.group/version format,
