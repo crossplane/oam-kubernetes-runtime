@@ -175,7 +175,7 @@ func (dm *dagManagerImpl) checkSourceReady(ctx context.Context, s *Source) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to get object (%s): %w", key.String(), err)
 	}
-	paved := fieldpath.Pave(u.Object)
+	paved := fieldpath.Pave(u.UnstructuredContent())
 
 	// TODO: Currently only string value supported. Support more types in the future.
 	val, err := paved.GetString(obj.FieldPath)
@@ -203,7 +203,7 @@ func (dm *dagManagerImpl) trigger(ctx context.Context, s *Sink, val string) erro
 		return err
 	}
 
-	paved := fieldpath.Pave(obj.Object)
+	paved := fieldpath.Pave(obj.UnstructuredContent())
 
 	// fill values
 	for _, fp := range s.ToFieldPaths {

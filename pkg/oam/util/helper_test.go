@@ -263,3 +263,32 @@ var _ = Describe("Test workload related helper utils", func() {
 		}
 	})
 })
+
+var _ = Describe("Test unstructured related helper utils", func() {
+	It("Test get CRD name from an unstructured object", func() {
+		tests := map[string]struct {
+			u   *unstructured.Unstructured
+			exp string
+		}{
+			"native resource": {
+				u: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+				}},
+				exp: "deployments.apps",
+			},
+			"extended resource": {
+				u: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "extend.oam.dev/v1alpha2",
+					"kind":       "SimpleRolloutTrait",
+				}},
+				exp: "simplerollouttraits.extend.oam.dev",
+			},
+		}
+		for name, ti := range tests {
+			got := util.GetCRDName(ti.u)
+			By(fmt.Sprint("Running test: ", name))
+			Expect(ti.exp).Should(Equal(got))
+		}
+	})
+})
