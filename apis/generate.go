@@ -20,10 +20,10 @@ limitations under the License.
 // https://github.com/golang/go/wiki/Modules#how-can-i-track-tool-dependencies-for-a-module
 
 // Remove existing CRDs
-//go:generate rm -rf ../crds
+//go:generate rm -rf ../charts/oam-core/crds
 
 // Generate deepcopy methodsets and CRD manifests
-//go:generate go run -tags generate sigs.k8s.io/controller-tools/cmd/controller-gen object:headerFile=../hack/boilerplate.go.txt paths=./... crd:trivialVersions=true output:artifacts:config=../crds
+//go:generate go run -tags generate sigs.k8s.io/controller-tools/cmd/controller-gen object:headerFile=../hack/boilerplate.go.txt paths=./... crd:trivialVersions=true output:artifacts:config=../charts/oam-core/crds
 
 package apis
 

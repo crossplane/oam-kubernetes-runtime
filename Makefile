@@ -1,5 +1,6 @@
 # ====================================================================================
 # Setup Project
+IMG ?= controller:latest
 
 PROJECT_NAME := oam-kubernetes-runtime
 PROJECT_REPO := github.com/crossplane/$(PROJECT_NAME)
@@ -97,3 +98,27 @@ oam-runtime.help:
 help-special: oam-runtime.help
 
 .PHONY: oam-runtime.help help-special
+
+
+# Build the docker image
+docker-build:
+	docker build . -t $(IMG)
+
+# Push the docker image
+docker-push:
+	docker push ${IMG}
+
+# load docker image to the kind cluster
+kind-load:
+	kind load docker-image $(IMG) || { echo >&2 "kind not installed or error loading image: $(IMG)"; exit 1; }
+
+e2e-test: docker-build kind-load
+	kubectl create namespace oam-system
+	helm install e2e ./charts/oam-core/ -n oam-system --set image.repository=$(IMG) --wait \
+		|| { echo >&2 "helm install timeout"; \
+		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-core,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
+		helm uninstall e2e -n oam-system; exit 1;}
+	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=oam-core -n oam-system --timeout=300s
+	ginkgo -v ./test/e2e-test
+	helm uninstall e2e -n oam-system
+	kubectl delete namespace oam-system --wait

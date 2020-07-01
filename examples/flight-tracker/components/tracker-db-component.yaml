@@ -1,0 +1,61 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: tracker-postgres-db
+spec:
+  workload:
+    apiVersion: core.oam.dev/v1alpha2
+    kind: ContainerizedWorkload
+    metadata:
+      name: db-workload
+    spec:
+      osType: linux
+      arch: amd64
+      containers:
+        - name: postgres
+          image: docker.io/postgres:9.6.17-alpine
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              value: "dbpassword"
+            - name: POSTGRES_DB
+              value: "hackfest"
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - echo
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - echo
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5   
+  parameters:
+    - name: dbuser
+      description: database username
+      required: false
+      fieldPaths:
+      - spec.containers[0].env[0].value 
+    - name: dbpassword
+      description: database password
+      required: false
+      fieldPaths:
+      - spec.containers[0].env[1].value 
+    - name: database
+      description: new database
+      required: false
+      fieldPaths:
+      - spec.containers[0].env[2].value 

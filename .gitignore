@@ -29,7 +29,6 @@ vendor/
 .DS_Store
 bin/
 tmp/
-crds/
 
 # Vscode files
 .vscode

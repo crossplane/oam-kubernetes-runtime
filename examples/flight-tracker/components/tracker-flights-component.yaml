@@ -1,0 +1,29 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: flights-api
+spec:
+  workload:
+    apiVersion: core.oam.dev/v1alpha2
+    kind: ContainerizedWorkload
+    metadata:
+      name: flights-api
+    spec:
+      osType: linux
+      arch: amd64
+      containers:
+        - name: flights-api
+          image: sonofjorel/rudr-flights-api:0.49  
+          env:
+            - name: DATA_SERVICE_URI
+              value: "foo" 
+          ports:
+            - name: http
+              containerPort: 3003
+              protocol: TCP
+  parameters:
+    - name: dataUri
+      description: uri for data-api pod
+      required: true
+      fieldPaths:
+      - spec.containers[0].env[0].value
