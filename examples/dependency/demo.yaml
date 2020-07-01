@@ -8,8 +8,6 @@ spec:
     kind: Foo
     metadata:
       name: source
-    status: # comment this part to mimic dependency wait time.
-      key: test
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component

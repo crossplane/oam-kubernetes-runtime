@@ -95,7 +95,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 		workloads = append(workloads, *w)
 	}
 
-	if dependency.GlobalManager != nil { // Some unit test might not setup the global DAGManager.
+	if !dag.IsEmpty() {
 		dependency.GlobalManager.AddDAG(ac.GetNamespace()+"/"+ac.GetName(), dag)
 	}
 	return workloads, nil
@@ -122,9 +122,6 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 	w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 	w.SetNamespace(ac.GetNamespace())
-
-	addDataOutputsToDAG(dag, acc.DataOutputs, w)
-	addDataInputsToDAG(dag, acc.DataInputs, w)
 
 	traits := make([]unstructured.Unstructured, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
@@ -154,6 +151,12 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		scopes = append(scopes, *scopeObject)
 	}
 
+	addDataOutputsToDAG(dag, acc.DataOutputs, w)
+	addDataInputsToDAG(dag, acc.DataInputs, w, traits)
+
+	// TODO(wonderflow): Return nil here will make workload with dag totally different with normal workload. We must align them into one.
+	// For example, scopes, applyOptions and workloadStatus is not handled in dag workload now.
+	// I did a quick monkey patch to make trait work for demo.
 	if len(acc.DataInputs) != 0 { // Depends on other resources. Not creating it now.
 		return nil, nil
 	}
@@ -175,7 +178,7 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 	}
 
 	addDataOutputsToDAG(dag, ct.DataOutputs, t)
-	addDataInputsToDAG(dag, ct.DataInputs, t)
+	addDataInputsToDAG(dag, ct.DataInputs, t, nil)
 
 	// Depends on other resources. Not creating it now.
 	if len(ct.DataInputs) != 0 {
@@ -385,12 +388,12 @@ func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *u
 			Namespace:  obj.GetNamespace(),
 			FieldPath:  out.FieldPath,
 		}
-		dag.AddSource(out.Name, r)
+		dag.AddSource(out.Name, r, out.Conditions)
 	}
 }
 
-func addDataInputsToDAG(dag *dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured) {
+func addDataInputsToDAG(dag *dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured, attaches []unstructured.Unstructured) {
 	for _, in := range ins {
-		dag.AddSink(in.ValueFrom.DataOutputName, obj, in.ToFieldPaths, in.ValueFrom.Matchers)
+		dag.AddSink(in.ValueFrom.DataOutputName, obj, attaches, in.ToFieldPaths)
 	}
 }
