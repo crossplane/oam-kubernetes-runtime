@@ -2,16 +2,14 @@
 
 [![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/mod/github.com/crossplane/oam-kubernetes-runtime)
 
-The OAM Kubernetes runtime project is a collection of Golang helper libraries and OAM api type
-definitions. 
+The OAM Kubernetes runtime project is a collection of OAM core controllers and Golang helper
+libraries. It is designed to help OAM platform builders to quickly build an end-user facing OAM
+platform instead of starting from scratch. Application developers or end-users are not
+recommended to build or run their applications using this repo directly. 
 
-It is designed to help OAM platform builders rather than being used directly by developers
-or end-users. We would recommend end-users to check
-[Crossplane  official  documentation](https://crossplane.github.io/docs) instead.
-
-In addition, we created this library with the following goals in mind  
-* All OAM Kubernetes platform builders use and contribute to this library. 
-* The wide adoption of this library can facilitate workload/trait interoperability among OAM
+We created this repo with the following goals in mind  
+* All OAM Kubernetes platform builders use and contribute to this repo. 
+* The wide adoption of this repo can facilitate workload/trait interoperability among OAM
  Kubernetes platform builders.
 
 
@@ -19,9 +17,8 @@ In addition, we created this library with the following goals in mind
 
 - Kubernetes v1.16+
 - Helm 3
-- [Crossplane](https://github.com/crossplane/crossplane) v0.11+ installed
 
-## Install OAM controllers
+## Install OAM runtime
 
 #### Clone this repo
 
@@ -30,11 +27,11 @@ git clone git@github.com:crossplane/oam-kubernetes-runtime.git
 cd ./oam-kubernetes-runtime
 ```
 
-#### Install controllers
+#### Install OAM controllers
 
 ```console
 kubectl create namespace oam-system
-helm install controller -n oam-system ./charts/oam-core/ 
+helm install core-runtime -n oam-system ./charts/oam-core-runtime
 ```
 
 ## Verify
@@ -93,7 +90,7 @@ example-appconfig-workload-deployment-service   NodePort   10.96.78.215   <none>
 
 ## Cleanup
 ```console
-helm uninstall controller -n oam-system
+helm uninstall core-runtime -n oam-system
 kubectl delete -f examples/containerized-workload
 kubectl delete namespace oam-system --wait
 ```

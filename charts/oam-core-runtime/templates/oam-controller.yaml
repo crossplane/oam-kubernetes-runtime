@@ -3,9 +3,9 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "oam-core.serviceAccountName" . }}
+  name: {{ include "oam-core-runtime.serviceAccountName" . }}
   labels:
-  {{ include "oam-core.labels" . | nindent 4 }}
+  {{ include "oam-core-runtime.labels" . | nindent 4 }}
   {{- end }}
 ---
 
@@ -19,7 +19,7 @@ roleRef:
   name: "cluster-admin"
 subjects:
   - kind: ServiceAccount
-    name: {{ include "oam-core.serviceAccountName" . }}
+    name: {{ include "oam-core-runtime.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 
 ---
@@ -67,26 +67,26 @@ roleRef:
   name: leader-election-role
 subjects:
   - kind: ServiceAccount
-    name: {{ include "oam-core.serviceAccountName" . }}
+    name: {{ include "oam-core-runtime.serviceAccountName" . }}
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "oam-core.fullname" . }}
+  name: {{ include "oam-core-runtime.fullname" . }}
   labels:
-    {{- include "oam-core.labels" . | nindent 4 }}
+    {{- include "oam-core-runtime.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      {{- include "oam-core.selectorLabels" . | nindent 6 }}
+      {{- include "oam-core-runtime.selectorLabels" . | nindent 6 }}
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
       labels:
-        {{- include "oam-core.selectorLabels" . | nindent 8 }}
+        {{- include "oam-core-runtime.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "oam-core.serviceAccountName" . }}
+      serviceAccountName: {{ include "oam-core-runtime.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

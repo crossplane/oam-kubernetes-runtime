@@ -52,6 +52,7 @@ var _ = Describe("Manualscalar Trait Controller Test", func() {
 				WorkloadReference: runtimev1alpha1.TypedReference{
 					APIVersion: "apiversion",
 					Kind:       "Kind",
+					Name:       "wokload-example",
 				},
 			},
 		}

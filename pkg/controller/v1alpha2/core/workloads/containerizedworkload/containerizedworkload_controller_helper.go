@@ -28,8 +28,6 @@ func (r *Reconciler) renderDeployment(ctx context.Context,
 	if !ok {
 		return nil, fmt.Errorf("internal error, deployment is not rendered correctly")
 	}
-	// the translator lib doesn't set the namespace
-	deploy.Namespace = workload.Namespace
 	// make sure we don't have opinion on the replica count
 	deploy.Spec.Replicas = nil
 	// k8s server-side patch complains if the protocol is not set

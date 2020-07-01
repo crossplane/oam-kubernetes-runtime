@@ -39,8 +39,6 @@ var (
 
 // Reconcile error strings.
 const (
-	defaultNamespace = "default"
-
 	labelKey = "containerizedworkload.oam.crossplane.io"
 
 	errNotContainerizedWorkload = "object is not a containerized workload"
@@ -60,12 +58,8 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 			APIVersion: deploymentAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: cw.GetName(),
-			// NOTE(hasheddan): we always create the Deployment in the default
-			// namespace because there is not currently a namespace scheduling
-			// mechanism in the Crossplane OAM implementation. It is likely that
-			// this will be addressed in the future by adding a Scope.
-			Namespace: defaultNamespace,
+			Name:      cw.GetName(),
+			Namespace: w.GetNamespace(),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{

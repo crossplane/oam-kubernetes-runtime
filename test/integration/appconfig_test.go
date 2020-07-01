@@ -39,7 +39,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2"
+	v1alph2controller "github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2"
 )
 
 var (
@@ -215,7 +215,7 @@ func TestAppConfigController(t *testing.T) {
 	}
 
 	i, err := integration.New(cfg,
-		integration.WithCRDPaths("../../crds"),
+		integration.WithCRDPaths("../../charts/oam-core-runtime/crds"),
 		integration.WithCleaners(
 			integration.NewCRDCleaner(),
 			integration.NewCRDDirCleaner()),
@@ -239,7 +239,7 @@ func TestAppConfigController(t *testing.T) {
 
 	zl := zap.New(zap.UseDevMode(true))
 	log := logging.NewLogrLogger(zl.WithName("app-config"))
-	if err := v1alpha2.Setup(i, log); err != nil {
+	if err := v1alph2controller.Setup(i, log); err != nil {
 		t.Fatal(err)
 	}
 

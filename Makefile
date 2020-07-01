@@ -112,13 +112,17 @@ docker-push:
 kind-load:
 	kind load docker-image $(IMG) || { echo >&2 "kind not installed or error loading image: $(IMG)"; exit 1; }
 
-e2e-test: docker-build kind-load
+e2e-setup: docker-build kind-load
 	kubectl create namespace oam-system
-	helm install e2e ./charts/oam-core/ -n oam-system --set image.repository=$(IMG) --wait \
+	helm install e2e ./charts/oam-core-runtime/ -n oam-system --set image.repository=$(IMG) --wait \
 		|| { echo >&2 "helm install timeout"; \
-		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-core,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
+		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-core-runtime,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
 		helm uninstall e2e -n oam-system; exit 1;}
-	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=oam-core -n oam-system --timeout=300s
+	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=oam-core-runtime -n oam-system --timeout=300s
+
+e2e-test:
 	ginkgo -v ./test/e2e-test
+
+e2e-cleanup:
 	helm uninstall e2e -n oam-system
 	kubectl delete namespace oam-system --wait

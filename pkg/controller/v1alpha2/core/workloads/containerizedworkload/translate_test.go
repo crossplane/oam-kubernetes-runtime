@@ -41,10 +41,6 @@ var (
 
 	containerName = "test-container"
 	portName      = "test-port"
-
-	cwName      = "test-name"
-	cwNamespace = "test-namespace"
-	cwUID       = "a-very-unique-identifier"
 )
 
 type deploymentModifier func(*appsv1.Deployment)
@@ -81,19 +77,19 @@ func deployment(mod ...deploymentModifier) *appsv1.Deployment {
 			APIVersion: deploymentAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cwName,
-			Namespace: defaultNamespace,
+			Name:      workloadName,
+			Namespace: workloadNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					labelKey: cwUID,
+					labelKey: workloadUID,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						labelKey: cwUID,
+						labelKey: workloadUID,
 					},
 				},
 			},
@@ -131,9 +127,9 @@ func dmWithContainer(c corev1.Container) deploymentModifier {
 func containerizedWorkload(mod ...cwModifier) *v1alpha2.ContainerizedWorkload {
 	cw := &v1alpha2.ContainerizedWorkload{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cwName,
-			Namespace: cwNamespace,
-			UID:       types.UID(cwUID),
+			Name:      workloadName,
+			Namespace: workloadNamespace,
+			UID:       types.UID(workloadUID),
 		},
 	}
 

@@ -10,9 +10,9 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
 COPY apis/ apis/
 COPY pkg/ pkg/
+COPY cmd/oam-runtime/main.go main.go
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o controller main.go
