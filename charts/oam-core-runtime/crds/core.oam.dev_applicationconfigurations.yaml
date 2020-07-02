@@ -76,26 +76,6 @@ spec:
                               description: DataOutputName matches a name of a DataOutput
                                 in the same AppConfig.
                               type: string
-                            matchers:
-                              description: Matchers specify the requirements to match
-                                a value. Different requirements are AND-ed together.
-                                If no matcher is specified, it is by default to check
-                                not empty.
-                              items:
-                                description: DataMatcherRequirement specifies the
-                                  requirement to match a value.
-                                properties:
-                                  op:
-                                    description: DataMatcherOperator specifies the
-                                      operator to match a value.
-                                    type: string
-                                  value:
-                                    type: string
-                                required:
-                                - op
-                                - value
-                                type: object
-                              type: array
                           required:
                           - dataOutputName
                           type: object
@@ -108,6 +88,28 @@ spec:
                       description: DataOutput specifies a data output source from
                         an object.
                       properties:
+                        conditions:
+                          description: Conditions specify the conditions that should
+                            be satisfied before emitting a data output. Different
+                            conditions are AND-ed together. If no conditions is specified,
+                            it is by default to check output value not empty.
+                          items:
+                            description: ConditionRequirement specifies the requirement
+                              to match a value.
+                            properties:
+                              fieldPath:
+                                type: string
+                              op:
+                                description: ConditionOperator specifies the operator
+                                  to match a value.
+                                type: string
+                              value:
+                                type: string
+                            required:
+                            - op
+                            - value
+                            type: object
+                          type: array
                         fieldPath:
                           description: FieldPath refers to the value of an object's
                             field.
@@ -203,26 +205,6 @@ spec:
                                     description: DataOutputName matches a name of
                                       a DataOutput in the same AppConfig.
                                     type: string
-                                  matchers:
-                                    description: Matchers specify the requirements
-                                      to match a value. Different requirements are
-                                      AND-ed together. If no matcher is specified,
-                                      it is by default to check not empty.
-                                    items:
-                                      description: DataMatcherRequirement specifies
-                                        the requirement to match a value.
-                                      properties:
-                                        op:
-                                          description: DataMatcherOperator specifies
-                                            the operator to match a value.
-                                          type: string
-                                        value:
-                                          type: string
-                                      required:
-                                      - op
-                                      - value
-                                      type: object
-                                    type: array
                                 required:
                                 - dataOutputName
                                 type: object
@@ -235,6 +217,29 @@ spec:
                             description: DataOutput specifies a data output source
                               from an object.
                             properties:
+                              conditions:
+                                description: Conditions specify the conditions that
+                                  should be satisfied before emitting a data output.
+                                  Different conditions are AND-ed together. If no
+                                  conditions is specified, it is by default to check
+                                  output value not empty.
+                                items:
+                                  description: ConditionRequirement specifies the
+                                    requirement to match a value.
+                                  properties:
+                                    fieldPath:
+                                      type: string
+                                    op:
+                                      description: ConditionOperator specifies the
+                                        operator to match a value.
+                                      type: string
+                                    value:
+                                      type: string
+                                  required:
+                                  - op
+                                  - value
+                                  type: object
+                                type: array
                               fieldPath:
                                 description: FieldPath refers to the value of an object's
                                   field.

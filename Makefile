@@ -97,8 +97,7 @@ oam-runtime.help:
 
 help-special: oam-runtime.help
 
-.PHONY: oam-runtime.help help-special
-
+.PHONY: oam-runtime.help help-special docker-build docker-push kind-load e2e-setup e2e-test e2e-cleanup
 
 # Build the docker image
 docker-build:
