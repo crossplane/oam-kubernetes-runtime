@@ -39,6 +39,11 @@ jobs:
       - name: Run Make build
         run: make build
 
+      - name: Install ginkgo
+        run:  |
+          sudo apt-get update
+          sudo apt-get install -y golang-ginkgo-dev
+
       - name: Setup Kind Cluster
         uses: engineerd/setup-kind@v0.4.0
         with:
