@@ -11,6 +11,9 @@
 Step 1. Create OAM component
 
 ```shell script
+$ kubectl apply -f examples/containerized-workload/sample_workload_definition.yaml
+$ kubectl apply -f examples/containerized-workload/sample_trait_definition.yaml
+$ kubectl apply -f examples/containerized-workload/sample_scope_definition.yaml
 $ kubectl apply -f examples/containerized-workload/sample_component.yaml
 component.core.oam.dev/example-component created
 ``` 
@@ -232,7 +235,7 @@ example-component   21m
 ```
 
 ```shell script
-k get containerizedworkloads.core.oam.dev example-component -o yaml
+$ kubectl get containerizedworkloads.core.oam.dev example-component -o yaml
 apiVersion: core.oam.dev/v1alpha2
 kind: ContainerizedWorkload
 metadata:
@@ -251,7 +254,7 @@ spec:
 
 Step 3. Change Component will not affect the workload.
 
-```
+```shell script
 $ kubectl edit components example-component
 component.core.oam.dev/example-component edited
 ```

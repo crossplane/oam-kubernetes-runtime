@@ -6,20 +6,20 @@ contributing to `oam-kubernetes-runtime` or build a PoC (Proof of Concept).
 ## Prerequisites
 
 1. Golang version 1.12+
-2. Kubernetes version v1.15+ with kubectl configured
+2. Kubernetes version v1.16+ with kubectl configured
 
 ## Build
 
 The functionality of this library can be demonstrated with the following steps:
 
 * Clone this project
-```shell script
+```console
 git clone git@github.com:crossplane/oam-kubernetes-runtime.git
 ```
 
 * Build the library 
 
-```shell
+```console
 $ make submodules
 Submodule 'build' (https://github.com/upbound/build) registered for path 'build'
 Cloning into '/Users/xxx/Programming/golang/src/github.com/crossplane/oam-kubernetes-runtime/build'...
@@ -75,7 +75,7 @@ go: finding github.com/mattn/go-isatty v0.0.8
 
 
 ```
-$ kubectl apply -f crds/
+$ kubectl apply -f charts/oam-core-runtime/crds
 customresourcedefinition.apiextensions.k8s.io/applicationconfigurations.core.oam.dev configured
 customresourcedefinition.apiextensions.k8s.io/components.core.oam.dev configured
 customresourcedefinition.apiextensions.k8s.io/containerizedworkloads.core.oam.dev configured
@@ -96,7 +96,7 @@ regenerate crd manifests as the step above.
 You can start running OAM Kubernetes runtime to verify your changes.
 * Run OAM sample controller
 ```
-go run examples/containerized-workload/main.go
+go run cmd/oam-runtime/main.go
 ```
 
 * Apply the sample application configurations or other manifests 

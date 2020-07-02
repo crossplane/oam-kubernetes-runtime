@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dbuser
+type: Opaque
+data:
+  endpoint: ZGItd29ya2xvYWQ=
+  password: ZGJwYXNzd29yZA==
+  username: cG9zdGdyZXM=
+
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: service-tracker
+spec:
+  components:
+    - componentName: tracker-postgres-db
+    - componentName: data-api
+      parameterValues:
+        - name: dbsecret
+          value: "dbuser"
+        - name: dbname
+          value: "hackfest"
+        - name: dbport
+          value: "5432"
+        - name: dbdriver
+          value: "postgres"
+        - name: dboptions
+          value: ""
+    - componentName: flights-api
+      parameterValues:
+        - name: dataUri
+          value: "http://data-api.default.svc.cluster.local:3009/"
+      traits:
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            metadata:
+              name: flights-api
+            spec:
+              replicaCount: 2
+    - componentName: quakes-api
+      parameterValues:
+        - name: dataUri
+          value: "http://data-api.default.svc.cluster.local:3009/"  
+      traits:
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            metadata:
+              name: quakes-api
+            spec:
+              replicaCount: 2    
+    - componentName: weather-api
+      parameterValues:
+        - name: dataUri
+          value: "http://data-api.default.svc.cluster.local:3009/"
+      traits:
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            metadata:
+              name: weather-api
+            spec:
+              replicaCount: 2       
+    - componentName: service-tracker-ui
+      parameterValues:
+        - name: flightsUri
+          value: "http://flights-api.default.svc.cluster.local:3003/"
+        - name: weatherUri
+          value: "http://weather-api.default.svc.cluster.local:3015/"
+        - name: quakesUri
+          value: "http://quakes-api.default.svc.cluster.local:3012/"

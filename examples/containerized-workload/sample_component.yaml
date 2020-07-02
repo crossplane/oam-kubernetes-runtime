@@ -10,12 +10,17 @@ spec:
       containers:
         - name: wordpress
           image: wordpress:4.6.1-apache
-          # TODO(negz): Allow environment variables to be set from a secret? OAM
-          # doesn't have a concept of Kubernetes secrets, so we will likely need
-          # to abstract this somehow.
           ports:
             - containerPort: 80
               name: wordpress
           env:
             - name: TEST_ENV
               value: test
+  parameters:
+    - name: instance-name
+      required: true
+      fieldPaths:
+        - metadata.name
+    - name: image
+      fieldPaths:
+        - spec.containers[0].image
