@@ -41,6 +41,7 @@ import (
 
 const (
 	reconcileTimeout = 1 * time.Minute
+	dependCheckWait  = 10 * time.Second
 	shortWait        = 30 * time.Second
 	longWait         = 1 * time.Minute
 )
@@ -187,7 +188,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	log = log.WithValues("uid", ac.GetUID(), "version", ac.GetResourceVersion())
 
-	workloads, err := r.components.Render(ctx, ac)
+	workloads, hasDep, err := r.components.Render(ctx, ac)
 	if err != nil {
 		log.Debug("Cannot render components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotRenderComponents, err))
@@ -233,7 +234,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+	waitTime := longWait
+	if hasDep {
+		waitTime = dependCheckWait
+	}
+	return reconcile.Result{RequeueAfter: waitTime}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 }
 
 // A Workload produced by an OAM ApplicationConfiguration.

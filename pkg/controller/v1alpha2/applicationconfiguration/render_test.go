@@ -324,7 +324,7 @@ func TestRenderComponents(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := &components{tc.fields.client, tc.fields.appclient, tc.fields.params, tc.fields.workload, tc.fields.trait}
-			got, err := r.Render(tc.args.ctx, tc.args.ac)
+			got, _, err := r.Render(tc.args.ctx, tc.args.ac)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, diff)
 			}
@@ -670,7 +670,7 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := &components{tc.fields.client, nil, tc.fields.params, tc.fields.workload, tc.fields.trait}
-			got, _ := r.Render(tc.args.ctx, tc.args.ac)
+			got, _, _ := r.Render(tc.args.ctx, tc.args.ac)
 			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].GetName() != componentName {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
 					"automatically set.")

@@ -126,8 +126,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-						return nil, errBoom
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
+						return nil, false, errBoom
 					})),
 				},
 			},
@@ -152,8 +152,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-						return []Workload{{Workload: workload}}, nil
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
+						return []Workload{{Workload: workload}}, false, nil
 					})),
 					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return errBoom
@@ -182,8 +182,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-						return []Workload{}, nil
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
+						return []Workload{}, false, nil
 					})),
 					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
@@ -225,8 +225,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-						return []Workload{{ComponentName: componentName, Workload: workload}}, nil
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
+						return []Workload{{ComponentName: componentName, Workload: workload}}, false, nil
 					})),
 					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
@@ -436,8 +436,6 @@ func TestIsRevisionWorkload(t *testing.T) {
 }
 
 func TestDependentComponentShouldNotReturn(t *testing.T) {
-	dependency.GlobalManager = dependency.NewFakeDAGManager()
-
 	workload := &unstructured.Unstructured{}
 	workload.SetAPIVersion("v1")
 	workload.SetKind("workload")
@@ -452,7 +450,14 @@ func TestDependentComponentShouldNotReturn(t *testing.T) {
 
 	c := components{
 		client: &test.MockClient{
-			MockGet: test.NewMockGetFn(nil),
+			MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+				u, ok := obj.(*unstructured.Unstructured)
+				if !ok {
+					return nil
+				}
+				u.Object = workload.Object
+				return nil
+			}),
 		},
 		params: ParameterResolveFn(resolve),
 		workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
@@ -471,26 +476,30 @@ func TestDependentComponentShouldNotReturn(t *testing.T) {
 		},
 		Spec: v1alpha2.ApplicationConfigurationSpec{
 			Components: []v1alpha2.ApplicationConfigurationComponent{{
-				ComponentName: "test-component",
+				ComponentName: "test-component-1",
 				DataInputs: []v1alpha2.DataInput{{
 					ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
-					ToFieldPaths: []string{"spec.replica"},
+					ToFieldPaths: []string{"spec.external"},
+				}},
+			}, {
+				ComponentName: "test-component-2",
+				DataOutputs: []v1alpha2.DataOutput{{
+					Name:      "test-output",
+					FieldPath: "status.state",
 				}},
 			}},
 		},
 	}
-	got, err := c.Render(context.Background(), ac)
+	got, _, err := c.Render(context.Background(), ac)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) > 0 {
+	if len(got) > 1 {
 		t.Error("should not return any workload")
 	}
 }
 
 func TestDependentTraitShouldNotReturn(t *testing.T) {
-	dependency.GlobalManager = dependency.NewFakeDAGManager()
-
 	workload := &unstructured.Unstructured{}
 	workload.SetAPIVersion("v1")
 	workload.SetKind("workload")
@@ -505,7 +514,14 @@ func TestDependentTraitShouldNotReturn(t *testing.T) {
 
 	c := components{
 		client: &test.MockClient{
-			MockGet: test.NewMockGetFn(nil),
+			MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+				u, ok := obj.(*unstructured.Unstructured)
+				if !ok {
+					return nil
+				}
+				u.Object = workload.Object
+				return nil
+			}),
 		},
 		params: ParameterResolveFn(resolve),
 		workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
@@ -524,22 +540,28 @@ func TestDependentTraitShouldNotReturn(t *testing.T) {
 		},
 		Spec: v1alpha2.ApplicationConfigurationSpec{
 			Components: []v1alpha2.ApplicationConfigurationComponent{{
-				ComponentName: "test-component",
+				ComponentName: "test-component-1",
 				Traits: []v1alpha2.ComponentTrait{{
 					Trait: runtime.RawExtension{},
 					DataInputs: []v1alpha2.DataInput{{
 						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
-						ToFieldPaths: []string{"spec.replica"},
+						ToFieldPaths: []string{"spec.external"},
 					}},
+				}},
+			}, {
+				ComponentName: "test-component-2",
+				DataOutputs: []v1alpha2.DataOutput{{
+					Name:      "test-output",
+					FieldPath: "status.state",
 				}},
 			}},
 		},
 	}
-	got, err := c.Render(context.Background(), ac)
+	got, _, err := c.Render(context.Background(), ac)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got[0].Traits) > 0 {
+	if len(got) > 1 {
 		t.Error("should not return any trait")
 	}
 }
@@ -555,10 +577,15 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 	outs := []v1alpha2.DataOutput{{
 		Name:      "test-output",
 		FieldPath: "spec.replica",
+		Conditions: []v1alpha2.ConditionRequirement{{
+			Operator:  v1alpha2.ConditionEqual,
+			Value:     "abc",
+			FieldPath: "status.state",
+		}},
 	}}
 	addDataOutputsToDAG(dag, outs, obj)
 
-	sps, ok := dag.SourceMap["test-output"]
+	s, ok := dag.Sources["test-output"]
 	if !ok {
 		t.Fatal("didn't add source correctly")
 	}
@@ -571,39 +598,11 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 		FieldPath:  outs[0].FieldPath,
 	}
 
-	if diff := cmp.Diff(sps.Source.ObjectRef, r); diff != "" {
+	if diff := cmp.Diff(s.ObjectRef, r); diff != "" {
 		t.Errorf("didn't add objectRef to source correctly: %s", diff)
 	}
-}
 
-func TestAddDataInputsToDAG(t *testing.T) {
-	obj := &unstructured.Unstructured{}
-	obj.SetAPIVersion("v1")
-	obj.SetKind("Trait")
-	obj.SetNamespace("test-ns")
-	obj.SetName("test-name")
-
-	dag := dependency.NewDAG(&v1alpha2.ApplicationConfiguration{})
-	ins := []v1alpha2.DataInput{{
-		ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
-		ToFieldPaths: []string{"spec.replica"},
-	}}
-	addDataInputsToDAG(dag, ins, obj, nil)
-
-	sps, ok := dag.SourceMap["test-output"]
-	if !ok {
-		t.Fatal("didn't add sinks to specified output correctly")
-	}
-
-	s, ok := sps.Sinks["Trait:test-ns/test-name"]
-	if !ok {
-		t.Fatal("didn't add object as sink correctly")
-	}
-
-	if diff := cmp.Diff(s.Object, obj); diff != "" {
-		t.Errorf("didn't add raw object to sink correctly: %s", diff)
-	}
-	if diff := cmp.Diff(s.ToFieldPaths, ins[0].ToFieldPaths); diff != "" {
-		t.Errorf("didn't add ToFieldPaths correctly: %s", diff)
+	if diff := cmp.Diff(s.Matchers, outs[0].Conditions); diff != "" {
+		t.Errorf("didn't add conditions to source correctly: %s", diff)
 	}
 }
