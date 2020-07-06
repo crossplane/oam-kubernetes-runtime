@@ -2,11 +2,16 @@ package util
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/davecgh/go-spew/spew"
 
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	plur "github.com/gertd/go-pluralize"
@@ -16,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -30,6 +36,11 @@ var (
 	KindService = reflect.TypeOf(corev1.Service{}).Name()
 	// ReconcileWaitResult is the time to wait between reconciliation.
 	ReconcileWaitResult = reconcile.Result{RequeueAfter: 30 * time.Second}
+)
+
+const (
+	//TraitPrefixKey is prefix of trait name
+	TraitPrefixKey = "trait"
 )
 
 const (
@@ -196,4 +207,40 @@ func Object2Map(obj interface{}) (map[string]interface{}, error) {
 	}
 	err = json.Unmarshal(bts, &res)
 	return res, err
+}
+
+// GenTraitName generate trait name
+func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait, collisionCount *int32) string {
+	return fmt.Sprintf("%s-%s-%s", componentName, TraitPrefixKey, ComputeHash(ct, collisionCount))
+}
+
+// ComputeHash returns a hash value calculated from pod template and
+// a collisionCount to avoid hash collision. The hash will be safe encoded to
+// avoid bad words.
+func ComputeHash(trait *v1alpha2.ComponentTrait, collisionCount *int32) string {
+	componentTraitHasher := fnv.New32a()
+	DeepHashObject(componentTraitHasher, *trait)
+
+	// Add collisionCount in the hash if it exists.
+	if collisionCount != nil {
+		collisionCountBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint32(collisionCountBytes, uint32(*collisionCount))
+		_, _ = componentTraitHasher.Write(collisionCountBytes)
+	}
+
+	return rand.SafeEncodeString(fmt.Sprint(componentTraitHasher.Sum32()))
+}
+
+// DeepHashObject writes specified object to hash using the spew library
+// which follows pointers and prints actual values of the nested objects
+// ensuring the hash does not change when a pointer changes.
+func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
+	hasher.Reset()
+	printer := spew.ConfigState{
+		Indent:         " ",
+		SortKeys:       true,
+		DisableMethods: true,
+		SpewKeys:       true,
+	}
+	_, _ = printer.Fprintf(hasher, "%#v", objectToWrite)
 }

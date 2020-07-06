@@ -165,12 +165,13 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 }
 
 func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, namespace, componentName string, ref *metav1.OwnerReference, dag *dependency.DAG) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
+	traitName := util.GenTraitName(componentName, ct.DeepCopy(), nil)
 	t, err := r.trait.Render(ct.Trait.Raw)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
+		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, traitName)
 	}
 
-	setTraitProperties(t, componentName, namespace, ref)
+	setTraitProperties(t, traitName, namespace, ref)
 
 	traitDef, err := util.FetchTraitDefinition(ctx, r.client, t)
 	if err != nil {
@@ -199,10 +200,10 @@ func (r *components) renderScope(ctx context.Context, cs v1alpha2.ComponentScope
 	return scopeObject, nil
 }
 
-func setTraitProperties(t *unstructured.Unstructured, componentName, namespace string, ref *metav1.OwnerReference) {
+func setTraitProperties(t *unstructured.Unstructured, traitName, namespace string, ref *metav1.OwnerReference) {
 	// Set metadata name for `Trait` if the metadata name is NOT set.
 	if t.GetName() == "" {
-		t.SetName(componentName)
+		t.SetName(traitName)
 	}
 
 	t.SetOwnerReferences([]metav1.OwnerReference{*ref})

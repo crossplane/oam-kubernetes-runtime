@@ -173,7 +173,7 @@ func TestRenderComponents(t *testing.T) {
 			},
 			args: args{ac: ac},
 			want: want{
-				err: errors.Wrapf(errBoom, errFmtRenderTrait, componentName),
+				err: errors.Wrapf(errBoom, errFmtRenderTrait, util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy(), nil)),
 			},
 		},
 		"Success": {
@@ -670,7 +670,7 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := &components{tc.fields.client, nil, tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _ := r.Render(tc.args.ctx, tc.args.ac)
-			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].GetName() != componentName {
+			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy(), nil) {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
 					"automatically set.")
 			}

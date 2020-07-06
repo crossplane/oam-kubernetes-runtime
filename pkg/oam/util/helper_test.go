@@ -3,6 +3,7 @@ package util_test
 import (
 	"context"
 	"fmt"
+	"math"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -290,5 +291,63 @@ var _ = Describe("Test unstructured related helper utils", func() {
 			By(fmt.Sprint("Running test: ", name))
 			Expect(ti.exp).Should(Equal(got))
 		}
+	})
+})
+
+var _ = Describe("Test GenTraitName helper utils", func() {
+	It("Test generate trait name", func() {
+
+		collisionCount := int32(1)
+		otherCollisionCount := int32(2)
+		maxCollisionCount := int32(math.MaxInt32)
+
+		tests := []struct {
+			name                string
+			template            *v1alpha2.ComponentTrait
+			collisionCount      *int32
+			otherCollisionCount *int32
+		}{
+			{
+				name:                "simple",
+				template:            &v1alpha2.ComponentTrait{},
+				collisionCount:      &collisionCount,
+				otherCollisionCount: &otherCollisionCount,
+			},
+			{
+				name:                "using math.MaxInt64",
+				template:            &v1alpha2.ComponentTrait{},
+				collisionCount:      nil,
+				otherCollisionCount: &maxCollisionCount,
+			},
+		}
+
+		for _, test := range tests {
+			hash := util.ComputeHash(test.template, test.collisionCount)
+			otherHash := util.ComputeHash(test.template, test.otherCollisionCount)
+			Expect(hash).ShouldNot(Equal(otherHash))
+		}
+
+		test2s := []struct {
+			name                string
+			template            *v1alpha2.ComponentTrait
+			collisionCount      *int32
+			otherCollisionCount *int32
+		}{
+			{
+				name:                "simple",
+				template:            &v1alpha2.ComponentTrait{},
+				collisionCount:      &collisionCount,
+				otherCollisionCount: &collisionCount,
+			},
+		}
+		for _, test := range test2s {
+			hash := util.ComputeHash(test.template, test.collisionCount)
+			name := fmt.Sprintf("%s-%s-%s", test.name, util.TraitPrefixKey, util.ComputeHash(test.template, &collisionCount))
+			otherHash := util.ComputeHash(test.template, test.otherCollisionCount)
+			Expect(hash).Should(Equal(otherHash))
+			traitName := util.GenTraitName(test.name, test.template, test.collisionCount)
+			Expect(traitName).Should(Equal(name))
+		}
+
 	})
 })
