@@ -40,13 +40,6 @@ secret/dbuser created
 applicationconfiguration.core.oam.dev/service-tracker created
 ```
 
-## Apply Ingress
-
-```bash
-$ kubectl apply -f tracker-ingress.yaml
-ingress.networking.k8s.io/tracker-ingress created
-```
-
 ## Result
 
 Visit your browser, and open `http://{your-ingress-address}/web-ui` for the Service Tracker website. Refresh the data on the dashboard for each of the microservices.
