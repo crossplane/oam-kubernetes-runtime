@@ -120,11 +120,13 @@ spec:
           ports:
             - containerPort: 8443
               name: https
+      {{ if .Values.useWebhook }}
       volumes:
         - name: tls-cert
           secret:
             defaultMode: 420
             secretName: {{ .Values.certificate.secretName | quote }}
+      {{ end }}
       terminationGracePeriodSeconds: 10
     {{- with .Values.nodeSelector }}
     nodeSelector:
