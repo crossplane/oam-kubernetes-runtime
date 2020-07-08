@@ -13,12 +13,20 @@ PLATFORMS ?= linux_amd64 linux_arm64
 -include build/makelib/common.mk
 
 # ====================================================================================
-# Setup Images
+# Setup Output
 
-# even though this repo doesn't build images (note the no-op img.build target below),
-# some of the init is needed for the cross build container, e.g. setting BUILD_REGISTRY
--include build/makelib/image.mk
-img.build:
+# S3_BUCKET ?= crossplane.releases
+-include build/makelib/output.mk
+
+# ====================================================================================
+# Setup Helm
+
+HELM_BASE_URL = https://charts.crossplane.io
+HELM_S3_BUCKET = crossplane.charts
+HELM_CHARTS_DIR=$(ROOT_DIR)/charts
+HELM_CHARTS = oam-core-runtime
+HELM_CHART_LINT_ARGS_oam-core-runtime = --set serviceAccount.name=''
+-include build/makelib/helm.mk
 
 # ====================================================================================
 # Setup Go
@@ -34,10 +42,31 @@ GO_TEST_PARALLEL := $(shell echo $$(( $(NPROCS) / 2 )))
 
 GO_INTEGRATION_TESTS_SUBDIRS = test
 
+GO_STATIC_PACKAGES = $(GO_PROJECT)/cmd/oam-runtime
 GO_LDFLAGS += -X $(GO_PROJECT)/pkg/version.Version=$(VERSION)
-GO_SUBDIRS += pkg apis
+GO_SUBDIRS += cmd pkg apis
 GO111MODULE = on
 -include build/makelib/golang.mk
+
+# ====================================================================================
+# Setup Images
+# Due to the way that the shared build logic works, images should
+# all be in folders at the same level (no additional levels of nesting).
+
+DOCKER_REGISTRY = crossplane
+IMAGE_DIR=$(ROOT_DIR)
+IMAGE = $(BUILD_REGISTRY)/oam-runtime-$(ARCH)
+-include build/makelib/image.mk
+
+img.build:
+	@$(INFO) docker build $(IMAGE)
+	@cp -r . $(IMAGE_TEMP_DIR) || $(FAIL)
+	@cp $(OUTPUT_DIR)/bin/$(OS)_$(ARCH)/oam-runtime $(IMAGE_TEMP_DIR) || $(FAIL)
+	@cd $(IMAGE_TEMP_DIR) || $(FAIL)
+	@docker build $(BUILD_ARGS) \
+		-t $(IMAGE) \
+		$(IMAGE_TEMP_DIR) || $(FAIL)
+	@$(OK) docker build $(IMAGE)
 
 # ====================================================================================
 # Targets
