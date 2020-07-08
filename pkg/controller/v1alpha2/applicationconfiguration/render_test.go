@@ -18,6 +18,7 @@ package applicationconfiguration
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/crossplane/crossplane-runtime/pkg/test"
@@ -904,4 +905,76 @@ func TestGetComponent(t *testing.T) {
 			LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
 		},
 	}, c)
+}
+
+func TestPassThroughObjMeta(t *testing.T) {
+	c := components{}
+	ac := &v1alpha2.ApplicationConfiguration{}
+
+	labels := map[string]string{
+		"core.oam.dev/ns":         "oam-system",
+		"core.oam.dev/controller": "oam-kubernetes-runtime",
+	}
+
+	annotation := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+
+	ac.SetLabels(labels)
+	ac.SetAnnotations(annotation)
+
+	t.Run("workload and trait have no labels and annotation", func(t *testing.T) {
+		var u unstructured.Unstructured
+		c.passThroughObjMeta(ac.ObjectMeta, &u)
+		got := u.GetLabels()
+		want := labels
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("labels want:%v,got:%v", want, got)
+		}
+		gotAnnotation := u.GetAnnotations()
+		wantAnnotation := annotation
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("annotation want:%v,got:%v", wantAnnotation, gotAnnotation)
+		}
+	})
+
+	t.Run("workload and trait contains overlapping keys", func(t *testing.T) {
+		var u unstructured.Unstructured
+		existAnnotation := map[string]string{
+			"key1": "exist value1",
+			"key3": "value3",
+		}
+		existLabels := map[string]string{
+			"core.oam.dev/ns":          "kube-system",
+			"core.oam.dev/kube-native": "deployment",
+		}
+		u.SetLabels(existLabels)
+		u.SetAnnotations(existAnnotation)
+
+		c.passThroughObjMeta(ac.ObjectMeta, &u)
+
+		gotAnnotation := u.GetAnnotations()
+		wantAnnotation := map[string]string{
+			"key1": "exist value1",
+			"key2": "value2",
+			"key3": "value3",
+		}
+		if !reflect.DeepEqual(gotAnnotation, wantAnnotation) {
+			t.Errorf("annotation got:%v,want:%v", gotAnnotation, wantAnnotation)
+		}
+
+		gotLabels := u.GetLabels()
+		wantLabels := map[string]string{
+			"core.oam.dev/ns":          "kube-system",
+			"core.oam.dev/kube-native": "deployment",
+			"core.oam.dev/controller":  "oam-kubernetes-runtime",
+		}
+		if !reflect.DeepEqual(gotLabels, wantLabels) {
+			t.Errorf("labels got:%v,want:%v", gotLabels, wantLabels)
+		}
+		if !reflect.DeepEqual(gotLabels, wantLabels) {
+			t.Errorf("labels got:%v,want:%v", gotLabels, wantLabels)
+		}
+	})
 }

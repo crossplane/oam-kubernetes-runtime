@@ -119,6 +119,9 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
 	}
 
+	// pass through labels and annotation from app-config to workload
+	r.passThroughObjMeta(ac.ObjectMeta, w)
+
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 	w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 	w.SetNamespace(ac.GetNamespace())
@@ -134,6 +137,9 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		if t == nil { // Depends on other resources. Not creating it now.
 			continue
 		}
+
+		// pass through labels and annotation from app-config to trait
+		r.passThroughObjMeta(ac.ObjectMeta, t)
 		traits = append(traits, *t)
 		traitDefs = append(traitDefs, *traitDef)
 	}
@@ -264,6 +270,29 @@ func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationC
 		revisionName = c.Status.LatestRevision.Name
 	}
 	return c, revisionName, nil
+}
+
+// pass through labels and annotation from app-config to workload  or trait
+func (r *components) passThroughObjMeta(oMeta metav1.ObjectMeta, u *unstructured.Unstructured) {
+	mergeMap := func(src, dst map[string]string) map[string]string {
+		if len(src) == 0 {
+			return dst
+		}
+		// make sure dst is initialized
+		if dst == nil {
+			dst = map[string]string{}
+		}
+		for k, v := range src {
+			if _, exist := dst[k]; !exist {
+				dst[k] = v
+			}
+		}
+		return dst
+	}
+	// pass app-config labels
+	u.SetLabels(mergeMap(oMeta.GetLabels(), u.GetLabels()))
+	// pass app-config annotation
+	u.SetAnnotations(mergeMap(oMeta.GetAnnotations(), u.GetAnnotations()))
 }
 
 // A ResourceRenderer renders a Kubernetes-compliant YAML resource into an
