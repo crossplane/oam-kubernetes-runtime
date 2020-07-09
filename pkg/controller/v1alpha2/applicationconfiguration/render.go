@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -483,7 +484,7 @@ func (r *components) checkSourceReady(ctx context.Context, s *dependency.Source)
 	u.SetGroupVersionKind(obj.GroupVersionKind())
 	err := r.client.Get(ctx, key, u)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get object (%s): %w", key.String(), err)
+		return "", false, errors.Wrap(resource.IgnoreNotFound(err), fmt.Errorf("failed to get object (%s)", key.String()))
 	}
 	paved := fieldpath.Pave(u.UnstructuredContent())
 
