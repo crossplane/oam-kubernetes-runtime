@@ -144,10 +144,6 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 			return nil, err
 		}
 
-		if t == nil { // Depends on other resources. Not creating it now.
-			continue
-		}
-
 		// pass through labels and annotation from app-config to trait
 		r.passThroughObjMeta(ac.ObjectMeta, t)
 		traits = append(traits, &Trait{Object: *t})
@@ -470,7 +466,7 @@ func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInp
 	for _, in := range ins {
 		s, ok := dag.Sources[in.ValueFrom.DataOutputName]
 		if !ok {
-			return nil, errors.New("DataOutput name doesn't exist")
+			return nil, fmt.Errorf("DataOutput name (%s) doesn't exist", in.ValueFrom.DataOutputName)
 		}
 		val, ready, err := r.checkSourceReady(ctx, s)
 		if err != nil {
