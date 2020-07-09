@@ -484,7 +484,7 @@ func (r *components) checkSourceReady(ctx context.Context, s *dependency.Source)
 	u.SetGroupVersionKind(obj.GroupVersionKind())
 	err := r.client.Get(ctx, key, u)
 	if err != nil {
-		return "", false, errors.Wrap(resource.IgnoreNotFound(err), fmt.Errorf("failed to get object (%s)", key.String()))
+		return "", false, errors.Wrap(resource.IgnoreNotFound(err), fmt.Sprintf("failed to get object (%s)", key.String()))
 	}
 	paved := fieldpath.Pave(u.UnstructuredContent())
 
