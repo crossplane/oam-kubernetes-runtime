@@ -24,11 +24,6 @@ import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )
 
-const (
-	// ReasonDependencyDone indicates that all dependencies are satisfied
-	ReasonDependencyDone = "All dependencies satisfied"
-)
-
 // A DefinitionReference refers to a CustomResourceDefinition by name.
 type DefinitionReference struct {
 	// Name of the referenced CustomResourceDefinition.
@@ -357,8 +352,35 @@ type WorkloadStatus struct {
 type ApplicationConfigurationStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
+	Dependency DependencyStatus `json:"dependency,omitempty"`
+
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`
+}
+
+// DependencyStatus represents the observed state of the dependency of
+// an ApplicationConfiguration.
+type DependencyStatus struct {
+	Unsatisfied []UnstaifiedDependency `json:"unsatisfied"`
+}
+
+// UnstaifiedDependency describes unsatisfied dependency flow between
+// one pair of objects.
+type UnstaifiedDependency struct {
+	From DependencyFromObject `json:"from"`
+	To   DependencyToObject   `json:"to"`
+}
+
+// DependencyFromObject represents the object that dependency data comes from.
+type DependencyFromObject struct {
+	runtimev1alpha1.TypedReference `json:",inline"`
+	FieldPath                      string `json:"fieldPath,omitempty"`
+}
+
+// DependencyToObject represents the object that dependency data goes to.
+type DependencyToObject struct {
+	runtimev1alpha1.TypedReference `json:",inline"`
+	FieldPaths                     []string `json:"fieldPaths,omitempty"`
 }
 
 // +kubebuilder:object:root=true

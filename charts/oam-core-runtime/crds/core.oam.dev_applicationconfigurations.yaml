@@ -301,6 +301,71 @@ spec:
                 - type
                 type: object
               type: array
+            dependency:
+              description: DependencyStatus represents the observed state of the dependency
+                of an ApplicationConfiguration.
+              properties:
+                unsatisfied:
+                  items:
+                    description: UnstaifiedDependency describes unsatisfied dependency
+                      flow between one pair of objects.
+                    properties:
+                      from:
+                        description: DependencyFromObject represents the object that
+                          dependency data comes from.
+                        properties:
+                          apiVersion:
+                            description: APIVersion of the referenced object.
+                            type: string
+                          fieldPath:
+                            type: string
+                          kind:
+                            description: Kind of the referenced object.
+                            type: string
+                          name:
+                            description: Name of the referenced object.
+                            type: string
+                          uid:
+                            description: UID of the referenced object.
+                            type: string
+                        required:
+                        - apiVersion
+                        - kind
+                        - name
+                        type: object
+                      to:
+                        description: DependencyToObject represents the object that
+                          dependency data goes to.
+                        properties:
+                          apiVersion:
+                            description: APIVersion of the referenced object.
+                            type: string
+                          fieldPaths:
+                            items:
+                              type: string
+                            type: array
+                          kind:
+                            description: Kind of the referenced object.
+                            type: string
+                          name:
+                            description: Name of the referenced object.
+                            type: string
+                          uid:
+                            description: UID of the referenced object.
+                            type: string
+                        required:
+                        - apiVersion
+                        - kind
+                        - name
+                        type: object
+                    required:
+                    - from
+                    - to
+                    type: object
+                  type: array
+              required:
+              - unsatisfied
+              type: object
             workloads:
               description: Workloads created by this ApplicationConfiguration.
               items:

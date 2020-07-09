@@ -35,7 +35,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/dependency"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 )
 
@@ -126,8 +125,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
-						return nil, false, errBoom
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return nil, &v1alpha2.DependencyStatus{}, errBoom
 					})),
 				},
 			},
@@ -152,8 +151,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
-						return []Workload{{Workload: workload}}, false, nil
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return []Workload{{Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
 					})),
 					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return errBoom
@@ -182,8 +181,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
-						return []Workload{}, false, nil
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return []Workload{}, &v1alpha2.DependencyStatus{}, nil
 					})),
 					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
@@ -225,8 +224,8 @@ func TestReconciler(t *testing.T) {
 					},
 				},
 				o: []ReconcilerOption{
-					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, bool, error) {
-						return []Workload{{ComponentName: componentName, Workload: workload}}, false, nil
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
 					})),
 					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
@@ -282,7 +281,7 @@ func TestWorkloadStatus(t *testing.T) {
 			w: Workload{
 				ComponentName: componentName,
 				Workload:      workload,
-				Traits:        []unstructured.Unstructured{*trait},
+				Traits:        []*Trait{{Object: *trait}},
 			},
 			want: v1alpha2.WorkloadStatus{
 				ComponentName: componentName,
@@ -414,7 +413,7 @@ func TestEligible(t *testing.T) {
 						},
 					},
 				},
-				w: []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}},
+				w: []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 			},
 			want: []unstructured.Unstructured{},
 		},
@@ -494,8 +493,8 @@ func TestDependentComponentShouldNotReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) > 1 {
-		t.Error("should not return any workload")
+	if !got[0].Unready {
+		t.Error("expect workload unready")
 	}
 }
 
@@ -561,8 +560,8 @@ func TestDependentTraitShouldNotReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) > 1 {
-		t.Error("should not return any trait")
+	if !got[0].Traits[0].Unready {
+		t.Error("should trait unready")
 	}
 }
 
@@ -573,7 +572,7 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 	obj.SetNamespace("test-ns")
 	obj.SetName("test-name")
 
-	dag := dependency.NewDAG(&v1alpha2.ApplicationConfiguration{})
+	dag := newDAG()
 	outs := []v1alpha2.DataOutput{{
 		Name:      "test-output",
 		FieldPath: "spec.replica",
@@ -602,7 +601,7 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 		t.Errorf("didn't add objectRef to source correctly: %s", diff)
 	}
 
-	if diff := cmp.Diff(s.Matchers, outs[0].Conditions); diff != "" {
+	if diff := cmp.Diff(s.Conditions, outs[0].Conditions); diff != "" {
 		t.Errorf("didn't add conditions to source correctly: %s", diff)
 	}
 }

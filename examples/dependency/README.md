@@ -3,7 +3,7 @@
 Start OAM runtime by:
 
 ```shell script
-go run examples/containerized-workload/main.go
+go run cmd/oam-runtime/main.go
 ```
 
 

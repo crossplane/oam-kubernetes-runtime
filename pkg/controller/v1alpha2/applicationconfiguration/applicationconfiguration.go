@@ -188,7 +188,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	log = log.WithValues("uid", ac.GetUID(), "version", ac.GetResourceVersion())
 
-	workloads, hasDep, err := r.components.Render(ctx, ac)
+	workloads, depStatus, err := r.components.Render(ctx, ac)
 	if err != nil {
 		log.Debug("Cannot render components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotRenderComponents, err))
@@ -234,8 +234,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
+
+	ac.Status.Dependency = *depStatus
+
 	waitTime := longWait
-	if hasDep {
+	if len(depStatus.Unsatisfied) != 0 {
 		waitTime = dependCheckWait
 	}
 	return reconcile.Result{RequeueAfter: waitTime}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
@@ -252,11 +255,24 @@ type Workload struct {
 	// A Workload object.
 	Workload *unstructured.Unstructured
 
+	// Unready indicates whether this resource is unready to apply
+	// because of dependency not ready
+	Unready bool
+
 	// Traits associated with this workload.
-	Traits []unstructured.Unstructured
+	Traits []*Trait
 
 	// Scopes associated with this workload.
 	Scopes []unstructured.Unstructured
+}
+
+// A Trait produced by an OAM ApplicationConfiguration.
+type Trait struct {
+	Object unstructured.Unstructured
+
+	// Unready indicates whether this resource is unready to apply
+	// because of dependency not ready
+	Unready bool
 }
 
 // Status produces the status of this workload and its traits, suitable for use
@@ -275,9 +291,9 @@ func (w Workload) Status() v1alpha2.WorkloadStatus {
 	}
 	for i := range w.Traits {
 		acw.Traits[i].Reference = runtimev1alpha1.TypedReference{
-			APIVersion: w.Traits[i].GetAPIVersion(),
-			Kind:       w.Traits[i].GetKind(),
-			Name:       w.Traits[i].GetName(),
+			APIVersion: w.Traits[i].Object.GetAPIVersion(),
+			Kind:       w.Traits[i].Object.GetKind(),
+			Name:       w.Traits[i].Object.GetName(),
 		}
 	}
 	for i, s := range w.Scopes {
@@ -322,9 +338,9 @@ func eligible(namespace string, ws []v1alpha2.WorkloadStatus, w []Workload) []un
 		applied[r] = true
 		for _, t := range wl.Traits {
 			r := runtimev1alpha1.TypedReference{
-				APIVersion: t.GetAPIVersion(),
-				Kind:       t.GetKind(),
-				Name:       t.GetName(),
+				APIVersion: t.Object.GetAPIVersion(),
+				Kind:       t.Object.GetKind(),
+				Name:       t.Object.GetName(),
 			}
 			applied[r] = true
 		}

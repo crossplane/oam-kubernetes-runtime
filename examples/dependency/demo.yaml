@@ -8,6 +8,8 @@ spec:
     kind: Foo
     metadata:
       name: source
+    status:
+      key: test
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component
