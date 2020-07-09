@@ -52,6 +52,12 @@ func withWorkloadStatuses(ws ...v1alpha2.WorkloadStatus) acParam {
 	}
 }
 
+func withDependencyStatus(s v1alpha2.DependencyStatus) acParam {
+	return func(ac *v1alpha2.ApplicationConfiguration) {
+		ac.Status.Dependency = s
+	}
+}
+
 func ac(p ...acParam) *v1alpha2.ApplicationConfiguration {
 	ac := &v1alpha2.ApplicationConfiguration{}
 	for _, fn := range p {
@@ -78,6 +84,27 @@ func TestReconciler(t *testing.T) {
 	trait.SetKind("trait")
 	trait.SetNamespace(namespace)
 	trait.SetName("trait")
+
+	depStatus := v1alpha2.DependencyStatus{
+		Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+			From: v1alpha2.DependencyFromObject{
+				TypedReference: runtimev1alpha1.TypedReference{
+					APIVersion: workload.GetAPIVersion(),
+					Kind:       workload.GetKind(),
+					Name:       workload.GetName(),
+				},
+				FieldPath: "status.key",
+			},
+			To: v1alpha2.DependencyToObject{
+				TypedReference: runtimev1alpha1.TypedReference{
+					APIVersion: workload.GetAPIVersion(),
+					Kind:       workload.GetKind(),
+					Name:       workload.GetName(),
+				},
+				FieldPaths: []string{"spec.key"},
+			},
+		}},
+	}
 
 	type args struct {
 		m manager.Manager
@@ -194,6 +221,50 @@ func TestReconciler(t *testing.T) {
 			},
 			want: want{
 				result: reconcile.Result{RequeueAfter: shortWait},
+			},
+		},
+		"Has dependency": {
+			reason: "dependency should be reflected in status and wait time should align",
+			args: args{
+				m: &mock.Manager{
+					Client: &test.MockClient{
+						MockGet:    test.NewMockGetFn(nil),
+						MockDelete: test.NewMockDeleteFn(nil),
+						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
+							want := ac(
+								withConditions(runtimev1alpha1.ReconcileSuccess()),
+								withWorkloadStatuses(v1alpha2.WorkloadStatus{
+									ComponentName: componentName,
+									Reference: runtimev1alpha1.TypedReference{
+										APIVersion: workload.GetAPIVersion(),
+										Kind:       workload.GetKind(),
+										Name:       workload.GetName(),
+									},
+								}),
+								withDependencyStatus(depStatus),
+							)
+							if diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty()); diff != "" {
+								t.Errorf("\nclient.Status().Update(): -want, +got:\n%s", diff)
+								return errUnexpectedStatus
+							}
+							return nil
+						}),
+					},
+				},
+				o: []ReconcilerOption{
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return []Workload{{ComponentName: componentName, Workload: workload}}, &depStatus, nil
+					})),
+					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+						return nil
+					})),
+					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
+						return []unstructured.Unstructured{*trait}
+					})),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: dependCheckWait},
 			},
 		},
 		"Success": {
