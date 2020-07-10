@@ -59,6 +59,10 @@ const (
 	errSetValueForField          = "can not set value %q for fieldPath %q"
 )
 
+var (
+	ErrDataOutputNotExist = errors.New("DataOutput does not exist")
+)
+
 const instanceNamePath = "metadata.name"
 
 // A ComponentRenderer renders an ApplicationConfiguration's Components into
@@ -466,7 +470,7 @@ func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInp
 	for _, in := range ins {
 		s, ok := dag.Sources[in.ValueFrom.DataOutputName]
 		if !ok {
-			return nil, fmt.Errorf("DataOutput name (%s) doesn't exist", in.ValueFrom.DataOutputName)
+			return nil, errors.Wrapf(ErrDataOutputNotExist, "DataOutputName (%s)", in.ValueFrom.DataOutputName)
 		}
 		val, ready, err := r.checkSourceReady(ctx, s)
 		if err != nil {
@@ -530,13 +534,13 @@ func (r *components) checkSourceReady(ctx context.Context, s *dagSource) (string
 	return val, true, nil
 }
 
-func matchValue(ms []v1alpha2.ConditionRequirement, val string, paved *fieldpath.Paved) (bool, error) {
+func matchValue(conds []v1alpha2.ConditionRequirement, val string, paved *fieldpath.Paved) (bool, error) {
 	// If no matcher is specified, it is by default to check value not empty.
-	if len(ms) == 0 {
+	if len(conds) == 0 {
 		return val != "", nil
 	}
 
-	for _, m := range ms {
+	for _, m := range conds {
 		var checkVal string
 		if m.FieldPath != "" {
 			var err error

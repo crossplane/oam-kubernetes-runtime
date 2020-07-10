@@ -1,11 +1,17 @@
 # Prerequisite
 
-Start OAM runtime by:
 
-```shell script
-go run cmd/oam-runtime/main.go
+Prepare CRD and Definitions:
+
+```shell
+kubectl apply -f examples/dependency/definition.yaml
 ```
 
+Start OAM runtime:
+
+```shell script
+go run ./cmd/oam-runtime/main.go
+```
 
 # Case 1: Use status as output and pass through to another workload 
 

@@ -18,7 +18,12 @@ package applicationconfiguration
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -505,134 +510,580 @@ func TestIsRevisionWorkload(t *testing.T) {
 	}
 }
 
-func TestDependentComponentShouldNotReturn(t *testing.T) {
-	workload := &unstructured.Unstructured{}
-	workload.SetAPIVersion("v1")
-	workload.SetKind("workload")
-	workload.SetNamespace("test-ns")
-	workload.SetName("workload")
+func TestDependency(t *testing.T) {
+	unreadyWorkload := &unstructured.Unstructured{}
+	unreadyWorkload.SetAPIVersion("v1")
+	unreadyWorkload.SetKind("Workload")
+	unreadyWorkload.SetNamespace("test-ns")
+	unreadyWorkload.SetName("unready-workload")
 
-	trait := &unstructured.Unstructured{}
-	trait.SetAPIVersion("v1")
-	trait.SetKind("trait")
-	trait.SetNamespace("test-ns")
-	trait.SetName("trait")
-
-	c := components{
-		client: &test.MockClient{
-			MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
-				u, ok := obj.(*unstructured.Unstructured)
-				if !ok {
-					return nil
-				}
-				u.Object = workload.Object
-				return nil
-			}),
-		},
-		params: ParameterResolveFn(resolve),
-		workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
-			return workload, nil
-		}),
-		trait: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
-			return trait, nil
-
-		}),
-	}
-
-	ac := &v1alpha2.ApplicationConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-app",
-			Namespace: "test-ns",
-		},
-		Spec: v1alpha2.ApplicationConfigurationSpec{
-			Components: []v1alpha2.ApplicationConfigurationComponent{{
-				ComponentName: "test-component-1",
-				DataInputs: []v1alpha2.DataInput{{
-					ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
-					ToFieldPaths: []string{"spec.external"},
-				}},
-			}, {
-				ComponentName: "test-component-2",
-				DataOutputs: []v1alpha2.DataOutput{{
-					Name:      "test-output",
-					FieldPath: "status.state",
-				}},
-			}},
-		},
-	}
-	got, _, err := c.Render(context.Background(), ac)
+	readyWorkload := unreadyWorkload.DeepCopy()
+	readyWorkload.SetName("ready-workload")
+	err := unstructured.SetNestedField(readyWorkload.Object, "test", "status", "key")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got[0].Unready {
-		t.Error("expect workload unready")
+
+	unreadyTrait := &unstructured.Unstructured{}
+	unreadyTrait.SetAPIVersion("v1")
+	unreadyTrait.SetKind("Trait")
+	unreadyTrait.SetNamespace("test-ns")
+	unreadyTrait.SetName("unready-trait")
+
+	readyTrait := unreadyTrait.DeepCopy()
+	readyTrait.SetName("ready-trait")
+	err = unstructured.SetNestedField(readyTrait.Object, "test", "status", "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type args struct {
+		components []v1alpha2.ApplicationConfigurationComponent
+		wl         *unstructured.Unstructured
+		trait      *unstructured.Unstructured
+	}
+	type want struct {
+		err             error
+		verifyWorkloads func([]Workload)
+		depStatus       *v1alpha2.DependencyStatus
+	}
+	cases := map[string]struct {
+		args args
+		want want
+	}{
+		"Workload depends on another Workload that's unready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+				}, {
+					ComponentName: "test-component-source",
+					DataOutputs: []v1alpha2.DataOutput{{
+						Name:      "test-output",
+						FieldPath: "status.key",
+					}},
+				}},
+				wl:    unreadyWorkload,
+				trait: unreadyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if !ws[0].Unready {
+						t.Error("Workload should be unready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{
+					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						From: v1alpha2.DependencyFromObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyWorkload.GetAPIVersion(),
+								Kind:       unreadyWorkload.GetKind(),
+								Name:       unreadyWorkload.GetName(),
+							},
+							FieldPath: "status.key",
+						},
+						To: v1alpha2.DependencyToObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyWorkload.GetAPIVersion(),
+								Kind:       unreadyWorkload.GetKind(),
+								Name:       unreadyWorkload.GetName(),
+							},
+							FieldPaths: []string{"spec.key"},
+						},
+					}},
+				},
+			},
+		},
+		"Workload depends on another Workload that's ready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+				}, {
+					ComponentName: "test-component-source",
+					DataOutputs: []v1alpha2.DataOutput{{
+						Name:      "test-output",
+						FieldPath: "status.key",
+					}},
+				}},
+				wl:    readyWorkload,
+				trait: unreadyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if ws[0].Unready {
+						t.Error("Workload should be ready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{},
+			},
+		},
+		"Workload depends on a Trait that's unready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataOutputs: []v1alpha2.DataOutput{{
+							Name:      "test-output",
+							FieldPath: "status.key",
+						}},
+					}},
+				}},
+				wl:    unreadyWorkload,
+				trait: unreadyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if !ws[0].Unready {
+						t.Error("Workload should be unready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{
+					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						From: v1alpha2.DependencyFromObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyTrait.GetAPIVersion(),
+								Kind:       unreadyTrait.GetKind(),
+								Name:       unreadyTrait.GetName(),
+							},
+							FieldPath: "status.key",
+						},
+						To: v1alpha2.DependencyToObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyWorkload.GetAPIVersion(),
+								Kind:       unreadyWorkload.GetKind(),
+								Name:       unreadyWorkload.GetName(),
+							},
+							FieldPaths: []string{"spec.key"},
+						},
+					}},
+				},
+			},
+		},
+		"Workload depends on a Trait that's ready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataOutputs: []v1alpha2.DataOutput{{
+							Name:      "test-output",
+							FieldPath: "status.key",
+						}},
+					}},
+				}},
+				wl:    unreadyWorkload,
+				trait: readyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if ws[0].Unready {
+						t.Error("Workload should be ready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{},
+			},
+		},
+		"Trait depends on a Workload that's unready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataInputs: []v1alpha2.DataInput{{
+							ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+							ToFieldPaths: []string{"spec.key"},
+						}},
+					}},
+				}, {
+					ComponentName: "test-component-source",
+					DataOutputs: []v1alpha2.DataOutput{{
+						Name:      "test-output",
+						FieldPath: "status.key",
+					}},
+				}},
+				wl:    unreadyWorkload,
+				trait: unreadyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if !ws[0].Traits[0].Unready {
+						t.Error("Trait should be unready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{
+					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						From: v1alpha2.DependencyFromObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyWorkload.GetAPIVersion(),
+								Kind:       unreadyWorkload.GetKind(),
+								Name:       unreadyWorkload.GetName(),
+							},
+							FieldPath: "status.key",
+						},
+						To: v1alpha2.DependencyToObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyTrait.GetAPIVersion(),
+								Kind:       unreadyTrait.GetKind(),
+								Name:       unreadyTrait.GetName(),
+							},
+							FieldPaths: []string{"spec.key"},
+						},
+					}},
+				},
+			},
+		},
+		"Trait depends on a Workload that's ready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataInputs: []v1alpha2.DataInput{{
+							ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+							ToFieldPaths: []string{"spec.key"},
+						}},
+					}},
+				}, {
+					ComponentName: "test-component-source",
+					DataOutputs: []v1alpha2.DataOutput{{
+						Name:      "test-output",
+						FieldPath: "status.key",
+					}},
+				}},
+				wl:    readyWorkload,
+				trait: unreadyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if ws[0].Traits[0].Unready {
+						t.Error("Trait should be ready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{},
+			},
+		},
+		"Trait depends on another unreadyTrait that's unready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataInputs: []v1alpha2.DataInput{{
+							ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+							ToFieldPaths: []string{"spec.key"},
+						}},
+					}, {
+						Trait: runtime.RawExtension{},
+						DataOutputs: []v1alpha2.DataOutput{{
+							Name:      "test-output",
+							FieldPath: "status.key",
+						}},
+					}},
+				}},
+				wl:    unreadyWorkload,
+				trait: unreadyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if !ws[0].Traits[0].Unready {
+						t.Error("Trait should be unready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{
+					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						From: v1alpha2.DependencyFromObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyTrait.GetAPIVersion(),
+								Kind:       unreadyTrait.GetKind(),
+								Name:       unreadyTrait.GetName(),
+							},
+							FieldPath: "status.key",
+						},
+						To: v1alpha2.DependencyToObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyTrait.GetAPIVersion(),
+								Kind:       unreadyTrait.GetKind(),
+								Name:       unreadyTrait.GetName(),
+							},
+							FieldPaths: []string{"spec.key"},
+						},
+					}},
+				},
+			},
+		},
+		"Trait depends on another unreadyTrait that's ready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataInputs: []v1alpha2.DataInput{{
+							ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+							ToFieldPaths: []string{"spec.key"},
+						}},
+					}, {
+						Trait: runtime.RawExtension{},
+						DataOutputs: []v1alpha2.DataOutput{{
+							Name:      "test-output",
+							FieldPath: "status.key",
+						}},
+					}},
+				}},
+				wl:    unreadyWorkload,
+				trait: readyTrait,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if ws[0].Traits[0].Unready {
+						t.Error("Trait should be ready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{},
+			}},
+		"DataOutputName doesn't exist": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "wrong-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+				}},
+				wl:    unreadyWorkload,
+				trait: unreadyTrait,
+			},
+			want: want{
+				err: ErrDataOutputNotExist,
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := components{
+				client: &test.MockClient{
+					MockGet: test.MockGetFn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+						if obj.GetObjectKind().GroupVersionKind().Kind == "Workload" {
+							b, err := json.Marshal(tc.args.wl)
+							if err != nil {
+								t.Fatal(err)
+							}
+							err = json.Unmarshal(b, obj)
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+						if obj.GetObjectKind().GroupVersionKind().Kind == "Trait" {
+							b, err := json.Marshal(tc.args.trait)
+							if err != nil {
+								t.Fatal(err)
+							}
+							err = json.Unmarshal(b, obj)
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+						return nil
+					}),
+				},
+				params: ParameterResolveFn(resolve),
+				workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
+					return tc.args.wl, nil
+				}),
+				trait: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
+					return tc.args.trait, nil
+				}),
+			}
+
+			ac := &v1alpha2.ApplicationConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-app",
+					Namespace: "test-ns",
+				},
+				Spec: v1alpha2.ApplicationConfigurationSpec{
+					Components: tc.args.components,
+				},
+			}
+
+			ws, ds, err := c.Render(context.Background(), ac)
+			if err != nil {
+				if errors.Is(err, tc.want.err) {
+					return
+				}
+				t.Error(err)
+				return
+			}
+			if diff := cmp.Diff(tc.want.err, err); diff != "" {
+				t.Error(diff)
+				return
+			}
+			tc.want.verifyWorkloads(ws)
+			if diff := cmp.Diff(tc.want.depStatus, ds); diff != "" {
+				t.Error(diff)
+			}
+		})
 	}
 }
 
-func TestDependentTraitShouldNotReturn(t *testing.T) {
-	workload := &unstructured.Unstructured{}
-	workload.SetAPIVersion("v1")
-	workload.SetKind("workload")
-	workload.SetNamespace("test-ns")
-	workload.SetName("workload")
-
-	trait := &unstructured.Unstructured{}
-	trait.SetAPIVersion("v1")
-	trait.SetKind("trait")
-	trait.SetNamespace("test-ns")
-	trait.SetName("trait")
-
-	c := components{
-		client: &test.MockClient{
-			MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
-				u, ok := obj.(*unstructured.Unstructured)
-				if !ok {
-					return nil
-				}
-				u.Object = workload.Object
-				return nil
-			}),
-		},
-		params: ParameterResolveFn(resolve),
-		workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
-			return workload, nil
-		}),
-		trait: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
-			return trait, nil
-
-		}),
+func TestMatchValue(t *testing.T) {
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("v1")
+	obj.SetKind("Workload")
+	obj.SetNamespace("test-ns")
+	obj.SetName("unready-workload")
+	if err := unstructured.SetNestedField(obj.Object, "test", "key"); err != nil {
+		t.Fatal(err)
 	}
-
-	ac := &v1alpha2.ApplicationConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-app",
-			Namespace: "test-ns",
-		},
-		Spec: v1alpha2.ApplicationConfigurationSpec{
-			Components: []v1alpha2.ApplicationConfigurationComponent{{
-				ComponentName: "test-component-1",
-				Traits: []v1alpha2.ComponentTrait{{
-					Trait: runtime.RawExtension{},
-					DataInputs: []v1alpha2.DataInput{{
-						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
-						ToFieldPaths: []string{"spec.external"},
-					}},
-				}},
-			}, {
-				ComponentName: "test-component-2",
-				DataOutputs: []v1alpha2.DataOutput{{
-					Name:      "test-output",
-					FieldPath: "status.state",
-				}},
-			}},
-		},
-	}
-	got, _, err := c.Render(context.Background(), ac)
+	paved, err := fieldpath.PaveObject(obj)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got[0].Traits[0].Unready {
-		t.Error("should trait unready")
+
+	type args struct {
+		conds []v1alpha2.ConditionRequirement
+		val   string
+		paved *fieldpath.Paved
+	}
+	type want struct {
+		matched bool
+	}
+	cases := map[string]struct {
+		args args
+		want want
+	}{
+		"No conditions with nonempty value should match": {},
+		"No conditions with empty value should not match": {
+			args: args{
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with same value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionEqual,
+					Value:    "test",
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with different value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionEqual,
+					Value:    "test",
+				}},
+				val: "different",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"notEq condition with different value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEqual,
+					Value:    "test",
+				}},
+				val: "different",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"notEq condition with same value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEqual,
+					Value:    "test",
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"notEmpty condition with nonempty value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEmpty,
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"notEmpty condition with empty value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEmpty,
+				}},
+				val: "",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"eq condition with same value from FieldPath should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					Value:     "test",
+					FieldPath: "key",
+				}},
+				paved: paved,
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with different value from FieldPath should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					Value:     "different",
+					FieldPath: "key",
+				}},
+				paved: paved,
+			},
+			want: want{
+				matched: false,
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			matched, err := matchValue(tc.args.conds, tc.args.val, tc.args.paved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.want.matched, matched); diff != "" {
+				t.Error(diff)
+			}
+		})
 	}
 }
 
