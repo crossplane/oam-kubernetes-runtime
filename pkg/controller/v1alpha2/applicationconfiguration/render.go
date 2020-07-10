@@ -60,6 +60,7 @@ const (
 )
 
 var (
+	// ErrDataOutputNotExist is an error indicating the DataOutput specified doesn't not exist
 	ErrDataOutputNotExist = errors.New("DataOutput does not exist")
 )
 
