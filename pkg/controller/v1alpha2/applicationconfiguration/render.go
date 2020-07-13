@@ -479,7 +479,7 @@ func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInp
 		}
 		if !ready {
 			uds = append(uds, makeUnsatisfiedDependency(obj, s, in))
-			continue
+			return uds, nil
 		}
 
 		err = fillValue(obj, in.ToFieldPaths, val)
