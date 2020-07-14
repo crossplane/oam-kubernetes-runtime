@@ -1,6 +1,6 @@
 # ====================================================================================
 # Setup Project
-IMG ?= controller:latest
+IMG ?= oam-kubernetes-runtime:latest
 
 PROJECT_NAME := oam-kubernetes-runtime
 PROJECT_REPO := github.com/crossplane/$(PROJECT_NAME)
@@ -141,7 +141,7 @@ kind-load:
 
 e2e-setup: docker-build kind-load
 	kubectl create namespace oam-system
-	helm install e2e ./charts/oam-kubernetes-runtime/ -n oam-system --set image.repository=$(IMG) --wait \
+	helm install e2e ./charts/oam-kubernetes-runtime/ -n oam-system --set image.repository=$(IMG),image.tag='',image.pullPolicy='Never' --wait \
 		|| { echo >&2 "helm install timeout"; \
 		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-kubernetes-runtime,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
 		helm uninstall e2e -n oam-system; exit 1;}
