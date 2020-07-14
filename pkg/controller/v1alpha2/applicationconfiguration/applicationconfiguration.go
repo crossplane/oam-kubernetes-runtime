@@ -235,11 +235,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
 
-	ac.Status.Dependency = *depStatus
-
+	ac.Status.Dependency = v1alpha2.DependencyStatus{}
 	waitTime := longWait
 	if len(depStatus.Unsatisfied) != 0 {
 		waitTime = dependCheckWait
+		ac.Status.Dependency = *depStatus
 	}
 	return reconcile.Result{RequeueAfter: waitTime}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 }

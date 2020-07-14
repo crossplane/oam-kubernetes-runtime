@@ -8,9 +8,9 @@ spec:
     kind: Foo
     metadata:
       name: source
-    ## Uncomment the following and apply again will make dependency satisfied.
-    # status:
-    #   key: test
+## Uncomment the following and apply again will make dependency satisfied.
+# status:
+#   key: test
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component

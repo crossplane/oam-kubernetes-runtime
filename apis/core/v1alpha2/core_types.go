@@ -352,7 +352,7 @@ type WorkloadStatus struct {
 type ApplicationConfigurationStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
-	Dependency DependencyStatus `json:"dependency,omitempty"`
+	Dependency DependencyStatus `json:"dependency"`
 
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`
@@ -361,7 +361,7 @@ type ApplicationConfigurationStatus struct {
 // DependencyStatus represents the observed state of the dependency of
 // an ApplicationConfiguration.
 type DependencyStatus struct {
-	Unsatisfied []UnstaifiedDependency `json:"unsatisfied"`
+	Unsatisfied []UnstaifiedDependency `json:"unsatisfied,omitempty"`
 }
 
 // UnstaifiedDependency describes unsatisfied dependency flow between

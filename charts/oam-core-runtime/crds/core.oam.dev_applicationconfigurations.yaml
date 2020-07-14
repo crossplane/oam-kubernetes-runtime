@@ -363,8 +363,6 @@ spec:
                     - to
                     type: object
                   type: array
-              required:
-              - unsatisfied
               type: object
             workloads:
               description: Workloads created by this ApplicationConfiguration.
@@ -459,6 +457,8 @@ spec:
                     type: object
                 type: object
               type: array
+          required:
+          - dependency
           type: object
       type: object
   version: v1alpha2
