@@ -19,8 +19,8 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,8 +30,11 @@ import (
 	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
+
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/dependency"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -56,20 +59,25 @@ const (
 	errSetValueForField          = "can not set value %q for fieldPath %q"
 )
 
+var (
+	// ErrDataOutputNotExist is an error indicating the DataOutput specified doesn't not exist
+	ErrDataOutputNotExist = errors.New("DataOutput does not exist")
+)
+
 const instanceNamePath = "metadata.name"
 
 // A ComponentRenderer renders an ApplicationConfiguration's Components into
 // workloads and traits.
 type ComponentRenderer interface {
-	Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error)
+	Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error)
 }
 
 // A ComponentRenderFn renders an ApplicationConfiguration's Components into
 // workloads and traits.
-type ComponentRenderFn func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error)
+type ComponentRenderFn func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error)
 
 // Render an ApplicationConfiguration's Components into workloads and traits.
-func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
+func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 	return fn(ctx, ac)
 }
 
@@ -81,27 +89,34 @@ type components struct {
 	trait      ResourceRenderer
 }
 
-func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, error) {
-	workloads := make([]Workload, 0, len(ac.Spec.Components))
-	dag := dependency.NewDAG(ac.DeepCopy())
+func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+	workloads := make([]*Workload, 0, len(ac.Spec.Components))
+	dag := newDAG()
+
 	for _, acc := range ac.Spec.Components {
 		w, err := r.renderComponent(ctx, acc, ac, dag)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if w == nil { // depends on other resources. Not creating now.
-			continue
-		}
-		workloads = append(workloads, *w)
+
+		workloads = append(workloads, w)
 	}
 
-	if !dag.IsEmpty() {
-		dependency.GlobalManager.AddDAG(ac.GetNamespace()+"/"+ac.GetName(), dag)
+	ds := &v1alpha2.DependencyStatus{}
+	res := make([]Workload, 0, len(ac.Spec.Components))
+	for i, acc := range ac.Spec.Components {
+		unsatisfied, err := r.handleDependency(ctx, workloads[i], acc, dag)
+		if err != nil {
+			return nil, nil, err
+		}
+		ds.Unsatisfied = append(ds.Unsatisfied, unsatisfied...)
+		res = append(res, *workloads[i])
 	}
-	return workloads, nil
+
+	return res, ds, nil
 }
 
-func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag *dependency.DAG) (*Workload, error) {
+func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag *dag) (*Workload, error) {
 	if acc.RevisionName != "" {
 		acc.ComponentName = ExtractComponentName(acc.RevisionName)
 	}
@@ -126,7 +141,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 	w.SetNamespace(ac.GetNamespace())
 
-	traits := make([]unstructured.Unstructured, 0, len(acc.Traits))
+	traits := make([]*Trait, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
 	for _, ct := range acc.Traits {
 		t, traitDef, err := r.renderTrait(ctx, ct, ac.GetNamespace(), acc.ComponentName, ref, dag)
@@ -134,13 +149,9 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 			return nil, err
 		}
 
-		if t == nil { // Depends on other resources. Not creating it now.
-			continue
-		}
-
 		// pass through labels and annotation from app-config to trait
 		r.passThroughObjMeta(ac.ObjectMeta, t)
-		traits = append(traits, *t)
+		traits = append(traits, &Trait{Object: *t})
 		traitDefs = append(traitDefs, *traitDef)
 	}
 	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
@@ -158,19 +169,11 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	}
 
 	addDataOutputsToDAG(dag, acc.DataOutputs, w)
-	addDataInputsToDAG(dag, acc.DataInputs, w, traits)
-
-	// TODO(wonderflow): Return nil here will make workload with dag totally different with normal workload. We must align them into one.
-	// For example, scopes, applyOptions and workloadStatus is not handled in dag workload now.
-	// I did a quick monkey patch to make trait work for demo.
-	if len(acc.DataInputs) != 0 { // Depends on other resources. Not creating it now.
-		return nil, nil
-	}
 
 	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}, nil
 }
 
-func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, namespace, componentName string, ref *metav1.OwnerReference, dag *dependency.DAG) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
+func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, namespace, componentName string, ref *metav1.OwnerReference, dag *dag) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
 	t, err := r.trait.Render(ct.Trait.Raw)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
@@ -184,12 +187,7 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 	}
 
 	addDataOutputsToDAG(dag, ct.DataOutputs, t)
-	addDataInputsToDAG(dag, ct.DataInputs, t, nil)
 
-	// Depends on other resources. Not creating it now.
-	if len(ct.DataInputs) != 0 {
-		return nil, nil, nil
-	}
 	return t, traitDef, nil
 }
 
@@ -408,7 +406,7 @@ func resolve(cp []v1alpha2.ComponentParameter, cpv []v1alpha2.ComponentParameter
 	return params, nil
 }
 
-func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *unstructured.Unstructured) {
+func addDataOutputsToDAG(dag *dag, outs []v1alpha2.DataOutput, obj *unstructured.Unstructured) {
 	for _, out := range outs {
 		r := &corev1.ObjectReference{
 			APIVersion: obj.GetAPIVersion(),
@@ -421,8 +419,154 @@ func addDataOutputsToDAG(dag *dependency.DAG, outs []v1alpha2.DataOutput, obj *u
 	}
 }
 
-func addDataInputsToDAG(dag *dependency.DAG, ins []v1alpha2.DataInput, obj *unstructured.Unstructured, attaches []unstructured.Unstructured) {
-	for _, in := range ins {
-		dag.AddSink(in.ValueFrom.DataOutputName, obj, attaches, in.ToFieldPaths)
+func (r *components) handleDependency(ctx context.Context, w *Workload, acc v1alpha2.ApplicationConfigurationComponent, dag *dag) ([]v1alpha2.UnstaifiedDependency, error) {
+	uds := make([]v1alpha2.UnstaifiedDependency, 0)
+
+	unsatisfied, err := r.handleDataInput(ctx, acc.DataInputs, dag, w.Workload)
+	if err != nil {
+		return nil, errors.Wrapf(err, "handleDataInput for workload (%s/%s) failed", w.Workload.GetNamespace(), w.Workload.GetName())
 	}
+	if len(unsatisfied) != 0 {
+		uds = append(uds, unsatisfied...)
+		w.HasDep = true
+	}
+
+	for i, ct := range acc.Traits {
+		trait := w.Traits[i]
+		unsatisfied, err := r.handleDataInput(ctx, ct.DataInputs, dag, &trait.Object)
+		if err != nil {
+			return nil, errors.Wrapf(err, "handleDataInput for trait (%s/%s) failed", trait.Object.GetNamespace(), trait.Object.GetName())
+		}
+		if len(unsatisfied) != 0 {
+			uds = append(uds, unsatisfied...)
+			trait.HasDep = true
+		}
+	}
+	return uds, nil
+}
+
+func makeUnsatisfiedDependency(obj *unstructured.Unstructured, s *dagSource, in v1alpha2.DataInput) v1alpha2.UnstaifiedDependency {
+	return v1alpha2.UnstaifiedDependency{
+		From: v1alpha2.DependencyFromObject{
+			TypedReference: runtimev1alpha1.TypedReference{
+				APIVersion: s.ObjectRef.APIVersion,
+				Kind:       s.ObjectRef.Kind,
+				Name:       s.ObjectRef.Name,
+			},
+			FieldPath: s.ObjectRef.FieldPath,
+		},
+		To: v1alpha2.DependencyToObject{
+			TypedReference: runtimev1alpha1.TypedReference{
+				APIVersion: obj.GetAPIVersion(),
+				Kind:       obj.GetKind(),
+				Name:       obj.GetName(),
+			},
+			FieldPaths: in.ToFieldPaths,
+		},
+	}
+}
+
+func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInput, dag *dag, obj *unstructured.Unstructured) ([]v1alpha2.UnstaifiedDependency, error) {
+	uds := make([]v1alpha2.UnstaifiedDependency, 0)
+	for _, in := range ins {
+		s, ok := dag.Sources[in.ValueFrom.DataOutputName]
+		if !ok {
+			return nil, errors.Wrapf(ErrDataOutputNotExist, "DataOutputName (%s)", in.ValueFrom.DataOutputName)
+		}
+		val, ready, err := r.checkSourceReady(ctx, s)
+		if err != nil {
+			return nil, errors.Wrap(err, "checkSourceReady failed")
+		}
+		if !ready {
+			uds = append(uds, makeUnsatisfiedDependency(obj, s, in))
+			return uds, nil
+		}
+
+		err = fillValue(obj, in.ToFieldPaths, val)
+		if err != nil {
+			return nil, errors.Wrap(err, "fillValue failed")
+		}
+	}
+	return uds, nil
+}
+
+func fillValue(obj *unstructured.Unstructured, fs []string, val string) error {
+	paved := fieldpath.Pave(obj.Object)
+	for _, fp := range fs {
+		err := paved.SetString(fp, val)
+		if err != nil {
+			return fmt.Errorf("paved.SetString() failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *components) checkSourceReady(ctx context.Context, s *dagSource) (string, bool, error) {
+	obj := s.ObjectRef
+	key := types.NamespacedName{
+		Namespace: obj.Namespace,
+		Name:      obj.Name,
+	}
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(obj.GroupVersionKind())
+	err := r.client.Get(ctx, key, u)
+	if err != nil {
+		return "", false, errors.Wrap(resource.IgnoreNotFound(err), fmt.Sprintf("failed to get object (%s)", key.String()))
+	}
+	paved := fieldpath.Pave(u.UnstructuredContent())
+
+	// TODO: Currently only string value supported. Support more types in the future.
+	val, err := paved.GetString(obj.FieldPath)
+	if err != nil {
+		if fieldpath.IsNotFound(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
+	}
+
+	ok, err := matchValue(s.Conditions, val, paved)
+	if err != nil {
+		return val, false, err
+	}
+	if !ok {
+		return val, false, nil
+	}
+
+	return val, true, nil
+}
+
+func matchValue(conds []v1alpha2.ConditionRequirement, val string, paved *fieldpath.Paved) (bool, error) {
+	// If no matcher is specified, it is by default to check value not empty.
+	if len(conds) == 0 {
+		return val != "", nil
+	}
+
+	for _, m := range conds {
+		var checkVal string
+		if m.FieldPath != "" {
+			var err error
+			checkVal, err = paved.GetString(m.FieldPath)
+			if err != nil {
+				return false, err
+			}
+		} else {
+			checkVal = val
+		}
+
+		switch m.Operator {
+		case v1alpha2.ConditionEqual:
+			if m.Value != checkVal {
+				return false, nil
+			}
+		case v1alpha2.ConditionNotEqual:
+			if m.Value == checkVal {
+				return false, nil
+			}
+		case v1alpha2.ConditionNotEmpty:
+			if checkVal == "" {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
