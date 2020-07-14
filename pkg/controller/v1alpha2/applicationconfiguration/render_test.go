@@ -918,7 +918,6 @@ func TestRenderTraitName(t *testing.T) {
 
 	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
 	assert.NoError(t, core.AddToScheme(scheme))
-
 	namespace := "ns"
 	acName := "coolappconfig"
 	acUID := types.UID("definitely-a-uuid")
