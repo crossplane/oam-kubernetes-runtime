@@ -215,7 +215,7 @@ func TestAppConfigController(t *testing.T) {
 	}
 
 	i, err := integration.New(cfg,
-		integration.WithCRDPaths("../../charts/oam-core-runtime/crds"),
+		integration.WithCRDPaths("../../charts/oam-kubernetes-runtime/crds"),
 		integration.WithCleaners(
 			integration.NewCRDCleaner(),
 			integration.NewCRDDirCleaner()),

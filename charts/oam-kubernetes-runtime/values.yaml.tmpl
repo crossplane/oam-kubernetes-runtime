@@ -1,12 +1,13 @@
-# Default values for oam-core.
+# Default values for oam-kubernetes-runtime.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
 replicaCount: 1
 useWebhook: false
 image:
-  repository: oamdev/core-controller:v0.0.2
-  pullPolicy: IfNotPresent
+  repository: crossplane/oam-kubernetes-runtime
+  tag: %%VERSION%%
+  pullPolicy: Always
 
 imagePullSecrets: []
 nameOverride: ""

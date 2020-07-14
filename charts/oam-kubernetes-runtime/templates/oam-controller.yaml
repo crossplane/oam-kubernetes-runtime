@@ -3,9 +3,9 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "oam-core-runtime.serviceAccountName" . }}
+  name: {{ include "oam-kubernetes-runtime.serviceAccountName" . }}
   labels:
-  {{ include "oam-core-runtime.labels" . | nindent 4 }}
+  {{ include "oam-kubernetes-runtime.labels" . | nindent 4 }}
   {{- end }}
 ---
 
@@ -19,7 +19,7 @@ roleRef:
   name: "cluster-admin"
 subjects:
   - kind: ServiceAccount
-    name: {{ include "oam-core-runtime.serviceAccountName" . }}
+    name: {{ include "oam-kubernetes-runtime.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 
 ---
@@ -67,26 +67,26 @@ roleRef:
   name: leader-election-role
 subjects:
   - kind: ServiceAccount
-    name: {{ include "oam-core-runtime.serviceAccountName" . }}
+    name: {{ include "oam-kubernetes-runtime.serviceAccountName" . }}
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "oam-core-runtime.fullname" . }}
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}
   labels:
-    {{- include "oam-core-runtime.labels" . | nindent 4 }}
+    {{- include "oam-kubernetes-runtime.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      {{- include "oam-core-runtime.selectorLabels" . | nindent 6 }}
+      {{- include "oam-kubernetes-runtime.selectorLabels" . | nindent 6 }}
   replicas: {{ .Values.replicaCount }}
   template:
     metadata:
       labels:
-        {{- include "oam-core-runtime.selectorLabels" . | nindent 8 }}
+        {{- include "oam-kubernetes-runtime.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "oam-core-runtime.serviceAccountName" . }}
+      serviceAccountName: {{ include "oam-kubernetes-runtime.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -96,7 +96,7 @@ spec:
           args:
             - "--metrics-addr=:8080"
             - "--enable-leader-election"
-          image: {{ .Values.image.repository }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ quote .Values.image.pullPolicy }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

@@ -15,7 +15,6 @@ PLATFORMS ?= linux_amd64 linux_arm64
 # ====================================================================================
 # Setup Output
 
-# S3_BUCKET ?= crossplane.releases
 -include build/makelib/output.mk
 
 # ====================================================================================
@@ -24,8 +23,8 @@ PLATFORMS ?= linux_amd64 linux_arm64
 HELM_BASE_URL = https://charts.crossplane.io
 HELM_S3_BUCKET = crossplane.charts
 HELM_CHARTS_DIR=$(ROOT_DIR)/charts
-HELM_CHARTS = oam-core-runtime
-HELM_CHART_LINT_ARGS_oam-core-runtime = --set serviceAccount.name=''
+HELM_CHARTS = oam-kubernetes-runtime
+HELM_CHART_LINT_ARGS_oam-kubernetes-runtime = --set serviceAccount.name=''
 -include build/makelib/helm.mk
 
 # ====================================================================================
@@ -42,7 +41,7 @@ GO_TEST_PARALLEL := $(shell echo $$(( $(NPROCS) / 2 )))
 
 GO_INTEGRATION_TESTS_SUBDIRS = test
 
-GO_STATIC_PACKAGES = $(GO_PROJECT)/cmd/oam-runtime
+GO_STATIC_PACKAGES = $(GO_PROJECT)/cmd/oam-kubernetes-runtime
 GO_LDFLAGS += -X $(GO_PROJECT)/pkg/version.Version=$(VERSION)
 GO_SUBDIRS += cmd pkg apis
 GO111MODULE = on
@@ -55,13 +54,13 @@ GO111MODULE = on
 
 DOCKER_REGISTRY = crossplane
 IMAGE_DIR=$(ROOT_DIR)
-IMAGE = $(BUILD_REGISTRY)/oam-runtime-$(ARCH)
+IMAGE = $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH)
 -include build/makelib/image.mk
 
 img.build:
 	@$(INFO) docker build $(IMAGE)
 	@cp -r . $(IMAGE_TEMP_DIR) || $(FAIL)
-	@cp $(OUTPUT_DIR)/bin/$(OS)_$(ARCH)/oam-runtime $(IMAGE_TEMP_DIR) || $(FAIL)
+	@cp $(OUTPUT_DIR)/bin/$(OS)_$(ARCH)/oam-kubernetes-runtime $(IMAGE_TEMP_DIR) || $(FAIL)
 	@cd $(IMAGE_TEMP_DIR) || $(FAIL)
 	@docker build $(BUILD_ARGS) \
 		-t $(IMAGE) \
@@ -112,21 +111,21 @@ go-integration:
 # ====================================================================================
 # Special Targets
 
-define CROSSPLANE_RUNTIME_HELP
+define OAM_KUBERNETES_RUNTIME_HELP
 Crossplane Runtime Targets:
     cobertura          Generate a coverage report for cobertura applying exclusions on generated files.
     reviewable         Ensure a PR is ready for review.
     submodules         Update the submodules, such as the common build scripts.
 
 endef
-export CROSSPLANE_RUNTIME_HELP
+export OAM_KUBERNETES_RUNTIME_HELP
 
-oam-runtime.help:
-	@echo "$$CROSSPLANE_RUNTIME_HELP"
+oam-kubernetes-runtime.help:
+	@echo "$$OAM_KUBERNETES_RUNTIME_HELP"
 
-help-special: oam-runtime.help
+help-special: oam-kubernetes-runtime.help
 
-.PHONY: oam-runtime.help help-special docker-build docker-push kind-load e2e-setup e2e-test e2e-cleanup
+.PHONY: oam-kubernetes-runtime.help help-special docker-build docker-push kind-load e2e-setup e2e-test e2e-cleanup
 
 # Build the docker image
 docker-build:
@@ -142,11 +141,11 @@ kind-load:
 
 e2e-setup: docker-build kind-load
 	kubectl create namespace oam-system
-	helm install e2e ./charts/oam-core-runtime/ -n oam-system --set image.repository=$(IMG) --wait \
+	helm install e2e ./charts/oam-kubernetes-runtime/ -n oam-system --set image.repository=$(IMG) --wait \
 		|| { echo >&2 "helm install timeout"; \
-		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-core-runtime,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
+		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-kubernetes-runtime,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
 		helm uninstall e2e -n oam-system; exit 1;}
-	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=oam-core-runtime -n oam-system --timeout=300s
+	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=oam-kubernetes-runtime -n oam-system --timeout=300s
 
 e2e-test:
 	ginkgo -v ./test/e2e-test

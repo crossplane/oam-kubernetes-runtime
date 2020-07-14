@@ -75,7 +75,7 @@ go: finding github.com/mattn/go-isatty v0.0.8
 
 
 ```
-$ kubectl apply -f charts/oam-core-runtime/crds
+$ kubectl apply -f charts/oam-kubernetes-runtime/crds
 customresourcedefinition.apiextensions.k8s.io/applicationconfigurations.core.oam.dev configured
 customresourcedefinition.apiextensions.k8s.io/components.core.oam.dev configured
 customresourcedefinition.apiextensions.k8s.io/containerizedworkloads.core.oam.dev configured
@@ -96,7 +96,7 @@ regenerate crd manifests as the step above.
 You can start running OAM Kubernetes runtime to verify your changes.
 * Run OAM sample controller
 ```
-go run cmd/oam-runtime/main.go
+go run cmd/oam-kubernetes-runtime/main.go
 ```
 
 * Apply the sample application configurations or other manifests 
