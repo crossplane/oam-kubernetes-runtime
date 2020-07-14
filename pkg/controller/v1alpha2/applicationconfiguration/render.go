@@ -105,11 +105,11 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 	ds := &v1alpha2.DependencyStatus{}
 	res := make([]Workload, 0, len(ac.Spec.Components))
 	for i, acc := range ac.Spec.Components {
-		unsatsified, err := r.handleDependency(ctx, workloads[i], acc, dag)
+		unsatisfied, err := r.handleDependency(ctx, workloads[i], acc, dag)
 		if err != nil {
 			return nil, nil, err
 		}
-		ds.Unsatisfied = append(ds.Unsatisfied, unsatsified...)
+		ds.Unsatisfied = append(ds.Unsatisfied, unsatisfied...)
 		res = append(res, *workloads[i])
 	}
 
@@ -422,24 +422,24 @@ func addDataOutputsToDAG(dag *dag, outs []v1alpha2.DataOutput, obj *unstructured
 func (r *components) handleDependency(ctx context.Context, w *Workload, acc v1alpha2.ApplicationConfigurationComponent, dag *dag) ([]v1alpha2.UnstaifiedDependency, error) {
 	uds := make([]v1alpha2.UnstaifiedDependency, 0)
 
-	unsatsified, err := r.handleDataInput(ctx, acc.DataInputs, dag, w.Workload)
+	unsatisfied, err := r.handleDataInput(ctx, acc.DataInputs, dag, w.Workload)
 	if err != nil {
 		return nil, errors.Wrapf(err, "handleDataInput for workload (%s/%s) failed", w.Workload.GetNamespace(), w.Workload.GetName())
 	}
-	if len(unsatsified) != 0 {
-		uds = append(uds, unsatsified...)
-		w.Unready = true
+	if len(unsatisfied) != 0 {
+		uds = append(uds, unsatisfied...)
+		w.HasDep = true
 	}
 
 	for i, ct := range acc.Traits {
 		trait := w.Traits[i]
-		unsatsified, err := r.handleDataInput(ctx, ct.DataInputs, dag, &trait.Object)
+		unsatisfied, err := r.handleDataInput(ctx, ct.DataInputs, dag, &trait.Object)
 		if err != nil {
 			return nil, errors.Wrapf(err, "handleDataInput for trait (%s/%s) failed", trait.Object.GetNamespace(), trait.Object.GetName())
 		}
-		if len(unsatsified) != 0 {
-			uds = append(uds, unsatsified...)
-			trait.Unready = true
+		if len(unsatisfied) != 0 {
+			uds = append(uds, unsatisfied...)
+			trait.HasDep = true
 		}
 	}
 	return uds, nil

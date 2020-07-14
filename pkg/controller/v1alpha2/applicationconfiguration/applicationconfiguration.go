@@ -255,9 +255,8 @@ type Workload struct {
 	// A Workload object.
 	Workload *unstructured.Unstructured
 
-	// Unready indicates whether this resource is unready to apply
-	// because of dependency not ready
-	Unready bool
+	// HasDep indicates whether this resource has dependencies and unready to be applied.
+	HasDep bool
 
 	// Traits associated with this workload.
 	Traits []*Trait
@@ -270,9 +269,8 @@ type Workload struct {
 type Trait struct {
 	Object unstructured.Unstructured
 
-	// Unready indicates whether this resource is unready to apply
-	// because of dependency not ready
-	Unready bool
+	// HasDep indicates whether this resource has dependencies and unready to be applied.
+	HasDep bool
 }
 
 // Status produces the status of this workload and its traits, suitable for use

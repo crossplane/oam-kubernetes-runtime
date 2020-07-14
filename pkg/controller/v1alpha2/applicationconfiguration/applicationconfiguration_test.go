@@ -571,7 +571,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if !ws[0].Unready {
+					if !ws[0].HasDep {
 						t.Error("Workload should be unready to apply")
 					}
 				},
@@ -617,7 +617,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if ws[0].Unready {
+					if ws[0].HasDep {
 						t.Error("Workload should be ready to apply")
 					}
 				},
@@ -645,7 +645,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if !ws[0].Unready {
+					if !ws[0].HasDep {
 						t.Error("Workload should be unready to apply")
 					}
 				},
@@ -692,7 +692,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if ws[0].Unready {
+					if ws[0].HasDep {
 						t.Error("Workload should be ready to apply")
 					}
 				},
@@ -722,7 +722,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if !ws[0].Traits[0].Unready {
+					if !ws[0].Traits[0].HasDep {
 						t.Error("Trait should be unready to apply")
 					}
 				},
@@ -771,7 +771,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if ws[0].Traits[0].Unready {
+					if ws[0].Traits[0].HasDep {
 						t.Error("Trait should be ready to apply")
 					}
 				},
@@ -801,7 +801,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if !ws[0].Traits[0].Unready {
+					if !ws[0].Traits[0].HasDep {
 						t.Error("Trait should be unready to apply")
 					}
 				},
@@ -850,7 +850,7 @@ func TestDependency(t *testing.T) {
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
-					if ws[0].Traits[0].Unready {
+					if ws[0].Traits[0].HasDep {
 						t.Error("Trait should be ready to apply")
 					}
 				},
