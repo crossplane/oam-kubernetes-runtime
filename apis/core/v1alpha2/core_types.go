@@ -221,6 +221,7 @@ type Revision struct {
 // +kubebuilder:resource:categories={crossplane,oam}
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.workload.kind",name=WORKLOAD-KIND,type=string
+// +kubebuilder:printcolumn:name="age",type="date",JSONPath=".metadata.creationTimestamp"
 type Component struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

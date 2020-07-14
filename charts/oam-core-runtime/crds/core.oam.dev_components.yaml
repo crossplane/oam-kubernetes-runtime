@@ -12,6 +12,9 @@ spec:
   - JSONPath: .spec.workload.kind
     name: WORKLOAD-KIND
     type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: age
+    type: date
   group: core.oam.dev
   names:
     categories:
