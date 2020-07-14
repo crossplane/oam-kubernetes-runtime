@@ -2,7 +2,6 @@ package util
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"hash"
@@ -210,23 +209,16 @@ func Object2Map(obj interface{}) (map[string]interface{}, error) {
 }
 
 // GenTraitName generate trait name
-func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait, collisionCount *int32) string {
-	return fmt.Sprintf("%s-%s-%s", componentName, TraitPrefixKey, ComputeHash(ct, collisionCount))
+func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait) string {
+	return fmt.Sprintf("%s-%s-%s", componentName, TraitPrefixKey, ComputeHash(ct))
 }
 
 // ComputeHash returns a hash value calculated from pod template and
 // a collisionCount to avoid hash collision. The hash will be safe encoded to
 // avoid bad words.
-func ComputeHash(trait *v1alpha2.ComponentTrait, collisionCount *int32) string {
+func ComputeHash(trait *v1alpha2.ComponentTrait) string {
 	componentTraitHasher := fnv.New32a()
 	DeepHashObject(componentTraitHasher, *trait)
-
-	// Add collisionCount in the hash if it exists.
-	if collisionCount != nil {
-		collisionCountBytes := make([]byte, 8)
-		binary.LittleEndian.PutUint32(collisionCountBytes, uint32(*collisionCount))
-		_, _ = componentTraitHasher.Write(collisionCountBytes)
-	}
 
 	return rand.SafeEncodeString(fmt.Sprint(componentTraitHasher.Sum32()))
 }

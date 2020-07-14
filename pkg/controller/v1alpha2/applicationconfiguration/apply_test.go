@@ -106,7 +106,7 @@ func TestApplyWorkloads(t *testing.T) {
 			}),
 			rawClient: nil,
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 			want: errors.Wrapf(errBoom, errFmtApplyWorkload, workload.GetName()),
 		},
@@ -120,7 +120,7 @@ func TestApplyWorkloads(t *testing.T) {
 			}),
 			rawClient: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 			want: errors.Wrapf(errBoom, errFmtApplyTrait, trait.GetAPIVersion(), trait.GetKind(), trait.GetName()),
 		},
@@ -131,7 +131,7 @@ func TestApplyWorkloads(t *testing.T) {
 				return nil
 			}),
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 			want: errors.Wrapf(errTrait, errFmtGetTraitDefinition, trait.GetAPIVersion(), trait.GetKind(), trait.GetName()),
 		},
@@ -171,7 +171,7 @@ func TestApplyWorkloads(t *testing.T) {
 				return nil
 			}),
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait.DeepCopy()}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait.DeepCopy()}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 		},
 		"Success": {
@@ -188,7 +188,7 @@ func TestApplyWorkloads(t *testing.T) {
 			}),
 			rawClient: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait.DeepCopy()}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{},
 			},
 		},
@@ -206,7 +206,7 @@ func TestApplyWorkloads(t *testing.T) {
 			args: args{
 				w: []Workload{{
 					Workload: workload,
-					Traits:   []unstructured.Unstructured{*trait.DeepCopy()},
+					Traits:   []*Trait{{Object: *trait.DeepCopy()}},
 					Scopes:   []unstructured.Unstructured{*scope.DeepCopy()},
 				}},
 				ws: []v1alpha2.WorkloadStatus{
@@ -243,7 +243,7 @@ func TestApplyWorkloads(t *testing.T) {
 			args: args{
 				w: []Workload{{
 					Workload: workload,
-					Traits:   []unstructured.Unstructured{*trait.DeepCopy()},
+					Traits:   []*Trait{{Object: *trait.DeepCopy()}},
 					Scopes:   []unstructured.Unstructured{*scopeWithRef.DeepCopy()},
 				}},
 				ws: []v1alpha2.WorkloadStatus{
@@ -298,7 +298,7 @@ func TestApplyWorkloads(t *testing.T) {
 			args: args{
 				w: []Workload{{
 					Workload: workload,
-					Traits:   []unstructured.Unstructured{*trait.DeepCopy()},
+					Traits:   []*Trait{{Object: *trait.DeepCopy()}},
 					Scopes:   []unstructured.Unstructured{},
 				}},
 				ws: []v1alpha2.WorkloadStatus{

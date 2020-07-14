@@ -72,3 +72,13 @@ spec:
           value: "http://weather-api.default.svc.cluster.local:3015/"
         - name: quakesUri
           value: "http://quakes-api.default.svc.cluster.local:3012/"
+      traits:
+        - trait:
+            apiVersion: extensions/v1beta1
+            kind: Ingress
+            metadata:
+              name: tracker-ingress
+            spec:
+                backend:
+                  serviceName: web-ui
+                  servicePort: 8080

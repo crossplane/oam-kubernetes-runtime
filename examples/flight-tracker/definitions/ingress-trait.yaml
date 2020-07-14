@@ -1,7 +1,7 @@
 apiVersion: core.oam.dev/v1alpha2
 kind: TraitDefinition
 metadata:
-  name: foo.example.com
+  name: ingresses.extensions
 spec:
   definitionRef:
-    name: foo.example.com
+    name: ingresses.extensions

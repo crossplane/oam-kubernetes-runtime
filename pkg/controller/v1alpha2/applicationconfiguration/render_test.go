@@ -18,7 +18,11 @@ package applicationconfiguration
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
+
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
@@ -32,9 +36,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
@@ -173,7 +179,7 @@ func TestRenderComponents(t *testing.T) {
 			},
 			args: args{ac: ac},
 			want: want{
-				err: errors.Wrapf(errBoom, errFmtRenderTrait, util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy(), nil)),
+				err: errors.Wrapf(errBoom, errFmtRenderTrait, componentName),
 			},
 		},
 		"Success": {
@@ -206,13 +212,13 @@ func TestRenderComponents(t *testing.T) {
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								return &Trait{Object: *t}
 							}(),
 						},
 						Scopes: []unstructured.Unstructured{},
@@ -251,13 +257,13 @@ func TestRenderComponents(t *testing.T) {
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								return &Trait{Object: *t}
 							}(),
 						},
 						Scopes: []unstructured.Unstructured{},
@@ -305,13 +311,13 @@ func TestRenderComponents(t *testing.T) {
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								return &Trait{Object: *t}
 							}(),
 						},
 						Scopes: []unstructured.Unstructured{},
@@ -323,7 +329,7 @@ func TestRenderComponents(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := &components{tc.fields.client, tc.fields.appclient, tc.fields.params, tc.fields.workload, tc.fields.trait}
-			got, err := r.Render(tc.args.ctx, tc.args.ac)
+			got, _, err := r.Render(tc.args.ctx, tc.args.ac)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, diff)
 			}
@@ -653,12 +659,12 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								return &Trait{Object: *t}
 							}(),
 						},
 					},
@@ -669,8 +675,8 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := &components{tc.fields.client, nil, tc.fields.params, tc.fields.workload, tc.fields.trait}
-			got, _ := r.Render(tc.args.ctx, tc.args.ac)
-			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy(), nil) {
+			got, _, _ := r.Render(tc.args.ctx, tc.args.ac)
+			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].Object.GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy()) {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
 					"automatically set.")
 			}
@@ -904,4 +910,149 @@ func TestGetComponent(t *testing.T) {
 			LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
 		},
 	}, c)
+}
+
+var scheme = runtime.NewScheme()
+
+func TestRenderTraitName(t *testing.T) {
+
+	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
+	assert.NoError(t, core.AddToScheme(scheme))
+
+	namespace := "ns"
+	acName := "coolappconfig"
+	acUID := types.UID("definitely-a-uuid")
+	componentName := "component"
+
+	mts := v1alpha2.ManualScalerTrait{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.ManualScalerTraitSpec{
+			ReplicaCount: 3,
+		},
+	}
+
+	gvks, _, _ := scheme.ObjectKinds(&mts)
+	mts.APIVersion = gvks[0].GroupVersion().String()
+	mts.Kind = gvks[0].Kind
+	raw, _ := json.Marshal(mts)
+
+	ac := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      acName,
+			UID:       acUID,
+		},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.ComponentTrait{
+						{
+							Trait: runtime.RawExtension{
+								Object: &mts,
+								Raw:    raw,
+							},
+						},
+					},
+				},
+			},
+		},
+		Status: v1alpha2.ApplicationConfigurationStatus{
+			Workloads: []v1alpha2.WorkloadStatus{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.WorkloadTrait{
+						{
+							Reference: v1alpha1.TypedReference{
+								APIVersion: gvks[0].GroupVersion().String(),
+								Kind:       gvks[0].Kind,
+								Name:       "component-trait-11111111",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mapResult, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ac.Spec.Components[0].Traits[0].Trait.Object)
+	assert.NoError(t, err)
+	data := unstructured.Unstructured{Object: mapResult}
+
+	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data)
+	assert.Equal(t, traitName, "component-trait-11111111")
+}
+
+func TestPassThroughObjMeta(t *testing.T) {
+	c := components{}
+	ac := &v1alpha2.ApplicationConfiguration{}
+
+	labels := map[string]string{
+		"core.oam.dev/ns":         "oam-system",
+		"core.oam.dev/controller": "oam-kubernetes-runtime",
+	}
+
+	annotation := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+
+	ac.SetLabels(labels)
+	ac.SetAnnotations(annotation)
+
+	t.Run("workload and trait have no labels and annotation", func(t *testing.T) {
+		var u unstructured.Unstructured
+		c.passThroughObjMeta(ac.ObjectMeta, &u)
+		got := u.GetLabels()
+		want := labels
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("labels want:%v,got:%v", want, got)
+		}
+		gotAnnotation := u.GetAnnotations()
+		wantAnnotation := annotation
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("annotation want:%v,got:%v", wantAnnotation, gotAnnotation)
+		}
+	})
+
+	t.Run("workload and trait contains overlapping keys", func(t *testing.T) {
+		var u unstructured.Unstructured
+		existAnnotation := map[string]string{
+			"key1": "exist value1",
+			"key3": "value3",
+		}
+		existLabels := map[string]string{
+			"core.oam.dev/ns":          "kube-system",
+			"core.oam.dev/kube-native": "deployment",
+		}
+		u.SetLabels(existLabels)
+		u.SetAnnotations(existAnnotation)
+
+		c.passThroughObjMeta(ac.ObjectMeta, &u)
+
+		gotAnnotation := u.GetAnnotations()
+		wantAnnotation := map[string]string{
+			"key1": "exist value1",
+			"key2": "value2",
+			"key3": "value3",
+		}
+		if !reflect.DeepEqual(gotAnnotation, wantAnnotation) {
+			t.Errorf("annotation got:%v,want:%v", gotAnnotation, wantAnnotation)
+		}
+
+		gotLabels := u.GetLabels()
+		wantLabels := map[string]string{
+			"core.oam.dev/ns":          "kube-system",
+			"core.oam.dev/kube-native": "deployment",
+			"core.oam.dev/controller":  "oam-kubernetes-runtime",
+		}
+		if !reflect.DeepEqual(gotLabels, wantLabels) {
+			t.Errorf("labels got:%v,want:%v", gotLabels, wantLabels)
+		}
+		if !reflect.DeepEqual(gotLabels, wantLabels) {
+			t.Errorf("labels got:%v,want:%v", gotLabels, wantLabels)
+		}
+	})
 }

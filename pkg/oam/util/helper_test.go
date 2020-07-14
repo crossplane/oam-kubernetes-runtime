@@ -3,7 +3,7 @@ package util_test
 import (
 	"context"
 	"fmt"
-	"math"
+	"hash/adler32"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -297,57 +297,105 @@ var _ = Describe("Test unstructured related helper utils", func() {
 var _ = Describe("Test GenTraitName helper utils", func() {
 	It("Test generate trait name", func() {
 
-		collisionCount := int32(1)
-		otherCollisionCount := int32(2)
-		maxCollisionCount := int32(math.MaxInt32)
+		mts := v1alpha2.ManualScalerTrait{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "sample-manualscaler-trait",
+			},
+			Spec: v1alpha2.ManualScalerTraitSpec{
+				ReplicaCount: 3,
+			},
+		}
 
-		tests := []struct {
-			name                string
-			template            *v1alpha2.ComponentTrait
-			collisionCount      *int32
-			otherCollisionCount *int32
+		test := []struct {
+			name     string
+			template *v1alpha2.ComponentTrait
+			exp      string
 		}{
 			{
-				name:                "simple",
-				template:            &v1alpha2.ComponentTrait{},
-				collisionCount:      &collisionCount,
-				otherCollisionCount: &otherCollisionCount,
+				name:     "simple",
+				template: &v1alpha2.ComponentTrait{},
+				exp:      "simple-trait-67b8949f8d",
 			},
 			{
-				name:                "using math.MaxInt64",
-				template:            &v1alpha2.ComponentTrait{},
-				collisionCount:      nil,
-				otherCollisionCount: &maxCollisionCount,
+				name: "simple",
+				template: &v1alpha2.ComponentTrait{
+					Trait: runtime.RawExtension{
+						Object: &mts,
+					},
+				},
+				exp: "simple-trait-5ddc8b7556",
+			},
+		}
+		for _, test := range test {
+
+			got := util.GenTraitName(test.name, test.template)
+			By(fmt.Sprint("Running test: ", test.name))
+			Expect(test.exp).Should(Equal(got))
+		}
+
+	})
+})
+
+var _ = Describe("Test ComputeHash helper utils", func() {
+	It("Test generate hash", func() {
+
+		mts := v1alpha2.ManualScalerTrait{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "sample-manualscaler-trait",
+			},
+			Spec: v1alpha2.ManualScalerTraitSpec{
+				ReplicaCount: 3,
 			},
 		}
 
-		for _, test := range tests {
-			hash := util.ComputeHash(test.template, test.collisionCount)
-			otherHash := util.ComputeHash(test.template, test.otherCollisionCount)
-			Expect(hash).ShouldNot(Equal(otherHash))
-		}
-
-		test2s := []struct {
-			name                string
-			template            *v1alpha2.ComponentTrait
-			collisionCount      *int32
-			otherCollisionCount *int32
+		test := []struct {
+			name     string
+			template *v1alpha2.ComponentTrait
+			exp      string
 		}{
 			{
-				name:                "simple",
-				template:            &v1alpha2.ComponentTrait{},
-				collisionCount:      &collisionCount,
-				otherCollisionCount: &collisionCount,
+				name:     "simple",
+				template: &v1alpha2.ComponentTrait{},
+				exp:      "67b8949f8d",
+			},
+			{
+				name: "simple",
+				template: &v1alpha2.ComponentTrait{
+					Trait: runtime.RawExtension{
+						Object: &mts,
+					},
+				},
+				exp: "5ddc8b7556",
 			},
 		}
-		for _, test := range test2s {
-			hash := util.ComputeHash(test.template, test.collisionCount)
-			name := fmt.Sprintf("%s-%s-%s", test.name, util.TraitPrefixKey, util.ComputeHash(test.template, &collisionCount))
-			otherHash := util.ComputeHash(test.template, test.otherCollisionCount)
-			Expect(hash).Should(Equal(otherHash))
-			traitName := util.GenTraitName(test.name, test.template, test.collisionCount)
-			Expect(traitName).Should(Equal(name))
+		for _, test := range test {
+			got := util.ComputeHash(test.template)
+
+			By(fmt.Sprint("Running test: ", got))
+			Expect(test.exp).Should(Equal(got))
+		}
+	})
+})
+
+var _ = Describe("Test DeepHashObject helper utils", func() {
+	It("Test generate hash", func() {
+
+		successCases := []func() interface{}{
+			func() interface{} { return 8675309 },
+			func() interface{} { return "Jenny, I got your number" },
+			func() interface{} { return []string{"eight", "six", "seven"} },
 		}
 
+		for _, tc := range successCases {
+			hasher1 := adler32.New()
+			util.DeepHashObject(hasher1, tc())
+			hash1 := hasher1.Sum32()
+			util.DeepHashObject(hasher1, tc())
+			hash2 := hasher1.Sum32()
+
+			Expect(hash1).Should(Equal(hash2))
+		}
 	})
 })
