@@ -51,19 +51,9 @@ GO111MODULE = on
 # all be in folders at the same level (no additional levels of nesting).
 
 DOCKER_REGISTRY = crossplane
-IMAGE_DIR=$(ROOT_DIR)
-IMAGE = $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH)
+IMAGE_DIR=$(ROOT_DIR)/images
+IMAGES = oam-kubernetes-runtime
 -include build/makelib/image.mk
-
-img.build:
-	@$(INFO) docker build $(IMAGE)
-	@cp -r . $(IMAGE_TEMP_DIR) || $(FAIL)
-	@cp $(OUTPUT_DIR)/bin/$(OS)_$(ARCH)/oam-kubernetes-runtime $(IMAGE_TEMP_DIR) || $(FAIL)
-	@cd $(IMAGE_TEMP_DIR) || $(FAIL)
-	@docker build $(BUILD_ARGS) \
-		-t $(IMAGE) \
-		$(IMAGE_TEMP_DIR) || $(FAIL)
-	@$(OK) docker build $(IMAGE)
 
 # ====================================================================================
 # Targets
@@ -127,7 +117,7 @@ help-special: oam-kubernetes-runtime.help
 
 # load docker image to the kind cluster
 kind-load:
-	docker tag $(IMAGE) crossplane/oam-kubernetes-runtime:$(VERSION)
+	docker tag $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH) crossplane/oam-kubernetes-runtime:$(VERSION)
 	kind load docker-image crossplane/oam-kubernetes-runtime:$(VERSION) || { echo >&2 "kind not installed or error loading image: $(IMAGE)"; exit 1; }
 
 e2e-setup: build kind-load
