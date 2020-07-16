@@ -31,7 +31,7 @@ cd ./oam-kubernetes-runtime
 
 ```console
 kubectl create namespace oam-system
-helm install core-runtime -n oam-system ./charts/oam-core-runtime
+helm install core-runtime -n oam-system ./charts/oam-kubernetes-runtime
 ```
 
 ## Verify

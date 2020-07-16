@@ -3,6 +3,7 @@ package util_test
 import (
 	"context"
 	"fmt"
+	"hash/adler32"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -289,6 +290,112 @@ var _ = Describe("Test unstructured related helper utils", func() {
 			got := util.GetCRDName(ti.u)
 			By(fmt.Sprint("Running test: ", name))
 			Expect(ti.exp).Should(Equal(got))
+		}
+	})
+})
+
+var _ = Describe("Test GenTraitName helper utils", func() {
+	It("Test generate trait name", func() {
+
+		mts := v1alpha2.ManualScalerTrait{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "sample-manualscaler-trait",
+			},
+			Spec: v1alpha2.ManualScalerTraitSpec{
+				ReplicaCount: 3,
+			},
+		}
+
+		test := []struct {
+			name     string
+			template *v1alpha2.ComponentTrait
+			exp      string
+		}{
+			{
+				name:     "simple",
+				template: &v1alpha2.ComponentTrait{},
+				exp:      "simple-trait-67b8949f8d",
+			},
+			{
+				name: "simple",
+				template: &v1alpha2.ComponentTrait{
+					Trait: runtime.RawExtension{
+						Object: &mts,
+					},
+				},
+				exp: "simple-trait-5ddc8b7556",
+			},
+		}
+		for _, test := range test {
+
+			got := util.GenTraitName(test.name, test.template)
+			By(fmt.Sprint("Running test: ", test.name))
+			Expect(test.exp).Should(Equal(got))
+		}
+
+	})
+})
+
+var _ = Describe("Test ComputeHash helper utils", func() {
+	It("Test generate hash", func() {
+
+		mts := v1alpha2.ManualScalerTrait{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns",
+				Name:      "sample-manualscaler-trait",
+			},
+			Spec: v1alpha2.ManualScalerTraitSpec{
+				ReplicaCount: 3,
+			},
+		}
+
+		test := []struct {
+			name     string
+			template *v1alpha2.ComponentTrait
+			exp      string
+		}{
+			{
+				name:     "simple",
+				template: &v1alpha2.ComponentTrait{},
+				exp:      "67b8949f8d",
+			},
+			{
+				name: "simple",
+				template: &v1alpha2.ComponentTrait{
+					Trait: runtime.RawExtension{
+						Object: &mts,
+					},
+				},
+				exp: "5ddc8b7556",
+			},
+		}
+		for _, test := range test {
+			got := util.ComputeHash(test.template)
+
+			By(fmt.Sprint("Running test: ", got))
+			Expect(test.exp).Should(Equal(got))
+		}
+	})
+})
+
+var _ = Describe("Test DeepHashObject helper utils", func() {
+	It("Test generate hash", func() {
+
+		successCases := []func() interface{}{
+			func() interface{} { return 8675309 },
+			func() interface{} { return "Jenny, I got your number" },
+			func() interface{} { return []string{"eight", "six", "seven"} },
+		}
+
+		for _, tc := range successCases {
+			hasher1 := adler32.New()
+			util.DeepHashObject(hasher1, tc())
+			hash1 := hasher1.Sum32()
+			util.DeepHashObject(hasher1, tc())
+			hash2 := hasher1.Sum32()
+
+			Expect(hash1).Should(Equal(hash2))
 		}
 	})
 })

@@ -144,7 +144,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	traits := make([]*Trait, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
 	for _, ct := range acc.Traits {
-		t, traitDef, err := r.renderTrait(ctx, ct, ac.GetNamespace(), acc.ComponentName, ref, dag)
+		t, traitDef, err := r.renderTrait(ctx, ct, ac, acc.ComponentName, ref, dag)
 		if err != nil {
 			return nil, err
 		}
@@ -173,13 +173,16 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}, nil
 }
 
-func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, namespace, componentName string, ref *metav1.OwnerReference, dag *dag) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
+func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, ac *v1alpha2.ApplicationConfiguration,
+	componentName string, ref *metav1.OwnerReference, dag *dag) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
 	t, err := r.trait.Render(ct.Trait.Raw)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
 	}
 
-	setTraitProperties(t, componentName, namespace, ref)
+	traitName := getTraitName(ac, componentName, &ct, t)
+
+	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
 
 	traitDef, err := util.FetchTraitDefinition(ctx, r.client, t)
 	if err != nil {
@@ -203,10 +206,10 @@ func (r *components) renderScope(ctx context.Context, cs v1alpha2.ComponentScope
 	return scopeObject, nil
 }
 
-func setTraitProperties(t *unstructured.Unstructured, componentName, namespace string, ref *metav1.OwnerReference) {
+func setTraitProperties(t *unstructured.Unstructured, traitName, namespace string, ref *metav1.OwnerReference) {
 	// Set metadata name for `Trait` if the metadata name is NOT set.
 	if t.GetName() == "" {
-		t.SetName(componentName)
+		t.SetName(traitName)
 	}
 
 	t.SetOwnerReferences([]metav1.OwnerReference{*ref})
@@ -569,4 +572,38 @@ func matchValue(conds []v1alpha2.ConditionRequirement, val string, paved *fieldp
 		}
 	}
 	return true, nil
+}
+
+// GetTraitName return trait name
+func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
+	ct *v1alpha2.ComponentTrait, t *unstructured.Unstructured) string {
+	var (
+		traitName  string
+		apiVersion string
+		kind       string
+	)
+
+	if len(t.GetName()) > 0 {
+		return t.GetName()
+	}
+
+	apiVersion = t.GetAPIVersion()
+	kind = t.GetKind()
+
+	for _, w := range ac.Status.Workloads {
+		if w.ComponentName != componentName {
+			continue
+		}
+		for _, trait := range w.Traits {
+			if trait.Reference.APIVersion == apiVersion && trait.Reference.Kind == kind {
+				traitName = trait.Reference.Name
+			}
+		}
+	}
+
+	if len(traitName) == 0 {
+		traitName = util.GenTraitName(componentName, ct.DeepCopy())
+	}
+
+	return traitName
 }
