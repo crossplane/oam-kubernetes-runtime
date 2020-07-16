@@ -18,6 +18,22 @@ We created this repo with the following goals in mind
 - Kubernetes v1.16+
 - Helm 3
 
+## Install Crossplane
+
+#### Add helm repo
+
+```console
+helm repo add crossplane-master https://charts.crossplane.io/master/
+```
+
+#### Install crossplane
+
+```console
+kubectl create namespace oam-system
+
+helm install crossplane -n oam-system crossplane-master/crossplane --version 0.12.0
+```
+
 ## Install OAM runtime
 
 #### Clone this repo
@@ -30,7 +46,6 @@ cd ./oam-kubernetes-runtime
 #### Install OAM controllers
 
 ```console
-kubectl create namespace oam-system
 helm install core-runtime -n oam-system ./charts/oam-kubernetes-runtime
 ```
 
@@ -90,9 +105,13 @@ example-appconfig-workload-deployment-service   NodePort   10.96.78.215   <none>
 
 ## Cleanup
 ```console
-helm uninstall core-runtime -n oam-system
 kubectl delete -f examples/containerized-workload
+helm uninstall core-runtime -n oam-system
+helm uninstall crossplane -n oam-system
 kubectl delete namespace oam-system --wait
+
+kubectl get crd | grep oam.dev | awk '{print $1}' | xargs kubectl delete crd
+kubectl get crd | grep crossplane.io | awk '{print $1}' | xargs kubectl delete crd
 ```
 
 ## Community, discussion, contribution
