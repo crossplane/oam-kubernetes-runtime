@@ -1,4 +1,4 @@
-# Trait Work as Patch of Workload
+# Trait separated from underlying workload should patch back before workload emitted
 
 - Owner: Shibo Li (@ifree613), Jianbo Sun (@wonderflow)
 - Date: 07/18/2020
@@ -6,18 +6,36 @@
 
 ## Background
 
-OAM encourages separate of concern for developers and operators. So we use abstract workload like ContainerizedWorkload
-to hide details for K8s built-in object like Deployment. We separate Deployment into one `ContainerizedWorkload` and
+A platform tend to provide simper view to developers. For example, in OAM spec, higher level abstractions like
+ContainerizedWorkload are defined to hide unnecessary details of Deployment from developers. At the mean time,
+with the concept of separate of concerns, the spec abstracted operational related fields from Deployment into 
 several traits in implementation, both of them have CRDs and controllers.
 
-Everything goes well until we change traits which will affect fields in pod template of Deployment, that will trigger
-re-create of pods. Trait will take effect asynchronously after workload created. In another world, a deployment will be
-created first, after that trait will update the deployment to take effect. Updating pod template of deployment leads to
-re-create of pods, which finally makes the Application unstable. 
- 
-For example, if we currently have an OAM app running like below:
+In below example, `securityContext` and `nodeSelector` will be separated as traits.
 
-It just contains a component with ContainerizedWorkload, and a canary trait.
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      nodeSelector:
+        disktype: ssd
+      containers:
+        - name: wordpress
+          image: wordpress:4.6.1-apache
+    ...
+```
+
+However, any changes happened to pod template of Deployment will trigger re-create of pods. 
+In our current workflow, traits will take effect asynchronously after workload created. That means
+a deployment will be created first without these traits' information, and then being updated several times.
+Updating pod template of deployment leads to re-create of pods, which finally makes the Application unstable. 
+
+Let's use a concrete example to make this problem more clear. For example, we currently have an OAM app running
+like below. It just contains a component with ContainerizedWorkload, and a canary trait.
  
 ```yaml
 apiVersion: core.oam.dev/v1alpha2
@@ -53,7 +71,7 @@ spec:
               canaryNumber: 1
 ```
 
-The real running workload is like below:
+The real running workload is deployment.
 
 ```yaml
 apiVersion: apps/v1
@@ -72,7 +90,8 @@ spec:
               value: test
 ```
 
-After some time, the App operator want to add two traits on this App for some security reason.
+After some time, the App operator want to add two traits on this App for some security reason, and they are both fields
+of underlying Deployment.
 
 ```yaml
 apiVersion: core.oam.dev/v1alpha2
@@ -100,8 +119,8 @@ spec:
               runAsNonRoot: true
 ```
 
-After the change of AppConfig deployed, NodeSelector and SecurityContext trait will work in a random order. Assuming the controller of NodeSelector trait
-will work first, then it will patch and update the Deployment.
+After AppConfig deployed, NodeSelector and SecurityContext trait will work in a random order.
+Assuming the controller of NodeSelector trait will work first, then it will patch and update the underlying Deployment.
 
 ```yaml
 apiVersion: apps/v1
@@ -109,6 +128,32 @@ kind: Deployment
 spec:
   template:
     spec:
++     nodeSelector:
++       disktype: ssd
+      containers:
+        - name: wordpress
+          image: wordpress:4.6.1-apache
+          ports:
+            - containerPort: 80
+              name: wordpress
+          env:
+            - name: TEST_ENV
+              value: test
+``` 
+
+This will cause first round re-create of K8s pods, and please notice it won't trigger the canary trait to work.
+The App will become unstable at this point.
+
+At the same time, the controller of SecurityContext trait will work and update the deployment again.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
++     securityContext:
++       runAsNonRoot: true
       nodeSelector:
         disktype: ssd
       containers:
@@ -122,39 +167,15 @@ spec:
               value: test
 ``` 
 
-This will cause first round re-create of pods, it won't trigger the canary trait to work, and the App will become unstable.
-
-Before the deployment become stable, the controller of SecurityContext trait will work and update the deployment again.
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-spec:
-  template:
-    spec:
-      securityContext:
-        runAsNonRoot: true
-      nodeSelector:
-        disktype: ssd
-      containers:
-        - name: wordpress
-          image: wordpress:4.6.1-apache
-          ports:
-            - containerPort: 80
-              name: wordpress
-          env:
-            - name: TEST_ENV
-              value: test
-``` 
-
-This will cause a second round of re-create. Again, the canary trait won't work.
+This will cause a second round of pods re-create. Again, the canary trait won't work.
 
 There're no doubt too many risks here in this workflow. We can conclude into two problems:
 
-1. Pods can't be re-created several times, all changes of trait in one deploy can only affect pod once.
+1. Unstable changes to underlying workload can't happen several times in one deploy, all changes of trait
+should only affect underlying workload once.
 2. Changes of trait which will affect the underlying workload must trigger new revision and make the canary trait work.
 
-In this proposal, we're going to fix these two probelms.
+In this proposal, we're going to fix these two problems.
 
 ## Goals
 
@@ -163,10 +184,25 @@ In this proposal, we're going to fix these two probelms.
 
 ## Proposal
 
-The overall idea of this proposal is to merge all traits and patch on the workload only once, and this action will
+The overall idea of this proposal is to merge all traits and patch on the workload only once, and make this action
 trigger component revision generated automatically.
 
-To achieve this, we propose: 
+To make it more clear, let's define what kind of trait we are talking with first. Let's call them `patch trait`
+for convenience. A trait will be `patch trait` only if it's change will **affect fields of underlying workload**
+and **MUST trigger new revision to do rollout**. 
+
+Let's see some examples.
+
+   - SecurityContext, NodeSelector and SideCar Trait are all `patch trait` if we are using K8s Deployment to implement.
+   Because these traits will all affect fields of underlying workload, and will make pods re-create, these changes
+   MUST trigger new revision and do rollout.
+   - ManualScaler is NOT a `patch trait`, even though `replica` cloud be field of underlying workload, but change
+   replica don't need to do rollout and won't affect the stability of an APP.
+   - Ingress, Service Binding Trait are all NOT `patch trait`, it won't affect any field of underlying workload and also don't need to
+   do rollout.
+
+
+Now let's go straight forward to this proposal: 
 
 1. Add `patch` field into TraitDefinition, this will make the trait become a kind of patch trait.
 
@@ -183,7 +219,7 @@ spec:
     name: nodeselectors.extended.oam.dev
 ```
 
-2. All patch traits MUST be created before workload emit, and oam-k8s-runtime will be pending until all patch traits are
+2. All patch traits MUST be created or updated before workload emit, and oam-k8s-runtime will be pending until all patch traits are
 ready.
 
 ```yaml
