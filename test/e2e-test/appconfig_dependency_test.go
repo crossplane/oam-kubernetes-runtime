@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
@@ -129,7 +129,7 @@ var _ = Describe("AppconfigDependency", func() {
 			Unsatisfied: []v1alpha2.UnstaifiedDependency{
 				{
 					From: v1alpha2.DependencyFromObject{
-						TypedReference: runtimev1alpha1.TypedReference{
+						TypedReference: v1alpha1.TypedReference{
 							APIVersion: tempFoo.GetAPIVersion(),
 							Name:       outName,
 							Kind:       tempFoo.GetKind(),
@@ -137,7 +137,7 @@ var _ = Describe("AppconfigDependency", func() {
 						FieldPath: "status.key",
 					},
 					To: v1alpha2.DependencyToObject{
-						TypedReference: runtimev1alpha1.TypedReference{
+						TypedReference: v1alpha1.TypedReference{
 							APIVersion: tempFoo.GetAPIVersion(),
 							Name:       inName,
 							Kind:       tempFoo.GetKind(),
