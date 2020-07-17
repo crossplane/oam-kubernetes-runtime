@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/rs/xid"
 	appsv1 "k8s.io/api/apps/v1"
@@ -21,6 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 // ComponentHandler will watch component change and generate Revision automatically.

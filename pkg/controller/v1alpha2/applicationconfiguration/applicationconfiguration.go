@@ -22,6 +22,13 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/event"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
@@ -29,12 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/event"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
@@ -50,6 +51,8 @@ const (
 const (
 	errGetAppConfig          = "cannot get application configuration"
 	errUpdateAppConfigStatus = "cannot update application configuration status"
+	errExecutePrehooks       = "failed to execute pre-hooks"
+	errExecutePosthooks      = "failed to execute post-hooks"
 	errRenderComponents      = "cannot render components"
 	errApplyComponents       = "cannot apply components"
 	errGCComponent           = "cannot garbage collect components"
@@ -57,10 +60,11 @@ const (
 
 // Reconcile event reasons.
 const (
-	reasonRenderComponents = "RenderedComponents"
-	reasonApplyComponents  = "AppliedComponents"
-	reasonGGComponent      = "GarbageCollectedComponent"
-
+	reasonRenderComponents       = "RenderedComponents"
+	reasonApplyComponents        = "AppliedComponents"
+	reasonGGComponent            = "GarbageCollectedComponent"
+	reasonCannotExecutePrehooks  = "CannotExecutePrehooks"
+	reasonCannotExecutePosthooks = "CannotExecutePosthooks"
 	reasonCannotRenderComponents = "CannotRenderComponents"
 	reasonCannotApplyComponents  = "CannotApplyComponents"
 	reasonCannotGGComponents     = "CannotGarbageCollectComponents"
@@ -83,31 +87,33 @@ func Setup(mgr ctrl.Manager, l logging.Logger) error {
 			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
 
-// A Reconciler reconciles OAM ApplicationConfigurations by rendering and
+// An OAMApplicationReconciler reconciles OAM ApplicationConfigurations by rendering and
 // instantiating their Components and Traits.
-type Reconciler struct {
+type OAMApplicationReconciler struct {
 	client     client.Client
 	components ComponentRenderer
 	workloads  WorkloadApplicator
 	gc         GarbageCollector
-
-	log    logging.Logger
-	record event.Recorder
+	scheme     *runtime.Scheme
+	log        logging.Logger
+	record     event.Recorder
+	preHooks   map[string]ControllerHooks
+	postHooks  map[string]ControllerHooks
 }
 
 // A ReconcilerOption configures a Reconciler.
-type ReconcilerOption func(*Reconciler)
+type ReconcilerOption func(*OAMApplicationReconciler)
 
 // WithRenderer specifies how the Reconciler should render workloads and traits.
 func WithRenderer(r ComponentRenderer) ReconcilerOption {
-	return func(rc *Reconciler) {
+	return func(rc *OAMApplicationReconciler) {
 		rc.components = r
 	}
 }
 
 // WithApplicator specifies how the Reconciler should apply workloads and traits.
 func WithApplicator(a WorkloadApplicator) ReconcilerOption {
-	return func(rc *Reconciler) {
+	return func(rc *OAMApplicationReconciler) {
 		rc.workloads = a
 	}
 }
@@ -116,35 +122,45 @@ func WithApplicator(a WorkloadApplicator) ReconcilerOption {
 // workloads and traits when an ApplicationConfiguration is edited to remove
 // them.
 func WithGarbageCollector(gc GarbageCollector) ReconcilerOption {
-	return func(rc *Reconciler) {
+	return func(rc *OAMApplicationReconciler) {
 		rc.gc = gc
 	}
 }
 
 // WithLogger specifies how the Reconciler should log messages.
 func WithLogger(l logging.Logger) ReconcilerOption {
-	return func(r *Reconciler) {
+	return func(r *OAMApplicationReconciler) {
 		r.log = l
 	}
 }
 
 // WithRecorder specifies how the Reconciler should record events.
 func WithRecorder(er event.Recorder) ReconcilerOption {
-	return func(r *Reconciler) {
+	return func(r *OAMApplicationReconciler) {
 		r.record = er
 	}
 }
 
-// NewReconciler returns a Reconciler that reconciles ApplicationConfigurations
-// by rendering and instantiating their Components and Traits.
-func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *Reconciler {
-	// NOTE(negz): We take a ctrl.Manager here despite only using its client for
-	// consistency with other NewReconciler functions, and to avoid needing to
-	// change the signature if we eventually need more from the manager (e.g its
-	// scheme).
+// WithPrehook register a pre-hook to the Reconciler
+func WithPrehook(name string, hook ControllerHooks) ReconcilerOption {
+	return func(r *OAMApplicationReconciler) {
+		r.preHooks[name] = hook
+	}
+}
 
-	r := &Reconciler{
+// WithPosthook register a post-hook to the Reconciler
+func WithPosthook(name string, hook ControllerHooks) ReconcilerOption {
+	return func(r *OAMApplicationReconciler) {
+		r.postHooks[name] = hook
+	}
+}
+
+// NewReconciler returns an OAMApplicationReconciler that reconciles ApplicationConfigurations
+// by rendering and instantiating their Components and Traits.
+func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *OAMApplicationReconciler {
+	r := &OAMApplicationReconciler{
 		client: m.GetClient(),
+		scheme: m.GetScheme(),
 		components: &components{
 			client:     m.GetClient(),
 			appsClient: clientappv1.NewForConfigOrDie(m.GetConfig()),
@@ -174,7 +190,7 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *Reconciler {
 
 // Reconcile an OAM ApplicationConfigurations by rendering and instantiating its
 // Components and Traits.
-func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
+func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")
 
@@ -184,6 +200,16 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	ac := &v1alpha2.ApplicationConfiguration{}
 	if err := r.client.Get(ctx, req.NamespacedName, ac); err != nil {
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetAppConfig)
+	}
+	// execute the prehooks
+	for name, hook := range r.preHooks {
+		result, err := hook.Exec(ctx, ac, log)
+		if err != nil {
+			log.Debug("Failed to execute pre-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
+			r.record.Event(ac, event.Warning(reasonCannotExecutePrehooks, err))
+			ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePrehooks)))
+			return result, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+		}
 	}
 
 	log = log.WithValues("uid", ac.GetUID(), "version", ac.GetResourceVersion())
@@ -231,6 +257,17 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	ac.Status.Workloads = make([]v1alpha2.WorkloadStatus, len(workloads))
 	for i := range workloads {
 		ac.Status.Workloads[i] = workloads[i].Status()
+	}
+
+	// execute the posthooks
+	for name, hook := range r.postHooks {
+		result, err := hook.Exec(ctx, ac, log)
+		if err != nil {
+			log.Debug("Failed to execute post-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
+			r.record.Event(ac, event.Warning(reasonCannotExecutePosthooks, err))
+			ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePosthooks)))
+			return result, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+		}
 	}
 
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
