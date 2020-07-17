@@ -33,11 +33,15 @@ import (
 
 // Reconcile error strings.
 const (
-	errFmtApplyWorkload      = "cannot apply workload %q"
-	errFmtSetWorkloadRef     = "cannot set trait %q reference to %q"
-	errFmtGetTraitDefinition = "cannot find trait definition %q %q %q"
-	errFmtApplyTrait         = "cannot apply trait %q %q %q"
-	errFmtApplyScope         = "cannot apply scope %q %q %q"
+	errFmtApplyWorkload           = "cannot apply workload %q"
+	errFmtSetWorkloadRef          = "cannot set trait %q reference to %q"
+	errFmtSetScopeWorkloadRef     = "cannot set scope %q reference to %q"
+	errFmtGetTraitDefinition      = "cannot find trait definition %q %q %q"
+	errFmtGetScopeDefinition      = "cannot find scope definition %q %q %q"
+	errFmtGetScopeWorkloadRef     = "cannot find scope workloadRef %q %q %q with workloadRefPath %q"
+	errFmtGetScopeWorkloadRefPath = "cannot get workloadRefPath for scope to be dereferenced %q %q %q"
+	errFmtApplyTrait              = "cannot apply trait %q %q %q"
+	errFmtApplyScope              = "cannot apply scope %q %q %q"
 )
 
 // A WorkloadApplicator creates or updates workloads and their traits.
@@ -149,8 +153,20 @@ func findDereferencedScopes(statusScopes []v1alpha2.WorkloadScope, scopes []unst
 }
 
 func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.Unstructured, workloadRef runtimev1alpha1.TypedReference) error {
+	// get ScopeDefinition
+	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, &s)
+	if err != nil {
+		return errors.Wrapf(err, errFmtGetScopeDefinition, s.GetAPIVersion(), s.GetKind(), s.GetName())
+	}
+	// checkout whether scope asks for workloadRef
+	workloadRefPath := scopeDefinition.Spec.WorkloadRefPath
+	if len(workloadRefPath) == 0 {
+		// this scope does not ask for workloadRefs
+		return nil
+	}
+
 	var refs []interface{}
-	if value, err := fieldpath.Pave(s.UnstructuredContent()).GetValue("spec.workloadRefs"); err == nil {
+	if value, err := fieldpath.Pave(s.UnstructuredContent()).GetValue(workloadRefPath); err == nil {
 		refs = value.([]interface{})
 
 		for _, item := range refs {
@@ -162,12 +178,13 @@ func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.
 				return nil
 			}
 		}
+	} else {
+		return errors.Wrapf(err, errFmtGetScopeWorkloadRef, s.GetAPIVersion(), s.GetKind(), s.GetName(), workloadRefPath)
 	}
 
 	refs = append(refs, workloadRef)
-	// TODO(rz): Add workloadRef to ScopeDefinition too
-	if err := fieldpath.Pave(s.UnstructuredContent()).SetValue("spec.workloadRefs", refs); err != nil {
-		return errors.Wrapf(err, errFmtSetWorkloadRef, s.GetName(), wl.Workload.GetName())
+	if err := fieldpath.Pave(s.UnstructuredContent()).SetValue(workloadRefPath, refs); err != nil {
+		return errors.Wrapf(err, errFmtSetScopeWorkloadRef, s.GetName(), wl.Workload.GetName())
 	}
 
 	if err := a.rawClient.Update(ctx, &s); err != nil {
@@ -192,7 +209,18 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 		return errors.Wrapf(err, errFmtApplyScope, s.Reference.APIVersion, s.Reference.Kind, s.Reference.Name)
 	}
 
-	if value, err := fieldpath.Pave(scopeObject.UnstructuredContent()).GetValue("spec.workloadRefs"); err == nil {
+	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, &scopeObject)
+	if err != nil {
+		return errors.Wrapf(err, errFmtGetScopeDefinition, scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName())
+	}
+
+	workloadRefPath := scopeDefinition.Spec.WorkloadRefPath
+	if len(workloadRefPath) == 0 {
+		// Scopes to be dereferenced MUST have workloadRefPath
+		return errors.Errorf(errFmtGetScopeWorkloadRefPath, scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName())
+	}
+
+	if value, err := fieldpath.Pave(scopeObject.UnstructuredContent()).GetValue(workloadRefPath); err == nil {
 		refs := value.([]interface{})
 
 		workloadRefIndex := -1
@@ -211,16 +239,17 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 			refs[workloadRefIndex] = refs[len(refs)-1]
 			refs = refs[:len(refs)-1]
 
-			// TODO(rz): Add workloadRef to ScopeDefinition too
-			if err := fieldpath.Pave(scopeObject.UnstructuredContent()).SetValue("spec.workloadRefs", refs); err != nil {
-				return errors.Wrapf(err, errFmtSetWorkloadRef, s.Reference.Name, ws.Reference.Name)
+			if err := fieldpath.Pave(scopeObject.UnstructuredContent()).SetValue(workloadRefPath, refs); err != nil {
+				return errors.Wrapf(err, errFmtSetScopeWorkloadRef, s.Reference.Name, ws.Reference.Name)
 			}
 
 			if err := a.rawClient.Update(ctx, &scopeObject); err != nil {
 				return errors.Wrapf(err, errFmtApplyScope, s.Reference.APIVersion, s.Reference.Kind, s.Reference.Name)
 			}
 		}
+	} else {
+		return errors.Wrapf(err, errFmtGetScopeWorkloadRef,
+			scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName(), workloadRefPath)
 	}
-
 	return nil
 }

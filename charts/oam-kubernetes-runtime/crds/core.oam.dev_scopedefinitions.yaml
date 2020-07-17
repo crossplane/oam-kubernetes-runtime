@@ -59,6 +59,10 @@ spec:
               required:
               - name
               type: object
+            workloadRefPath:
+              description: WorkloadRefPath indicates if/where a scope accepts a workloadRef
+                object
+              type: string
           required:
           - allowComponentOverlap
           - definitionRef

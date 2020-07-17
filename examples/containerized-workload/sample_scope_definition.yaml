@@ -3,6 +3,7 @@ kind: ScopeDefinition
 metadata:
   name: healthscope.core.oam.dev
 spec:
+  workloadRefPath: spec.workloadRefs
   allowComponentOverlap: true
   definitionRef:
     name: healthscope.core.oam.dev

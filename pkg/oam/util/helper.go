@@ -79,6 +79,21 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 	return nil, errors.Errorf(ErrLocateAppConfig)
 }
 
+// FetchScopeDefinition fetch corresponding scopeDefinition given a scope
+func FetchScopeDefinition(ctx context.Context, r client.Reader,
+	scope *unstructured.Unstructured) (*v1alpha2.ScopeDefinition, error) {
+	// The name of the scopeDefinition CR is the CRD name of the scope
+	spName := GetCRDName(scope)
+	// the scopeDefinition crd is cluster scoped
+	nn := types.NamespacedName{Name: spName}
+	// Fetch the corresponding scopeDefinition CR
+	scopeDefinition := &v1alpha2.ScopeDefinition{}
+	if err := r.Get(ctx, nn, scopeDefinition); err != nil {
+		return nil, err
+	}
+	return scopeDefinition, nil
+}
+
 // FetchTraitDefinition fetch corresponding traitDefinition given a trait
 func FetchTraitDefinition(ctx context.Context, r client.Reader,
 	trait *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
