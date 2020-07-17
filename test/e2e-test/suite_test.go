@@ -23,14 +23,18 @@ import (
 	. "github.com/onsi/gomega"
 
 	rbac "k8s.io/api/rbac/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	controllerscheme "sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
@@ -42,6 +46,7 @@ var k8sClient client.Client
 var scheme = runtime.NewScheme()
 var manualscalertrait v1alpha2.TraitDefinition
 var roleBindingName = "oam-role-binding"
+var crd v1beta1.CustomResourceDefinition
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -57,6 +62,19 @@ var _ = BeforeSuite(func(done Done) {
 	err := clientgoscheme.AddToScheme(scheme)
 	Expect(err).Should(BeNil())
 	err = core.AddToScheme(scheme)
+	Expect(err).Should(BeNil())
+	err = v1beta1.AddToScheme(scheme)
+	Expect(err).Should(BeNil())
+	depExample := &unstructured.Unstructured{}
+	depExample.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "example.com",
+		Version: "v1",
+		Kind:    "Foo",
+	})
+	depSchemeGroupVersion := schema.GroupVersion{Group: "example.com", Version: "v1"}
+	depSchemeBuilder := &controllerscheme.Builder{GroupVersion: depSchemeGroupVersion}
+	depSchemeBuilder.Register(depExample.DeepCopyObject())
+	err = depSchemeBuilder.AddToScheme(scheme)
 	Expect(err).Should(BeNil())
 	By("Setting up kubernetes client")
 	k8sClient, err = client.New(config.GetConfigOrDie(), client.Options{Scheme: scheme})
@@ -101,6 +119,31 @@ var _ = BeforeSuite(func(done Done) {
 	}
 	Expect(k8sClient.Create(context.Background(), &adminRoleBinding)).Should(BeNil())
 	By("Created cluster role bind for the test service account")
+	// Create a crd for appconfig dependency test
+	crd = v1beta1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "foo.example.com",
+			Labels: map[string]string{"crd": "dependency"},
+		},
+		Spec: v1beta1.CustomResourceDefinitionSpec{
+			Group: "example.com",
+			Names: v1beta1.CustomResourceDefinitionNames{
+				Kind:     "Foo",
+				ListKind: "FooList",
+				Plural:   "foo",
+				Singular: "foo",
+			},
+			Versions: []v1beta1.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1",
+					Served:  true,
+					Storage: true,
+				},
+			},
+		},
+	}
+	Expect(k8sClient.Create(context.Background(), &crd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
+	By("Created a crd for appconfig dependency test")
 	close(done)
 }, 300)
 
@@ -122,5 +165,13 @@ var _ = AfterSuite(func() {
 	}
 	Expect(k8sClient.Delete(context.Background(), &manualscalertrait)).Should(BeNil())
 	By("Deleted the manual scalertrait definition")
+	crd = v1beta1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "foo.example.com",
+			Labels: map[string]string{"crd": "dependency"},
+		},
+	}
+	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
+	By("Deleted the custom resource definition")
 
 })
