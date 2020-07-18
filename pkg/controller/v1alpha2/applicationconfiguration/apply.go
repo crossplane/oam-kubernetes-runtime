@@ -33,15 +33,15 @@ import (
 
 // Reconcile error strings.
 const (
-	errFmtApplyWorkload           = "cannot apply workload %q"
-	errFmtSetWorkloadRef          = "cannot set trait %q reference to %q"
-	errFmtSetScopeWorkloadRef     = "cannot set scope %q reference to %q"
-	errFmtGetTraitDefinition      = "cannot find trait definition %q %q %q"
-	errFmtGetScopeDefinition      = "cannot find scope definition %q %q %q"
-	errFmtGetScopeWorkloadRef     = "cannot find scope workloadRef %q %q %q with workloadRefPath %q"
-	errFmtGetScopeWorkloadRefPath = "cannot get workloadRefPath for scope to be dereferenced %q %q %q"
-	errFmtApplyTrait              = "cannot apply trait %q %q %q"
-	errFmtApplyScope              = "cannot apply scope %q %q %q"
+	errFmtApplyWorkload            = "cannot apply workload %q"
+	errFmtSetWorkloadRef           = "cannot set trait %q reference to %q"
+	errFmtSetScopeWorkloadRef      = "cannot set scope %q reference to %q"
+	errFmtGetTraitDefinition       = "cannot find trait definition %q %q %q"
+	errFmtGetScopeDefinition       = "cannot find scope definition %q %q %q"
+	errFmtGetScopeWorkloadRef      = "cannot find scope workloadRef %q %q %q with workloadRefsPath %q"
+	errFmtGetScopeWorkloadRefsPath = "cannot get workloadRefsPath for scope to be dereferenced %q %q %q"
+	errFmtApplyTrait               = "cannot apply trait %q %q %q"
+	errFmtApplyScope               = "cannot apply scope %q %q %q"
 )
 
 // A WorkloadApplicator creates or updates workloads and their traits.
@@ -159,14 +159,14 @@ func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.
 		return errors.Wrapf(err, errFmtGetScopeDefinition, s.GetAPIVersion(), s.GetKind(), s.GetName())
 	}
 	// checkout whether scope asks for workloadRef
-	workloadRefPath := scopeDefinition.Spec.WorkloadRefPath
-	if len(workloadRefPath) == 0 {
+	workloadRefsPath := scopeDefinition.Spec.WorkloadRefsPath
+	if len(workloadRefsPath) == 0 {
 		// this scope does not ask for workloadRefs
 		return nil
 	}
 
 	var refs []interface{}
-	if value, err := fieldpath.Pave(s.UnstructuredContent()).GetValue(workloadRefPath); err == nil {
+	if value, err := fieldpath.Pave(s.UnstructuredContent()).GetValue(workloadRefsPath); err == nil {
 		refs = value.([]interface{})
 
 		for _, item := range refs {
@@ -179,11 +179,11 @@ func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.
 			}
 		}
 	} else {
-		return errors.Wrapf(err, errFmtGetScopeWorkloadRef, s.GetAPIVersion(), s.GetKind(), s.GetName(), workloadRefPath)
+		return errors.Wrapf(err, errFmtGetScopeWorkloadRef, s.GetAPIVersion(), s.GetKind(), s.GetName(), workloadRefsPath)
 	}
 
 	refs = append(refs, workloadRef)
-	if err := fieldpath.Pave(s.UnstructuredContent()).SetValue(workloadRefPath, refs); err != nil {
+	if err := fieldpath.Pave(s.UnstructuredContent()).SetValue(workloadRefsPath, refs); err != nil {
 		return errors.Wrapf(err, errFmtSetScopeWorkloadRef, s.GetName(), wl.Workload.GetName())
 	}
 
@@ -214,13 +214,13 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 		return errors.Wrapf(err, errFmtGetScopeDefinition, scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName())
 	}
 
-	workloadRefPath := scopeDefinition.Spec.WorkloadRefPath
-	if len(workloadRefPath) == 0 {
-		// Scopes to be dereferenced MUST have workloadRefPath
-		return errors.Errorf(errFmtGetScopeWorkloadRefPath, scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName())
+	workloadRefsPath := scopeDefinition.Spec.WorkloadRefsPath
+	if len(workloadRefsPath) == 0 {
+		// Scopes to be dereferenced MUST have workloadRefsPath
+		return errors.Errorf(errFmtGetScopeWorkloadRefsPath, scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName())
 	}
 
-	if value, err := fieldpath.Pave(scopeObject.UnstructuredContent()).GetValue(workloadRefPath); err == nil {
+	if value, err := fieldpath.Pave(scopeObject.UnstructuredContent()).GetValue(workloadRefsPath); err == nil {
 		refs := value.([]interface{})
 
 		workloadRefIndex := -1
@@ -239,7 +239,7 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 			refs[workloadRefIndex] = refs[len(refs)-1]
 			refs = refs[:len(refs)-1]
 
-			if err := fieldpath.Pave(scopeObject.UnstructuredContent()).SetValue(workloadRefPath, refs); err != nil {
+			if err := fieldpath.Pave(scopeObject.UnstructuredContent()).SetValue(workloadRefsPath, refs); err != nil {
 				return errors.Wrapf(err, errFmtSetScopeWorkloadRef, s.Reference.Name, ws.Reference.Name)
 			}
 
@@ -249,7 +249,7 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 		}
 	} else {
 		return errors.Wrapf(err, errFmtGetScopeWorkloadRef,
-			scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName(), workloadRefPath)
+			scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName(), workloadRefsPath)
 	}
 	return nil
 }

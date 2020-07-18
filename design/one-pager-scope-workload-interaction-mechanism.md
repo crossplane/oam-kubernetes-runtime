@@ -97,7 +97,7 @@ But currently we can't, because OAM implementation assumes that every eligible `
 The overall idea is for the applicationConfiguration controller to fill critical information in the workload and scope CRs. 
 In addition, we will provide a helper library so that scope controller developers can locate the resources they need with a simple function call. 
 Here is the list of changes that we propose.
-1. Add an optional field called `workloadRefPath` to the `scopeDefinition` schema. This is for the scope owner to declare that the scope relies on the OAM scope/workload interaction mechanism. 
+1. Add an optional field called `workloadRefsPath` to the `scopeDefinition` schema. This is for the scope owner to declare that the scope relies on the OAM scope/workload interaction mechanism. 
 The value of the field is the path to the field that takes `workloadRef` objects. 
 In our example, the scope definition would look like below since our `HealthScope` takes the `workloadRef` field at `spec.workloadRefs`.
      ```yaml
@@ -106,7 +106,7 @@ In our example, the scope definition would look like below since our `HealthScop
        metadata:
          name: healthscopes.core.oam.dev
        spec:
-         workloadRefPath: spec.workloadRefs
+         workloadRefsPath: spec.workloadRefs
          definitionRef:
            name: healthscopes.core.oam.dev
      ```

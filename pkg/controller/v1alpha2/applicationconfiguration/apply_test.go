@@ -113,7 +113,7 @@ func TestApplyWorkloads(t *testing.T) {
 			Reference: v1alpha2.DefinitionReference{
 				Name: "scope-example.scope.oam.dev",
 			},
-			WorkloadRefPath: "spec.workloadRefs",
+			WorkloadRefsPath: "spec.workloadRefs",
 		},
 	}
 
