@@ -51,7 +51,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				return k8sClient.Get(ctx, objectKey, res)
 			},
 			time.Second*30, time.Millisecond*500).Should(&util.NotFoundMatcher{})
-		// recreate it
+		// recreate the namespace for testing
 		Eventually(
 			func() error {
 				return k8sClient.Create(ctx, &ns)
