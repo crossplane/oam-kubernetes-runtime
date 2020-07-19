@@ -20,7 +20,7 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
-var _ = Describe("AppconfigDependency", func() {
+var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 	ctx := context.Background()
 	namespace := "appconfig-dependency-test"
 	var ns corev1.Namespace
