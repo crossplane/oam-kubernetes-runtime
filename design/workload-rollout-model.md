@@ -2,7 +2,7 @@
 
 * Owner: Jianbo Sun (@wonderflow)
 * Reviewers: Crossplane Maintainers
-* Status: Draft
+* Status: Approved
 
 ## Background
 

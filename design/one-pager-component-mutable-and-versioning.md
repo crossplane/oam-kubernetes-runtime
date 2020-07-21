@@ -2,7 +2,7 @@
 
 * Owner: Lei Zhang (@resouer), Jianbo Sun (@wonderflow)
 * Reviewers: Crossplane Maintainers
-* Status: Draft
+* Status: Implemented
 
 ## Terminology
 
