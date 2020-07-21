@@ -211,6 +211,17 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (reconcile.R
 			return result, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 		}
 	}
+	defer func() {
+		// execute the posthooks
+		for name, hook := range r.postHooks {
+			result, err := hook.Exec(ctx, ac, log)
+			if err != nil {
+				log.Debug("Failed to execute post-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
+				r.record.Event(ac, event.Warning(reasonCannotExecutePosthooks, err))
+				ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePosthooks)))
+			}
+		}
+	}()
 
 	log = log.WithValues("uid", ac.GetUID(), "version", ac.GetResourceVersion())
 
@@ -257,17 +268,6 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (reconcile.R
 	ac.Status.Workloads = make([]v1alpha2.WorkloadStatus, len(workloads))
 	for i := range workloads {
 		ac.Status.Workloads[i] = workloads[i].Status()
-	}
-
-	// execute the posthooks
-	for name, hook := range r.postHooks {
-		result, err := hook.Exec(ctx, ac, log)
-		if err != nil {
-			log.Debug("Failed to execute post-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
-			r.record.Event(ac, event.Warning(reasonCannotExecutePosthooks, err))
-			ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePosthooks)))
-			return result, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
-		}
 	}
 
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
