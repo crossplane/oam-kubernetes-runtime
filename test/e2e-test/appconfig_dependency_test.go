@@ -36,6 +36,8 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 	inName := "data-input"
 	in := tempFoo.DeepCopy()
 	in.SetName(inName)
+	componentOutName := "component-out"
+	componentInName := "component-in"
 	BeforeEach(func() {
 		ns = corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -89,6 +91,34 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		logf.Log.Info("Creating trait definition")
 		// For some reason, TraitDefinition is created as a Cluster scope object
 		Expect(k8sClient.Create(ctx, &td)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
+		// Create a component for data outputs
+		compOut := v1alpha2.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      componentOutName,
+				Namespace: namespace,
+			},
+			Spec: v1alpha2.ComponentSpec{
+				Workload: runtime.RawExtension{
+					Object: out,
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, &compOut)).Should(BeNil())
+		logf.Log.Info("Creating component that outputs data", "Name", compOut.Name, "Namespace", compOut.Namespace)
+		// Create a component for data inputs
+		compIn := v1alpha2.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      componentInName,
+				Namespace: namespace,
+			},
+			Spec: v1alpha2.ComponentSpec{
+				Workload: runtime.RawExtension{
+					Object: in,
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, &compIn)).Should(BeNil())
+		logf.Log.Info("Creating component that inputs data", "Name", compIn.Name, "Namespace", compIn.Namespace)
 	})
 	AfterEach(func() {
 		logf.Log.Info("Clean up resources")
@@ -256,38 +286,6 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 
 	It("component depends on another component", func() {
 		label := map[string]string{"component": "component"}
-		// Create a component
-		componentOutName := "component-comp-out"
-		compOut := v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentOutName,
-				Namespace: namespace,
-				Labels:    label,
-			},
-			Spec: v1alpha2.ComponentSpec{
-				Workload: runtime.RawExtension{
-					Object: out,
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, &compOut)).Should(BeNil())
-		logf.Log.Info("Creating component that outputs data", "Name", compOut.Name, "Namespace", compOut.Namespace)
-		// Create another component
-		componentInName := "component-comp-in"
-		compIn := v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentInName,
-				Namespace: namespace,
-				Labels:    label,
-			},
-			Spec: v1alpha2.ComponentSpec{
-				Workload: runtime.RawExtension{
-					Object: in,
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, &compIn)).Should(BeNil())
-		logf.Log.Info("Creating component that inputs data", "Name", compIn.Name, "Namespace", compIn.Namespace)
 		// Create application configuration
 		appConfigName := "appconfig-comp-comp"
 		appConfig := v1alpha2.ApplicationConfiguration{
@@ -328,22 +326,6 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 
 	It("component depends on trait", func() {
 		label := map[string]string{"trait": "component"}
-		// Create a component
-		componentInName := "component-comp-in"
-		compIn := v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentInName,
-				Namespace: namespace,
-				Labels:    label,
-			},
-			Spec: v1alpha2.ComponentSpec{
-				Workload: runtime.RawExtension{
-					Object: in,
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, &compIn)).Should(BeNil())
-		logf.Log.Info("Creating component that inputs data", "Name", compIn.Name, "Namespace", compIn.Namespace)
 		// Create application configuration
 		appConfigName := "appconfig-trait-comp"
 		appConfig := v1alpha2.ApplicationConfiguration{
@@ -388,22 +370,6 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 
 	It("trait depends on component", func() {
 		label := map[string]string{"component": "trait"}
-		// Create a component
-		componentOutName := "component-comp-out"
-		compOut := v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentOutName,
-				Namespace: namespace,
-				Labels:    label,
-			},
-			Spec: v1alpha2.ComponentSpec{
-				Workload: runtime.RawExtension{
-					Object: out,
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, &compOut)).Should(BeNil())
-		logf.Log.Info("Creating component that outputs data", "Name", compOut.Name, "Namespace", compOut.Namespace)
 		// Create application configuration
 		appConfigName := "appconfig-comp-trait"
 		appConfig := v1alpha2.ApplicationConfiguration{
