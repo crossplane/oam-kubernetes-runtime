@@ -27,13 +27,13 @@ var _ = Describe("Test LocateParentAppConfig helper utils", func() {
 	ctx := context.Background()
 	namespace := "oamNS"
 	acKind := reflect.TypeOf(v1alpha2.ApplicationConfiguration{}).Name()
-	acVersion := "core.oam.dev/v1alpha2"
+	mockVersion := "core.oam.dev/v1alpha2"
 	acName := "mockAC"
 
 	mockAC := v1alpha2.ApplicationConfiguration{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       acKind,
-			APIVersion: acVersion,
+			APIVersion: mockVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      acName,
@@ -45,20 +45,19 @@ var _ = Describe("Test LocateParentAppConfig helper utils", func() {
 	}
 
 	mockOwnerRef := metav1.OwnerReference{
-		APIVersion: acVersion,
+		APIVersion: mockVersion,
 		Kind:       acKind,
 		Name:       acName,
 	}
 
 	cmpKind := "Component"
-	cmpVersion := "core.oam.dev/v1alpha2"
 	cmpName := "mockComponent"
 
 	// use Component as mock oam.Object
 	mockComp := v1alpha2.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       cmpKind,
-			APIVersion: cmpVersion,
+			APIVersion: mockVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cmpName,
@@ -154,7 +153,7 @@ var _ = Describe("Test scope related helper utils", func() {
 	ctx := context.Background()
 	namespace := "oamNS"
 	scopeDefinitionKind := "ScopeDefinition"
-	scopeDefinitionVerision := "core.oam.dev/v1alpha2"
+	mockVerision := "core.oam.dev/v1alpha2"
 	scopeDefinitionName := "mockscopes.core.oam.dev"
 	scopeDefinitionRefName := "mockscopes.core.oam.dev"
 	scopeDefinitionWorkloadRefsPath := "spec.workloadRefs"
@@ -162,7 +161,7 @@ var _ = Describe("Test scope related helper utils", func() {
 	mockScopeDefinition := v1alpha2.ScopeDefinition{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       scopeDefinitionKind,
-			APIVersion: scopeDefinitionVerision,
+			APIVersion: mockVerision,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scopeDefinitionName,
@@ -178,13 +177,12 @@ var _ = Describe("Test scope related helper utils", func() {
 	}
 
 	scopeKind := "HealthScope"
-	scopeVersion := "core.oam.dev/v1alpha2"
 	scopeName := "HealthScope"
 
 	mockScope := v1alpha2.HealthScope{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       scopeKind,
-			APIVersion: scopeVersion,
+			APIVersion: mockVerision,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      scopeName,
@@ -257,7 +255,7 @@ var _ = Describe("Test trait related helper utils", func() {
 	ctx := context.Background()
 	namespace := "oamNS"
 	traitDefinitionKind := "TraitDefinition"
-	tratiDefinitionVerision := "core.oam.dev/v1alpha2"
+	mockVerision := "core.oam.dev/v1alpha2"
 	traiitDefinitionName := "mocktraits.core.oam.dev"
 	traiitDefinitionRefName := "mocktraits.core.oam.dev"
 	traiitDefinitionWorkloadRefPath := "spec.workloadRef"
@@ -265,7 +263,7 @@ var _ = Describe("Test trait related helper utils", func() {
 	mockTraitDefinition := v1alpha2.TraitDefinition{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       traitDefinitionKind,
-			APIVersion: tratiDefinitionVerision,
+			APIVersion: mockVerision,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      traiitDefinitionName,
