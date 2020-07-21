@@ -13,6 +13,7 @@ PLATFORMS ?= linux_amd64 linux_arm64
 # ====================================================================================
 # Setup Output
 
+S3_BUCKET ?= crossplane.releases/oam
 -include build/makelib/output.mk
 
 # ====================================================================================
