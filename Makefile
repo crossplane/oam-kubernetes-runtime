@@ -100,11 +100,13 @@ go-integration:
 # Special Targets
 
 define OAM_KUBERNETES_RUNTIME_HELP
-Crossplane Runtime Targets:
+OAM Kubernetes Runtime Targets:
     cobertura          Generate a coverage report for cobertura applying exclusions on generated files.
     reviewable         Ensure a PR is ready for review.
     submodules         Update the submodules, such as the common build scripts.
-
+    run                Run oam-k8s-runtime as a local process. Useful for development.
+    install-crds       Install crds into clusters for oam-k8s-runtime. Useful for development.
+    uninstall-crds     Uninstall crds from clusters for oam-k8s-runtime. Useful for development.
 endef
 export OAM_KUBERNETES_RUNTIME_HELP
 
@@ -113,7 +115,21 @@ oam-kubernetes-runtime.help:
 
 help-special: oam-kubernetes-runtime.help
 
-.PHONY: oam-kubernetes-runtime.help help-special kind-load e2e-setup e2e-test e2e-cleanup
+.PHONY: oam-kubernetes-runtime.help help-special kind-load e2e-setup e2e-test e2e-cleanup run install-crds uninstall-crds
+
+# Install CRDs into a cluster. This is for convenience.
+install-crds: reviewable
+	kubectl apply -f charts/oam-kubernetes-runtime/crds/
+
+# Uninstall CRDs from a cluster. This is for convenience.
+uninstall-crds:
+	kubectl delete -f charts/oam-kubernetes-runtime/crds/
+
+# This is for running as a local process for convenience.
+run: go.build
+	@$(INFO) Running OAM Kubernetes Runtime as a local process . . .
+	@# To see other arguments that can be provided, run the command with --help instead
+	$(GO_OUT_DIR)/$(PROJECT_NAME)
 
 # load docker image to the kind cluster
 kind-load:
