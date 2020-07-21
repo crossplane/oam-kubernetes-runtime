@@ -18,7 +18,7 @@ We created this repo with the following goals in mind
 - Kubernetes v1.16+
 - Helm 3
 
-## Install OAM runtime
+## Install OAM Runtime without Webhook
 
 1. Create namespace for OAM runtime controller
 
@@ -31,6 +31,39 @@ kubectl create namespace oam-system
 ```console
 helm repo add crossplane-master https://charts.crossplane.io/master/
 helm install oam --namespace oam-system crossplane-master/oam-kubernetes-runtime --devel
+```
+
+## Install OAM Runtime with Webhook
+
+1. Admission Webhook need you to prepare certificates and ca for production use.
+**For none-production use**, you cloud generate it by the shell script provided in repo.
+
+```console	
+git clone git@github.com:crossplane/oam-kubernetes-runtime.git	
+cd ./oam-kubernetes-runtime/hack/ssl
+make
+```
+
+2. Create namespace for OAM runtime controller
+
+```shell script
+kubectl create namespace oam-system
+```
+
+3. Create secret for ssl certificates:
+
+* Notice the server key and certificate must be named tls.key and tls.crt, respectively.
+* Secret name can be user defined, we'd better align with chart values.
+
+```shell script
+kubectl -n oam-system create secret generic webhook-server-cert --from-file=tls.key=./oam-kubernetes-runtime-webhook.key --from-file=tls.crt=./oam-kubernetes-runtime-webhook.pem
+```
+
+4. Get CA Bundle info and install helm with it's value
+
+```shell script
+caValue=`kubectl config view --raw --minify --flatten -o jsonpath='{.clusters[].cluster.certificate-authority-data}'`
+helm install core-runtime -n oam-system ./charts/oam-kubernetes-runtime --set useWebhook=true --set certificate.caBundle=$caValue 
 ```
 
 ## Get started

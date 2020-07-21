@@ -33,9 +33,9 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
-service:
+webhookService:
   type: ClusterIP
-  port: 443
+  port: 9443
 
 resources:
   limits:
@@ -54,6 +54,6 @@ affinity: {}
 # certificate related to the webhook
 certificate:
   certificateName: serving-cert
-  issuerName: selfsigned-issuer
   secretName: webhook-server-cert
   mountPath: /etc/k8s-webhook-certs
+  caBundle: replace-me
