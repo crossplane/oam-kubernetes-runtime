@@ -30,6 +30,12 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 	tempFoo.SetAPIVersion("example.com/v1")
 	tempFoo.SetKind("Foo")
 	tempFoo.SetNamespace(namespace)
+	outName := "data-output"
+	out := tempFoo.DeepCopy()
+	out.SetName(outName)
+	inName := "data-input"
+	in := tempFoo.DeepCopy()
+	in.SetName(inName)
 	BeforeEach(func() {
 		ns = corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -94,7 +100,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 	})
 
 	// common function for verification
-	verify := func(appConfigName, outName, inName string) {
+	verify := func(appConfigName string) {
 		// Verification before satisfying dependency
 		By("Checking that resource which accepts data isn't created yet")
 		inFooKey := client.ObjectKey{
@@ -182,18 +188,9 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 
 	It("trait depends on another trait", func() {
 		label := map[string]string{"trait": "trait"}
-		// Define a trait which provides data
-		outName := "trait-out"
-		tdOut := tempFoo.DeepCopy()
-		tdOut.SetName(outName)
-		// Define a trait which accepts data
-		inName := "trait-in"
-		tdIn := tempFoo.DeepCopy()
-		tdIn.SetName(inName)
 		// Define a workload
-		wlName := "wl"
 		wl := tempFoo.DeepCopy()
-		wl.SetName(wlName)
+		wl.SetName("workload")
 		// Create a component
 		componentName := "component"
 		comp := v1alpha2.Component{
@@ -225,7 +222,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 						Traits: []v1alpha2.ComponentTrait{
 							{
 								Trait: runtime.RawExtension{
-									Object: tdOut,
+									Object: out,
 								},
 								DataOutputs: []v1alpha2.DataOutput{
 									{
@@ -236,7 +233,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 							},
 							{
 								Trait: runtime.RawExtension{
-									Object: tdIn,
+									Object: in,
 								},
 								DataInputs: []v1alpha2.DataInput{
 									{
@@ -254,19 +251,11 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName, outName, inName)
+		verify(appConfigName)
 	})
 
 	It("component depends on another component", func() {
 		label := map[string]string{"component": "component"}
-		// Define a workload which provides data
-		outName := "comp-out"
-		wlOut := tempFoo.DeepCopy()
-		wlOut.SetName(outName)
-		// Define a workload which accepts data
-		inName := "comp-in"
-		wlIn := tempFoo.DeepCopy()
-		wlIn.SetName(inName)
 		// Create a component
 		componentOutName := "component-comp-out"
 		compOut := v1alpha2.Component{
@@ -277,7 +266,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			},
 			Spec: v1alpha2.ComponentSpec{
 				Workload: runtime.RawExtension{
-					Object: wlOut,
+					Object: out,
 				},
 			},
 		}
@@ -293,7 +282,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			},
 			Spec: v1alpha2.ComponentSpec{
 				Workload: runtime.RawExtension{
-					Object: wlIn,
+					Object: in,
 				},
 			},
 		}
@@ -334,19 +323,11 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName, outName, inName)
+		verify(appConfigName)
 	})
 
 	It("component depends on trait", func() {
 		label := map[string]string{"trait": "component"}
-		// Define a trait which provides data
-		outName := "trait-out"
-		tdOut := tempFoo.DeepCopy()
-		tdOut.SetName(outName)
-		// Define a workload which accepts data
-		inName := "comp-in"
-		wlIn := tempFoo.DeepCopy()
-		wlIn.SetName(inName)
 		// Create a component
 		componentInName := "component-comp-in"
 		compIn := v1alpha2.Component{
@@ -357,7 +338,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			},
 			Spec: v1alpha2.ComponentSpec{
 				Workload: runtime.RawExtension{
-					Object: wlIn,
+					Object: in,
 				},
 			},
 		}
@@ -386,7 +367,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 						Traits: []v1alpha2.ComponentTrait{
 							{
 								Trait: runtime.RawExtension{
-									Object: tdOut,
+									Object: out,
 								},
 								DataOutputs: []v1alpha2.DataOutput{
 									{
@@ -402,19 +383,11 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName, outName, inName)
+		verify(appConfigName)
 	})
 
 	It("trait depends on component", func() {
 		label := map[string]string{"component": "trait"}
-		// Define a workload which provides data
-		outName := "comp-out"
-		wlOut := tempFoo.DeepCopy()
-		wlOut.SetName(outName)
-		// Define a trait which accepts data
-		inName := "trait-in"
-		tdIn := tempFoo.DeepCopy()
-		tdIn.SetName(inName)
 		// Create a component
 		componentOutName := "component-comp-out"
 		compOut := v1alpha2.Component{
@@ -425,7 +398,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			},
 			Spec: v1alpha2.ComponentSpec{
 				Workload: runtime.RawExtension{
-					Object: wlOut,
+					Object: out,
 				},
 			},
 		}
@@ -452,7 +425,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 						Traits: []v1alpha2.ComponentTrait{
 							{
 								Trait: runtime.RawExtension{
-									Object: tdIn,
+									Object: in,
 								},
 								DataInputs: []v1alpha2.DataInput{
 									{
@@ -470,6 +443,6 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName, outName, inName)
+		verify(appConfigName)
 	})
 })
