@@ -364,6 +364,11 @@ spec:
                     type: object
                   type: array
               type: object
+            status:
+              description: Status is a place holder for a customized controller to
+                fill if it needs a single place to summarize the status of the entire
+                application
+              type: string
             workloads:
               description: Workloads created by this ApplicationConfiguration.
               items:
@@ -378,8 +383,8 @@ spec:
                   scopes:
                     description: Scopes associated with this workload.
                     items:
-                      description: A WorkloadScope represents a trait associated with
-                        a workload.
+                      description: A WorkloadScope represents a scope associated with
+                        a workload and its status
                       properties:
                         scopeRef:
                           description: Reference to a scope created by an ApplicationConfiguration.
@@ -401,16 +406,31 @@ spec:
                           - kind
                           - name
                           type: object
+                        status:
+                          description: Status is a place holder for a customized controller
+                            to fill if it needs a single place to summarize the status
+                            of the scope
+                          type: string
                       required:
                       - scopeRef
                       type: object
                     type: array
+                  status:
+                    description: Status is a place holder for a customized controller
+                      to fill if it needs a single place to summarize the entire status
+                      of the workload
+                    type: string
                   traits:
                     description: Traits associated with this workload.
                     items:
                       description: A WorkloadTrait represents a trait associated with
-                        a workload.
+                        a workload and its status
                       properties:
+                        status:
+                          description: Status is a place holder for a customized controller
+                            to fill if it needs a single place to summarize the status
+                            of the trait
+                          type: string
                         traitRef:
                           description: Reference to a trait created by an ApplicationConfiguration.
                           properties:

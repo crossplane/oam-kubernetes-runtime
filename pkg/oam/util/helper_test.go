@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"hash/adler32"
 
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	ctrl "sigs.k8s.io/controller-runtime"
-
-	"github.com/crossplane/crossplane-runtime/pkg/test"
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
@@ -396,6 +399,60 @@ var _ = Describe("Test DeepHashObject helper utils", func() {
 			hash2 := hasher1.Sum32()
 
 			Expect(hash1).Should(Equal(hash2))
+		}
+	})
+})
+
+var _ = Describe("Test PatchCondition helper utils", func() {
+	It("Test PatchCondition", func() {
+		type args struct {
+			ctx       context.Context
+			r         client.StatusClient
+			workload  util.ConditionedObject
+			condition []v1alpha1.Condition
+		}
+		patchErr := fmt.Errorf("eww")
+		tests := []struct {
+			name     string
+			args     args
+			expected error
+		}{
+			{
+				name: "success",
+				args: args{
+					ctx: context.Background(),
+					r: &test.MockClient{
+						MockStatusPatch: test.NewMockStatusPatchFn(nil),
+					},
+					workload: &fake.Claim{},
+					condition: []v1alpha1.Condition{
+						{},
+					},
+				},
+				expected: nil,
+			},
+			{
+				name: "fail",
+				args: args{
+					ctx: context.Background(),
+					r: &test.MockClient{
+						MockStatusPatch: test.NewMockStatusPatchFn(patchErr),
+					},
+					workload: &fake.Claim{},
+					condition: []v1alpha1.Condition{
+						{},
+					},
+				},
+				expected: errors.Wrap(patchErr, util.ErrUpdateStatus),
+			},
+		}
+		for _, tt := range tests {
+			err := util.PatchCondition(tt.args.ctx, tt.args.r, tt.args.workload, tt.args.condition...)
+			if tt.expected == nil {
+				BeNil().Match(err)
+			} else {
+				Expect(err.Error()).Should(Equal(tt.expected.Error()))
+			}
 		}
 	})
 })
