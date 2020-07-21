@@ -6,12 +6,12 @@
 
 ## Background
 
-A platform tend to provide simper view to developers. For example, in OAM spec, higher level abstractions like
-ContainerizedWorkload are defined to hide unnecessary details of Deployment from developers. At the mean time,
-with the concept of separate of concerns, the spec abstracted operational related fields from Deployment into 
-several traits in implementation, both of them have CRDs and controllers.
+A platform tends to provide a simper view to developers. For example, in OAM spec, higher-level abstractions like
+ContainerizedWorkload are defined to hide unnecessary details of Deployment from developers. In the meantime,
+with the concept of separation of concerns, we recommend extracting operational related fields from the Deployment into 
+traits. Those traits are implemented as CRDs and controllers.
 
-In below example, `securityContext` and `nodeSelector` will be separated as traits.
+In below example, `securityContext` and `nodeSelector` should be extracted as traits in an OAM based platform.
 
 ```yaml
 apiVersion: apps/v1
@@ -29,10 +29,10 @@ spec:
     ...
 ```
 
-However, any changes happened to pod template of Deployment will trigger re-create of pods. 
-In our current workflow, traits will take effect asynchronously after workload created. That means
-a deployment will be created first without these traits' information, and then being updated several times.
-Updating pod template of deployment leads to re-create of pods, which finally makes the Application unstable. 
+However, any changes that happen to the pod template of Deployment will trigger a re-creation of pods.
+In our current workflow, traits take effect asynchronously after the workload is created. That means
+a deployment will be created first without the traits, and its pod template is updated each time a trait is applied.
+This type of behavior might not be acceptable in many production environments.
 
 Let's use a concrete example to make this problem more clear. For example, we currently have an OAM app running
 like below. It just contains a component with ContainerizedWorkload, and a canary trait.
@@ -90,8 +90,7 @@ spec:
               value: test
 ```
 
-After some time, the App operator want to add two traits on this App for some security reason, and they are both fields
-of underlying Deployment.
+After some time, the App operator wants to add two traits on this App for some security reasons, and they are both spec fields in the underlying Deployment.
 
 ```yaml
 apiVersion: core.oam.dev/v1alpha2
@@ -119,8 +118,8 @@ spec:
               runAsNonRoot: true
 ```
 
-After AppConfig deployed, NodeSelector and SecurityContext trait will work in a random order.
-Assuming the controller of NodeSelector trait will work first, then it will patch and update the underlying Deployment.
+After the AppConfig is deployed, NodeSelector and SecurityContext trait will work in random order.
+Assuming the controller of NodeSelector trait works first, then it will patch and update the underlying Deployment.
 
 ```yaml
 apiVersion: apps/v1
@@ -141,8 +140,8 @@ spec:
               value: test
 ``` 
 
-This will cause first round re-create of K8s pods, and please notice it won't trigger the canary trait to work.
-The App will become unstable at this point.
+This will trigger first round re-create of K8s pods, and please notice the canary trait won't work which makes
+the App become unstable.
 
 At the same time, the controller of SecurityContext trait will work and update the deployment again.
 
@@ -167,7 +166,7 @@ spec:
               value: test
 ``` 
 
-This will cause a second round of pods re-create. Again, the canary trait won't work.
+This will trigger the second round of pods re-create. Again, the canary trait won't work.
 
 There're no doubt too many risks here in this workflow. We can conclude into two problems:
 
