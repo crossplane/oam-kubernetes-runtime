@@ -205,7 +205,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				return k8sClient.Get(ctx, inFooKey, inFoo)
 			},
 			time.Second*15, time.Millisecond*500).Should(BeNil())
-		By("Verify the appconfig's dependency is unsatisfied")
+		By("Verify the appconfig's dependency is satisfied")
 		appconfig = &v1alpha2.ApplicationConfiguration{}
 		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
 		Eventually(
