@@ -59,13 +59,13 @@ spec:
               required:
               - name
               type: object
+            extension:
+              description: Extension is used for extension needs by OAM platform builders
+              type: object
             workloadRefsPath:
               description: WorkloadRefsPath indicates if/where a scope accepts workloadRef
                 objects
               type: string
-            extension:
-              description: Extension is used for extension needs by OAM platform builders
-              type: object
           required:
           - allowComponentOverlap
           - definitionRef
