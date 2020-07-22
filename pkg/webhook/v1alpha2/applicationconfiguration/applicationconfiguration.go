@@ -30,8 +30,6 @@ var _ admission.Handler = &ValidatingHandler{}
 //Handle validate ApplicationConfiguration Spec here
 func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	obj := &v1alpha2.ApplicationConfiguration{}
-	klog.Info("admitting Application Configuration")
-
 	if req.Resource.String() != appConfigResource.String() {
 		return admission.Errored(http.StatusBadRequest, fmt.Errorf("expect resource to be %s", appConfigResource))
 	}
@@ -50,13 +48,11 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		if err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
+		if pass, reason := checkRevisionName(obj); !pass {
+			return admission.ValidationResponse(false, reason)
+		}
+		// TODO(wonderflow): Add more validation logic here.
 	}
-
-	if pass, reason := checkRevisionName(obj); !pass {
-		return admission.ValidationResponse(false, reason)
-	}
-	// TODO(wonderflow): Add more validation logic here.
-
 	return admission.ValidationResponse(true, "")
 }
 
