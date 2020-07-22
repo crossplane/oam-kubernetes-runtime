@@ -63,6 +63,9 @@ spec:
               required:
               - name
               type: object
+            extension:
+              description: Extension is used for extension needs by OAM platform builders
+              type: object
             revisionEnabled:
               description: Revision indicates whether a trait is aware of component
                 revision

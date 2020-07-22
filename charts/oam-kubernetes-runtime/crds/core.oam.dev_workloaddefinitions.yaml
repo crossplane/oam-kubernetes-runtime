@@ -79,6 +79,9 @@ spec:
               required:
               - name
               type: object
+            extension:
+              description: Extension is used for extension needs by OAM platform builders
+              type: object
           required:
           - definitionRef
           type: object
