@@ -18,6 +18,7 @@ package v1alpha2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -49,6 +50,10 @@ type WorkloadDefinitionSpec struct {
 
 	// ChildResourceKinds are the list of GVK of the child resources this workload generates
 	ChildResourceKinds []ChildResourceKind `json:"childResourceKinds,omitempty"`
+
+	// Extension is used for extension needs by OAM platform builders
+	// +optional
+	Extension *unstructured.Unstructured `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -94,6 +99,10 @@ type TraitDefinitionSpec struct {
 	// all workload kinds.
 	// +optional
 	AppliesToWorkloads []string `json:"appliesToWorkloads,omitempty"`
+
+	// Extension is used for extension needs by OAM platform builders
+	// +optional
+	Extension *unstructured.Unstructured `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -128,6 +137,10 @@ type ScopeDefinitionSpec struct {
 	// AllowComponentOverlap specifies whether an OAM component may exist in
 	// multiple instances of this kind of scope.
 	AllowComponentOverlap bool `json:"allowComponentOverlap"`
+
+	// Extension is used for extension needs by OAM platform builders
+	// +optional
+	Extension *unstructured.Unstructured `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
