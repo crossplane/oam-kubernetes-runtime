@@ -96,13 +96,18 @@ spec:
           args:
             - "--metrics-addr=:8080"
             - "--enable-leader-election"
+            {{ if .Values.useWebhook }}
+            - "--use-webhook=true"
+            - "--webhook-port={{ .Values.webhookService.port }}"
+            - "--webhook-cert-dir={{ .Values.certificate.mountPath }}"
+            {{ end }}
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ quote .Values.image.pullPolicy }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           {{ if .Values.useWebhook }}
           ports:
-            - containerPort: 9443
+            - containerPort: {{ .Values.webhookService.port }}
               name: webhook-server
               protocol: TCP
           volumeMounts:
@@ -110,16 +115,6 @@ spec:
               name: tls-cert
               readOnly: true
           {{ end }}
-        - name: kube-rbac-proxy
-          image: gcr.io/kubebuilder/kube-rbac-proxy:v0.4.1
-          args:
-            - "--secure-listen-address=0.0.0.0:8443"
-            - "--upstream=http://127.0.0.1:8080/"
-            - "--logtostderr=true"
-            - "--v=10"
-          ports:
-            - containerPort: 8443
-              name: https
       {{ if .Values.useWebhook }}
       volumes:
         - name: tls-cert
