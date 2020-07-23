@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/crossplane/crossplane-runtime v0.8.0
 	github.com/davecgh/go-spew v1.1.1
+	github.com/evanphx/json-patch v4.5.0+incompatible
 	github.com/gertd/go-pluralize v0.1.7
 	github.com/go-logr/logr v0.1.0
 	github.com/google/go-cmp v0.4.0

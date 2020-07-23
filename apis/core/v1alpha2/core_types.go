@@ -80,6 +80,10 @@ type WorkloadDefinitionList struct {
 
 // A TraitDefinitionSpec defines the desired state of a TraitDefinition.
 type TraitDefinitionSpec struct {
+	// Flags whether the trait is separate from the underlying workload
+	// +optional
+	Patch bool `json:"patch,omitempty"`
+
 	// Reference to the CustomResourceDefinition that defines this trait kind.
 	Reference DefinitionReference `json:"definitionRef"`
 

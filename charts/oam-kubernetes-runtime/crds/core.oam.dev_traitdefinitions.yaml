@@ -68,6 +68,10 @@ spec:
                 description: Extension is used for extension needs by OAM platform
                   builders
                 type: object
+              patch:
+                description: Flags whether the trait is separate from the underlying
+                  workload
+                type: boolean
               revisionEnabled:
                 description: Revision indicates whether a trait is aware of component
                   revision
