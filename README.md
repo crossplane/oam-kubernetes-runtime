@@ -20,21 +20,27 @@ We created this repo with the following goals in mind
 
 ## Install OAM runtime
 
-#### Clone this repo
+1. Create namespace for OAM runtime controller
 
-```console
-git clone git@github.com:crossplane/oam-kubernetes-runtime.git
-cd ./oam-kubernetes-runtime
-```
-
-#### Install OAM controllers
-
-```console
+```shell script
 kubectl create namespace oam-system
-helm install core-runtime -n oam-system ./charts/oam-kubernetes-runtime
 ```
 
-## Verify
+2. Add helm repo and install 
+
+```console
+helm repo add crossplane-master https://charts.crossplane.io/master/
+helm install oam --namespace oam-system crossplane-master/oam-kubernetes-runtime --devel
+```
+
+## Get started
+
+* We have some examples in our repo, clone and get started with it.
+
+```console	
+git clone git@github.com:crossplane/oam-kubernetes-runtime.git	
+cd ./oam-kubernetes-runtime	
+```
 
 * Apply a sample application configuration
 
