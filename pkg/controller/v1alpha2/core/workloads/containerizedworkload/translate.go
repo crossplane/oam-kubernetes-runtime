@@ -113,7 +113,7 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 			for _, v := range container.Resources.Volumes {
 				mount := corev1.VolumeMount{
 					Name:      v.Name,
-					MountPath: v.MouthPath,
+					MountPath: v.MountPath,
 				}
 				if v.AccessMode != nil && *v.AccessMode == v1alpha2.VolumeAccessModeRO {
 					mount.ReadOnly = true
