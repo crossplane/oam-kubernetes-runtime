@@ -111,7 +111,8 @@ spec:
               readOnly: true
           {{ end }}
         - name: kube-rbac-proxy
-          image: gcr.io/kubebuilder/kube-rbac-proxy:v0.4.1
+          image: {{ .Values.kubeRBACProxy.image.repository }}:{{ .Values.kubeRBACProxy.image.tag }}
+          imagePullPolicy: {{ quote .Values.kubeRBACProxy.image.pullPolicy }}
           args:
             - "--secure-listen-address=0.0.0.0:8443"
             - "--upstream=http://127.0.0.1:8080/"

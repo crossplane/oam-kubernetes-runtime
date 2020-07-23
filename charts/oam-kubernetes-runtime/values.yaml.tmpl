@@ -9,6 +9,12 @@ image:
   tag: %%VERSION%%
   pullPolicy: Always
 
+kubeRBACProxy:
+  image:
+    repository: gcr.io/kubebuilder/kube-rbac-proxy
+    tag: v0.4.1
+    pullPolicy: Always
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
