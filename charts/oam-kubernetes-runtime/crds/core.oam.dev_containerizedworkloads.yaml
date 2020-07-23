@@ -428,7 +428,7 @@ spec:
                                 - required
                                 type: object
                               mountPath:
-                                description: MouthPath at which this volume will be
+                                description: MountPath at which this volume will be
                                   mounted within its container.
                                 type: string
                               name:

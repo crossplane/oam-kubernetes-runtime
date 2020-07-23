@@ -197,7 +197,7 @@ func TestContainerizedWorkloadTranslator(t *testing.T) {
 						Volumes: []v1alpha2.VolumeResource{
 							{
 								Name:      "cool-volume",
-								MouthPath: "/my/cool/path",
+								MountPath: "/my/cool/path",
 							},
 						},
 					},

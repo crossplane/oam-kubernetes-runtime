@@ -109,8 +109,8 @@ type VolumeResource struct {
 	// Name of this volume. Must be unique within its container.
 	Name string `json:"name"`
 
-	// MouthPath at which this volume will be mounted within its container.
-	MouthPath string `json:"mountPath"`
+	// MountPath at which this volume will be mounted within its container.
+	MountPath string `json:"mountPath"`
 
 	// TODO(negz): Use +kubebuilder:default marker to default AccessMode to RW
 	// and SharingPolicy to Exclusive once we're generating v1 CRDs.
