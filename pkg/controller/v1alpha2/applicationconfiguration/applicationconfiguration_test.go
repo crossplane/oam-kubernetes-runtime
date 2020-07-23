@@ -19,6 +19,7 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"testing"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
@@ -1127,3 +1128,18 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 		t.Errorf("didn't add conditions to source correctly: %s", diff)
 	}
 }
+
+func TestWithHook(t *testing.T) {
+	m := &mock.Manager{}
+	NewReconciler(m, WithPrehook("preHook", ControllerHooksFn(prehook)),
+		WithPosthook("postHook", ControllerHooksFn(posthook)))
+}
+
+func prehook(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}
+
+func posthook(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}
+

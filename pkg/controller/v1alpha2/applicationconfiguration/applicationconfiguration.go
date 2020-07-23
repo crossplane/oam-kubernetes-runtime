@@ -144,6 +144,9 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 // WithPrehook register a pre-hook to the Reconciler
 func WithPrehook(name string, hook ControllerHooks) ReconcilerOption {
 	return func(r *OAMApplicationReconciler) {
+		if r.preHooks == nil {
+			r.preHooks = make(map[string]ControllerHooks)
+		}
 		r.preHooks[name] = hook
 	}
 }
@@ -151,6 +154,9 @@ func WithPrehook(name string, hook ControllerHooks) ReconcilerOption {
 // WithPosthook register a post-hook to the Reconciler
 func WithPosthook(name string, hook ControllerHooks) ReconcilerOption {
 	return func(r *OAMApplicationReconciler) {
+		if r.postHooks == nil {
+			r.postHooks = make(map[string]ControllerHooks)
+		}
 		r.postHooks[name] = hook
 	}
 }
