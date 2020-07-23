@@ -205,6 +205,27 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	if err := r.client.Get(ctx, req.NamespacedName, ac); err != nil {
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetAppConfig)
 	}
+	// execute the prehooks
+	for name, hook := range r.preHooks {
+		result, err := hook.Exec(ctx, ac, log)
+		if err != nil {
+			log.Debug("Failed to execute pre-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
+			r.record.Event(ac, event.Warning(reasonCannotExecutePrehooks, err))
+			ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePrehooks)))
+			return result, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+		}
+	}
+	defer func() {
+		// execute the posthooks
+		for name, hook := range r.postHooks {
+			result, err := hook.Exec(ctx, ac, log)
+			if err != nil {
+				log.Debug("Failed to execute post-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
+				r.record.Event(ac, event.Warning(reasonCannotExecutePosthooks, err))
+				ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePosthooks)))
+			}
+		}
+	}()
 
 	// execute the posthooks at the end no matter what
 	defer func() {
