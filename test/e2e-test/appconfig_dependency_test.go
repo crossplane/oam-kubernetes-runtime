@@ -204,7 +204,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, inFooKey, inFoo)
 			},
-			time.Second*15, time.Millisecond*500).Should(BeNil())
+			time.Second*60, time.Second*5).Should(BeNil())
 		By("Verify the appconfig's dependency is satisfied")
 		appconfig = &v1alpha2.ApplicationConfiguration{}
 		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
@@ -213,7 +213,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				k8sClient.Get(ctx, appconfigKey, appconfig)
 				return appconfig.Status.Dependency.Unsatisfied
 			},
-			time.Second*15, time.Millisecond*500).Should(BeNil())
+			time.Second*60, time.Second*5).Should(BeNil())
 	}
 
 	It("trait depends on another trait", func() {

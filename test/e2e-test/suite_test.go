@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	rbac "k8s.io/api/rbac/v1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,7 +46,7 @@ var k8sClient client.Client
 var scheme = runtime.NewScheme()
 var manualscalertrait v1alpha2.TraitDefinition
 var roleBindingName = "oam-role-binding"
-var crd v1beta1.CustomResourceDefinition
+var crd crdv1.CustomResourceDefinition
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -63,7 +63,7 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).Should(BeNil())
 	err = core.AddToScheme(scheme)
 	Expect(err).Should(BeNil())
-	err = v1beta1.AddToScheme(scheme)
+	err = crdv1.AddToScheme(scheme)
 	Expect(err).Should(BeNil())
 	depExample := &unstructured.Unstructured{}
 	depExample.SetGroupVersionKind(schema.GroupVersionKind{
@@ -120,26 +120,40 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(k8sClient.Create(context.Background(), &adminRoleBinding)).Should(BeNil())
 	By("Created cluster role bind for the test service account")
 	// Create a crd for appconfig dependency test
-	crd = v1beta1.CustomResourceDefinition{
+	crd = crdv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "foo.example.com",
 			Labels: map[string]string{"crd": "dependency"},
 		},
-		Spec: v1beta1.CustomResourceDefinitionSpec{
+		Spec: crdv1.CustomResourceDefinitionSpec{
 			Group: "example.com",
-			Names: v1beta1.CustomResourceDefinitionNames{
+			Names: crdv1.CustomResourceDefinitionNames{
 				Kind:     "Foo",
 				ListKind: "FooList",
 				Plural:   "foo",
 				Singular: "foo",
 			},
-			Versions: []v1beta1.CustomResourceDefinitionVersion{
+			Versions: []crdv1.CustomResourceDefinitionVersion{
 				{
 					Name:    "v1",
 					Served:  true,
 					Storage: true,
+					Schema: &crdv1.CustomResourceValidation{
+						OpenAPIV3Schema: &crdv1.JSONSchemaProps{
+							Type: "object",
+							Properties: map[string]crdv1.JSONSchemaProps{
+								"status": {
+									Type: "object",
+									Properties: map[string]crdv1.JSONSchemaProps{
+										"key": {Type: "string"},
+									},
+								},
+							},
+						},
+					},
 				},
 			},
+			Scope: crdv1.NamespaceScoped,
 		},
 	}
 	Expect(k8sClient.Create(context.Background(), &crd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
@@ -165,7 +179,7 @@ var _ = AfterSuite(func() {
 	}
 	Expect(k8sClient.Delete(context.Background(), &manualscalertrait)).Should(BeNil())
 	By("Deleted the manual scalertrait definition")
-	crd = v1beta1.CustomResourceDefinition{
+	crd = crdv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "foo.example.com",
 			Labels: map[string]string{"crd": "dependency"},
