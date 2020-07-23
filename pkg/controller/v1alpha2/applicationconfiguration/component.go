@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/rs/xid"
 	appsv1 "k8s.io/api/apps/v1"
@@ -21,13 +19,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 // ComponentHandler will watch component change and generate Revision automatically.
 type ComponentHandler struct {
-	client     client.Client
-	appsClient clientappv1.AppsV1Interface
-	l          logging.Logger
+	Client     client.Client
+	AppsClient clientappv1.AppsV1Interface
+	Logger     logging.Logger
 }
 
 // Create implements EventHandler
@@ -83,9 +83,9 @@ func isMatch(appConfigs *v1alpha2.ApplicationConfigurationList, compName string)
 
 func (c *ComponentHandler) getRelatedAppConfig(object metav1.Object) []reconcile.Request {
 	var appConfigs v1alpha2.ApplicationConfigurationList
-	err := c.client.List(context.Background(), &appConfigs)
+	err := c.Client.List(context.Background(), &appConfigs)
 	if err != nil {
-		c.l.Info(fmt.Sprintf("error list all applicationConfigurations %v", err))
+		c.Logger.Info(fmt.Sprintf("error list all applicationConfigurations %v", err))
 		return nil
 	}
 	var reqs []reconcile.Request
@@ -100,14 +100,14 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 	if curComp.Status.LatestRevision == nil {
 		return true, 0
 	}
-	oldRev, err := c.appsClient.ControllerRevisions(mt.GetNamespace()).Get(context.Background(), curComp.Status.LatestRevision.Name, metav1.GetOptions{})
+	oldRev, err := c.AppsClient.ControllerRevisions(mt.GetNamespace()).Get(context.Background(), curComp.Status.LatestRevision.Name, metav1.GetOptions{})
 	if err != nil {
-		c.l.Info(fmt.Sprintf("get old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
+		c.Logger.Info(fmt.Sprintf("get old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
 		return true, curComp.Status.LatestRevision.Revision
 	}
 	oldComp, err := UnpackRevisionData(oldRev)
 	if err != nil {
-		c.l.Info(fmt.Sprintf("Unmarshal old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
+		c.Logger.Info(fmt.Sprintf("Unmarshal old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
 		return true, oldRev.Revision
 	}
 
@@ -168,17 +168,17 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 		Revision: nextRevision,
 		Data:     runtime.RawExtension{Object: curComp},
 	}
-	_, err := c.appsClient.ControllerRevisions(mt.GetNamespace()).Create(context.Background(), &revision, metav1.CreateOptions{})
+	_, err := c.AppsClient.ControllerRevisions(mt.GetNamespace()).Create(context.Background(), &revision, metav1.CreateOptions{})
 	if err != nil {
-		c.l.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
+		c.Logger.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
 		return false
 	}
-	err = c.client.Status().Update(context.Background(), curComp)
+	err = c.Client.Status().Update(context.Background(), curComp)
 	if err != nil {
-		c.l.Info(fmt.Sprintf("update component status latestRevision %s err %v", revisionName, err), "componentName", mt.GetName())
+		c.Logger.Info(fmt.Sprintf("update component status latestRevision %s err %v", revisionName, err), "componentName", mt.GetName())
 		return false
 	}
-	c.l.Info(fmt.Sprintf("ControllerRevision %s created", revisionName))
+	c.Logger.Info(fmt.Sprintf("ControllerRevision %s created", revisionName))
 	return true
 }
 

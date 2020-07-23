@@ -45,6 +45,8 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
+var _ ComponentRenderer = &components{}
+
 func TestRenderComponents(t *testing.T) {
 	errBoom := errors.New("boom")
 

@@ -2,14 +2,17 @@ package main
 
 import (
 	"flag"
+	"io"
 	"os"
 
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2"
@@ -24,15 +27,32 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
+	var metricsAddr, logFilePath string
+	var enableLeaderElection, logCompress bool
+	var logRetainDate int
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&logFilePath, "log-file-path", "", "The address the metric endpoint binds to.")
+	flag.IntVar(&logRetainDate, "log-retain-date", 7, "The number of days of logs history to retain.")
+	flag.BoolVar(&logCompress, "log-compress", true, "Enable compression on the rotated logs.")
 	flag.Parse()
+
+	// setup logging
+	var w io.Writer
+	if len(logFilePath) > 0 {
+		w = zapcore.AddSync(&lumberjack.Logger{
+			Filename: logFilePath,
+			MaxAge:   logRetainDate, // days
+			Compress: logCompress,
+		})
+	} else {
+		w = os.Stdout
+	}
 
 	ctrl.SetLogger(zap.New(func(o *zap.Options) {
 		o.Development = true
+		o.DestWritter = w
 	}))
 
 	oamLog := ctrl.Log.WithName("oam-kubernetes-runtime")
