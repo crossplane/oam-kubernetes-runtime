@@ -69,6 +69,7 @@ var _ = Describe("HealthScope", func() {
 			},
 			Spec: v1alpha2.ScopeDefinitionSpec{
 				AllowComponentOverlap: true,
+				WorkloadRefsPath:      "spec.workloadRefs",
 				Reference: v1alpha2.DefinitionReference{
 					Name: "healthscope.core.oam.dev",
 				},

@@ -134,6 +134,9 @@ type ScopeDefinitionSpec struct {
 	// Reference to the CustomResourceDefinition that defines this scope kind.
 	Reference DefinitionReference `json:"definitionRef"`
 
+	// WorkloadRefsPath indicates if/where a scope accepts workloadRef objects
+	WorkloadRefsPath string `json:"workloadRefsPath,omitempty"`
+
 	// AllowComponentOverlap specifies whether an OAM component may exist in
 	// multiple instances of this kind of scope.
 	AllowComponentOverlap bool `json:"allowComponentOverlap"`

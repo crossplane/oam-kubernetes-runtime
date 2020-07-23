@@ -1,4 +1,4 @@
-# Traits and workloads interaction mechanism in OAM
+# Traits/Scopes and workloads interaction mechanism in OAM
 
 * Owner: Ryan Zhang (@ryanzhang-oss)
 * Reviewers: Crossplane Maintainers
@@ -14,6 +14,9 @@
  should all have a controller reference pointing to the parent workload instance.
 
 ## Background
+
+ **Please notice that Traits and Scopes share the same issue on this topic, and we just use Trait to state the problem in this section.**
+
 Traits and workloads are two major types of resources in OAM. Traits usually affect how a
 kubernetes resource operate either directly (through spec change) or indirectly (add ingress or
 sidecar). However, the current OAM implementation does not contain a generic mechanism for traits
@@ -86,6 +89,43 @@ resources are most likely not the workload itself.
       directly. It needs to find the actual Kubernetes resources that the `example-db`
      workload generates and then it can modify the `replica` field in its spec.
 
+#### Same problem of Scope
+Just like what happens to **trait**, scope also needs a generic mechanism to interact with workload. It's a crucial step for OAM implementation to make scope aware of which workloads are associated to it. Currently, OAM implementation assumes that every scope has a field `.spec.workloadRefs` to record associated workload references and get/set references in a hard-code way. 
+
+Here's an example and `HealthScope` CRD refers to [here](https://github.com/crossplane/oam-kubernetes-runtime/blob/master/charts/oam-kubernetes-runtime/crds/core.oam.dev_healthscopes.yaml).
+ 
+```yaml
+apiVersion: core.oam.dev/v1alpha2
+kind: ScopeDefinition
+metadata:
+  name: healthscope.core.oam.dev
+spec:
+  allowComponentOverlap: true
+  definitionRef:
+    name: healthscope.core.oam.dev
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: HealthScope
+metadata:
+  name: example-health-scope
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - componentName: example-db      
+      traits:
+      ...
+      scopes:
+        - scopeRef:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: HealthScope
+            name: example-health-scope
+```
+
+
 ## Goals
 In order to maximize the extensibility of our OAM implementation, our solution need to meet the
  following two design objections.
@@ -117,6 +157,8 @@ apply to in the future.
       ```
 
 ## Proposal
+
+### Traits and workloads interaction mechanism
 The overall idea is for the applicationConfiguration controller to fill critical information
 in the workload and trait CR it emits. In addition, we will provide a helper library so that
 trait controller developers can locate the resources they need with a simple function call. 
@@ -156,7 +198,40 @@ Here is the list of changes that we propose.
          type: object
      ```
      
-3. Add a `childResourceKinds` field in the  WorkloadDefinition. 
+
+### Scopes and workloads interaction mechanism
+1. Add an optional field called `workloadRefsPath` to the `scopeDefinition` schema. This is for the scope owner to declare that the scope relies on the OAM scope/workload interaction mechanism. 
+The value of the field is the path to the field that takes `workloadRef` objects. 
+In our example, the scope definition would look like below since our `HealthScope` takes the `workloadRef` field at `spec.workloadRefs`.
+     ```yaml
+       apiVersion: core.oam.dev/v1alpha2
+       kind: ScopeDefinition
+       metadata:
+         name: healthscopes.core.oam.dev
+       spec:
+         workloadRefsPath: spec.workloadRefs
+         definitionRef:
+           name: healthscopes.core.oam.dev
+     ```
+2. ApplicationConfig controller no longer assumes that all Scope CRDs contain a `.spec.workloadRefs` field conforming to the OAM definition. It only fills the workload GVK to a Scope CR with `spec.workloadRefs` field defined as below if the corresponding `scopeDefiniton` has a `spec.workloadRefs` field.   
+     ```yaml
+       workloadRef:
+         properties:
+           apiVersion:
+             type: string
+           kind:
+             type: string
+           name:
+             type: string
+         required:
+         - apiVersion
+         - kind
+         - name
+         type: object
+     ```
+
+### Changes on WorkloadDefinition and Helper library
+1. Add a `childResourceKinds` field in the  WorkloadDefinition. 
 Currently, a workloadDefinition is nothing but a shim of a real workload CRD. We propose to add
 an **optional** field called `childResourceKinds` to the schema of the workloadDefinition. We encourage
 workload owners to fill in this field when they register their controllers to the OAM system. 
@@ -177,8 +252,8 @@ deployment and service child resources.
          - apiVersion: v1
            kind: Service      
     ```
-4. OAM runtime will provide a helper library. The library follows the following logic to help a
- trait developer locate the resources for the trait to modify.
+2. OAM runtime will provide a helper library. The library follows the following logic to help a
+ trait/scope developer locate the resources for the trait/scope to interact with.
     1. Get the corresponding `workload` instance from the Kubernetes cluster with the information
      inserted by the application controller in the `trait` CR.
     2. Fetch the corresponding `workloadDefinition` CR following an
@@ -196,13 +271,15 @@ deployment and service child resources.
 Here are the impacts of this mechanism to the existing OAM components
 - ApplicationConfiguration: This mechanism requires minimum changes in the
  applicationConfiguration controller except that it now needs to check if a trait definition has a
-  "workloadRefPath" before patching the workloadRef field.
+  `spec.workloadRefPath` or if a scope definition has a `spec.workloadRefsPath` before patching the workloadRef field.
 - Workload: This mechanism does not affect workload controller implementation.
 - Trait: This mechanism is optional so all existing trait controller still works. This mechanism
 requires modification to any existing trait and its traitDefinition that wants to take advantage of
 the extensibility of OAM. Any trait that only applies to a certain type of workload, such as
  `EtcdBackup` trait, doesn't need to use this mechanism.
 - WorkloadDefinition: workload owners can modify the existing workloadDefinition if needed.
+- Scope & ScopeDefinitiion: This mechanism is optional so all existing scope controller still works. 
+But for those scopes with `spec.workloadRefs`, their owner should add `spec.workloadRefsPath: spec.workloadRefs` in corresponding `scopeDefiniton`.  
 
 ## Alternative approach
 1. One alternative approach is that we can make the applicationConfiguration controller watch all
