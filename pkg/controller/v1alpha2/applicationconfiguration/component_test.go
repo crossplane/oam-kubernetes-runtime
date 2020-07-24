@@ -7,13 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-
 	"github.com/stretchr/testify/assert"
-
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/apps/v1"
 	v12 "k8s.io/api/core/v1"
@@ -26,6 +22,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllertest"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 func TestComponentHandler(t *testing.T) {
@@ -33,7 +31,7 @@ func TestComponentHandler(t *testing.T) {
 	fakeAppClient := fake.NewSimpleClientset().AppsV1()
 	var curComp = &v1alpha2.Component{}
 	var instance = ComponentHandler{
-		client: &test.MockClient{
+		Client: &test.MockClient{
 			MockList: test.NewMockListFn(nil, func(obj runtime.Object) error {
 				lists := v1alpha2.ApplicationConfigurationList{
 					Items: []v1alpha2.ApplicationConfiguration{
@@ -61,8 +59,8 @@ func TestComponentHandler(t *testing.T) {
 				return nil
 			}),
 		},
-		appsClient: fakeAppClient,
-		l:          logging.NewLogrLogger(ctrl.Log.WithName("test")),
+		AppsClient: fakeAppClient,
+		Logger:     logging.NewLogrLogger(ctrl.Log.WithName("test")),
 	}
 	comp := &v1alpha2.Component{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "biz", Name: "comp1"},

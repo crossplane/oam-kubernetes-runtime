@@ -10,9 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/davecgh/go-spew/spew"
 	plur "github.com/gertd/go-pluralize"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
