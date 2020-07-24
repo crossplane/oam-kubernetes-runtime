@@ -19,11 +19,11 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"testing"
 	"time"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
