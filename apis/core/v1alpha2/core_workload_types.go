@@ -17,11 +17,12 @@ limitations under the License.
 package v1alpha2
 
 import (
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
 // An OperatingSystem required by a containerised workload.
@@ -380,6 +381,8 @@ type ContainerizedWorkloadStatus struct {
 	// Resources managed by this containerised workload.
 	Resources []runtimev1alpha1.TypedReference `json:"resources,omitempty"`
 }
+
+var _ oam.Workload = &ContainerizedWorkload{}
 
 // +kubebuilder:object:root=true
 
