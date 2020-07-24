@@ -19,10 +19,11 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"testing"
+	"time"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
@@ -272,7 +273,153 @@ func TestReconciler(t *testing.T) {
 				result: reconcile.Result{RequeueAfter: dependCheckWait},
 			},
 		},
-		"Success": {
+		"FailedPreHook": {
+			reason: "Rendered workloads should be reflected in status",
+			args: args{
+				m: &mock.Manager{
+					Client: &test.MockClient{
+						MockGet:    test.NewMockGetFn(nil),
+						MockDelete: test.NewMockDeleteFn(nil),
+						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
+							want := ac(
+								withConditions(runtimev1alpha1.ReconcileError(errors.Wrap(errBoom, errExecutePrehooks))),
+							)
+							if diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty()); diff != "" {
+								t.Errorf("\nclient.Status().Update(): -want, +got:\n%s", diff)
+								return errUnexpectedStatus
+							}
+							return nil
+						}),
+					},
+				},
+				o: []ReconcilerOption{
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
+					})),
+					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+						return nil
+					})),
+					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
+						return []unstructured.Unstructured{*trait}
+					})),
+					WithPrehook("preHookSuccess", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+					})),
+					WithPrehook("preHookFailed", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: 15 * time.Second}, errBoom
+					})),
+					WithPosthook("postHook", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: shortWait}, nil
+					})),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: 15 * time.Second},
+			},
+		},
+		"FailedPostHook": {
+			reason: "Rendered workloads should be reflected in status",
+			args: args{
+				m: &mock.Manager{
+					Client: &test.MockClient{
+						MockGet:    test.NewMockGetFn(nil),
+						MockDelete: test.NewMockDeleteFn(nil),
+						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
+							want := ac(
+								withWorkloadStatuses(v1alpha2.WorkloadStatus{
+									ComponentName: componentName,
+									Reference: runtimev1alpha1.TypedReference{
+										APIVersion: workload.GetAPIVersion(),
+										Kind:       workload.GetKind(),
+										Name:       workload.GetName(),
+									},
+								}),
+							)
+							want.SetConditions(runtimev1alpha1.ReconcileSuccess())
+							diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty())
+							want.SetConditions(runtimev1alpha1.ReconcileError(errors.Wrap(errBoom, errExecutePosthooks)))
+							diffPost := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty())
+							if diff != "" && diffPost != "" {
+								t.Errorf("\nclient.Status().Update(): -want, +got:\n%s, \n%s", diff, diffPost)
+								return errUnexpectedStatus
+							}
+							return nil
+						}),
+					},
+				},
+				o: []ReconcilerOption{
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
+					})),
+					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+						return nil
+					})),
+					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
+						return []unstructured.Unstructured{*trait}
+					})),
+					WithPosthook("preHookSuccess", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: shortWait}, nil
+					})),
+					WithPosthook("preHookFailed", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: 15 * time.Second}, errBoom
+					})),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: 15 * time.Second},
+			},
+		},
+		"FailedPreAndPostHook": {
+			reason: "Rendered workloads should be reflected in status",
+			args: args{
+				m: &mock.Manager{
+					Client: &test.MockClient{
+						MockGet:    test.NewMockGetFn(nil),
+						MockDelete: test.NewMockDeleteFn(nil),
+						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
+							want := ac(
+								withConditions(runtimev1alpha1.ReconcileError(errors.Wrap(errBoom, errExecutePrehooks))),
+							)
+							diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty())
+							want.SetConditions(runtimev1alpha1.ReconcileError(errors.Wrap(errBoom, errExecutePosthooks)))
+							diffPost := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty())
+							if diff != "" && diffPost != "" {
+								t.Errorf("\nclient.Status().Update(): -want, +got:\n%s, \n%s", diff, diffPost)
+								return errUnexpectedStatus
+							}
+							return nil
+						}),
+					},
+				},
+				o: []ReconcilerOption{
+					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
+						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
+					})),
+					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+						return nil
+					})),
+					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
+						return []unstructured.Unstructured{*trait}
+					})),
+					WithPrehook("preHookSuccess", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+					})),
+					WithPrehook("preHookFailed", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: 15 * time.Second}, errBoom
+					})),
+					WithPosthook("preHookSuccess", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: shortWait}, nil
+					})),
+					WithPosthook("preHookFailed", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: 15 * time.Second}, errBoom
+					})),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: 15 * time.Second},
+			},
+		},
+		"SuccessWithHooks": {
 			reason: "Rendered workloads should be reflected in status",
 			args: args{
 				m: &mock.Manager{
@@ -308,6 +455,12 @@ func TestReconciler(t *testing.T) {
 					})),
 					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
 						return []unstructured.Unstructured{*trait}
+					})),
+					WithPrehook("preHook", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: shortWait}, nil
+					})),
+					WithPosthook("postHook", ControllerHooksFn(func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, logger logging.Logger) (reconcile.Result, error) {
+						return reconcile.Result{RequeueAfter: shortWait}, nil
 					})),
 				},
 			},
@@ -935,152 +1088,6 @@ func TestDependency(t *testing.T) {
 			}
 			tc.want.verifyWorkloads(ws)
 			if diff := cmp.Diff(tc.want.depStatus, ds); diff != "" {
-				t.Error(diff)
-			}
-		})
-	}
-}
-
-func TestMatchValue(t *testing.T) {
-	obj := &unstructured.Unstructured{}
-	obj.SetAPIVersion("v1")
-	obj.SetKind("Workload")
-	obj.SetNamespace("test-ns")
-	obj.SetName("unready-workload")
-	if err := unstructured.SetNestedField(obj.Object, "test", "key"); err != nil {
-		t.Fatal(err)
-	}
-	paved, err := fieldpath.PaveObject(obj)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	type args struct {
-		conds []v1alpha2.ConditionRequirement
-		val   string
-		paved *fieldpath.Paved
-	}
-	type want struct {
-		matched bool
-	}
-	cases := map[string]struct {
-		args args
-		want want
-	}{
-		"No conditions with nonempty value should match": {},
-		"No conditions with empty value should not match": {
-			args: args{
-				val: "test",
-			},
-			want: want{
-				matched: true,
-			},
-		},
-		"eq condition with same value should match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator: v1alpha2.ConditionEqual,
-					Value:    "test",
-				}},
-				val: "test",
-			},
-			want: want{
-				matched: true,
-			},
-		},
-		"eq condition with different value should not match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator: v1alpha2.ConditionEqual,
-					Value:    "test",
-				}},
-				val: "different",
-			},
-			want: want{
-				matched: false,
-			},
-		},
-		"notEq condition with different value should match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator: v1alpha2.ConditionNotEqual,
-					Value:    "test",
-				}},
-				val: "different",
-			},
-			want: want{
-				matched: true,
-			},
-		},
-		"notEq condition with same value should not match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator: v1alpha2.ConditionNotEqual,
-					Value:    "test",
-				}},
-				val: "test",
-			},
-			want: want{
-				matched: false,
-			},
-		},
-		"notEmpty condition with nonempty value should match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator: v1alpha2.ConditionNotEmpty,
-				}},
-				val: "test",
-			},
-			want: want{
-				matched: true,
-			},
-		},
-		"notEmpty condition with empty value should not match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator: v1alpha2.ConditionNotEmpty,
-				}},
-				val: "",
-			},
-			want: want{
-				matched: false,
-			},
-		},
-		"eq condition with same value from FieldPath should match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator:  v1alpha2.ConditionEqual,
-					Value:     "test",
-					FieldPath: "key",
-				}},
-				paved: paved,
-			},
-			want: want{
-				matched: true,
-			},
-		},
-		"eq condition with different value from FieldPath should not match": {
-			args: args{
-				conds: []v1alpha2.ConditionRequirement{{
-					Operator:  v1alpha2.ConditionEqual,
-					Value:     "different",
-					FieldPath: "key",
-				}},
-				paved: paved,
-			},
-			want: want{
-				matched: false,
-			},
-		},
-	}
-
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			matched, err := matchValue(tc.args.conds, tc.args.val, tc.args.paved)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if diff := cmp.Diff(tc.want.matched, matched); diff != "" {
 				t.Error(diff)
 			}
 		})

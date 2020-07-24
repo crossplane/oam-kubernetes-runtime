@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -1056,4 +1056,150 @@ func TestPassThroughObjMeta(t *testing.T) {
 			t.Errorf("labels got:%v,want:%v", gotLabels, wantLabels)
 		}
 	})
+}
+
+func TestMatchValue(t *testing.T) {
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("v1")
+	obj.SetKind("Workload")
+	obj.SetNamespace("test-ns")
+	obj.SetName("unready-workload")
+	if err := unstructured.SetNestedField(obj.Object, "test", "key"); err != nil {
+		t.Fatal(err)
+	}
+	paved, err := fieldpath.PaveObject(obj)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type args struct {
+		conds []v1alpha2.ConditionRequirement
+		val   string
+		paved *fieldpath.Paved
+	}
+	type want struct {
+		matched bool
+	}
+	cases := map[string]struct {
+		args args
+		want want
+	}{
+		"No conditions with nonempty value should match": {},
+		"No conditions with empty value should not match": {
+			args: args{
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with same value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionEqual,
+					Value:    "test",
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with different value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionEqual,
+					Value:    "test",
+				}},
+				val: "different",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"notEq condition with different value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEqual,
+					Value:    "test",
+				}},
+				val: "different",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"notEq condition with same value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEqual,
+					Value:    "test",
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"notEmpty condition with nonempty value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEmpty,
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"notEmpty condition with empty value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEmpty,
+				}},
+				val: "",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"eq condition with same value from FieldPath should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					Value:     "test",
+					FieldPath: "key",
+				}},
+				paved: paved,
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with different value from FieldPath should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					Value:     "different",
+					FieldPath: "key",
+				}},
+				paved: paved,
+			},
+			want: want{
+				matched: false,
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			matched, err := matchValue(tc.args.conds, tc.args.val, tc.args.paved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.want.matched, matched); diff != "" {
+				t.Error(diff)
+			}
+		})
+	}
 }
