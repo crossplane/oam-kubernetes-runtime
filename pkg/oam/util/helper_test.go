@@ -151,6 +151,120 @@ var _ = Describe("Test LocateParentAppConfig helper utils", func() {
 	})
 })
 
+var _ = Describe(" Trait Controller Test", func() {
+	BeforeEach(func() {
+		logf.Log.Info("Set up resources before a unit test")
+	})
+
+	AfterEach(func() {
+		logf.Log.Info("Clean up resources after a unit test")
+	})
+
+	It("Test fetch the workload the trait is reference to", func() {
+		By("Setting up variables")
+		log := ctrl.Log.WithName("ManualScalarTraitReconciler")
+		manualScalar := &v1alpha2.ManualScalerTrait{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: v1alpha2.SchemeGroupVersion.String(),
+				Kind:       v1alpha2.ManualScalerTraitKind,
+			},
+			Spec: v1alpha2.ManualScalerTraitSpec{
+				ReplicaCount: 3,
+				WorkloadReference: v1alpha1.TypedReference{
+					APIVersion: "apiversion",
+					Kind:       "Kind",
+					Name:       "wokload-example",
+				},
+			},
+		}
+		ctx := context.Background()
+		wl := v1alpha2.ContainerizedWorkload{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: v1alpha2.SchemeGroupVersion.String(),
+				Kind:       v1alpha2.ContainerizedWorkloadKind,
+			},
+		}
+		uwl, _ := util.Object2Unstructured(wl)
+		workloadErr := fmt.Errorf("workload errr")
+		updateErr := fmt.Errorf("update errr")
+
+		type fields struct {
+			getFunc         test.ObjectFn
+			patchStatusFunc test.MockStatusPatchFn
+		}
+		type want struct {
+			wl     *unstructured.Unstructured
+			result ctrl.Result
+			err    error
+		}
+		cases := map[string]struct {
+			fields fields
+			want   want
+		}{
+			"FetchWorkload fails when getWorkload fails": {
+				fields: fields{
+					getFunc: func(obj runtime.Object) error {
+						return workloadErr
+					},
+					patchStatusFunc: func(_ context.Context, obj runtime.Object, patch client.Patch,
+						_ ...client.PatchOption) error {
+						return nil
+					},
+				},
+				want: want{
+					wl:     nil,
+					result: util.ReconcileWaitResult,
+					err:    nil,
+				},
+			},
+			"FetchWorkload fail and update fails when getWorkload fails": {
+				fields: fields{
+					getFunc: func(obj runtime.Object) error {
+						return workloadErr
+					},
+					patchStatusFunc: func(_ context.Context, obj runtime.Object, patch client.Patch,
+						_ ...client.PatchOption) error {
+						return updateErr
+					},
+				},
+				want: want{
+					wl:     nil,
+					result: util.ReconcileWaitResult,
+					err:    errors.Wrap(updateErr, util.ErrUpdateStatus),
+				},
+			},
+			"FetchWorkload succeeds when getWorkload succeeds": {
+				fields: fields{
+					getFunc: func(obj runtime.Object) error {
+						o, _ := obj.(*unstructured.Unstructured)
+						*o = *uwl
+						return nil
+					},
+					patchStatusFunc: func(_ context.Context, obj runtime.Object, patch client.Patch,
+						_ ...client.PatchOption) error {
+						return updateErr
+					},
+				},
+				want: want{
+					wl:     uwl,
+					result: ctrl.Result{},
+					err:    nil,
+				},
+			},
+		}
+		for name, tc := range cases {
+			tclient := test.NewMockClient()
+			tclient.MockGet = test.NewMockGetFn(nil, tc.fields.getFunc)
+			tclient.MockStatusPatch = tc.fields.patchStatusFunc
+			gotWL, result, err := util.FetchWorkload(ctx, tclient, log, manualScalar)
+			By(fmt.Sprint("Running test: ", name))
+			Expect(tc.want.err).Should(util.BeEquivalentToError(err))
+			Expect(tc.want.wl).Should(Equal(gotWL))
+			Expect(tc.want.result).Should(Equal(result))
+		}
+	})
+})
+
 var _ = Describe("Test scope related helper utils", func() {
 	ctx := context.Background()
 	namespace := "oamNS"
