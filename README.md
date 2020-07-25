@@ -1,6 +1,10 @@
 # OAM Kubernetes Runtime
 
+[![License](https://img.shields.io/github/license/crossplane/oam-kubernetes-runtime?style=flat-square)](https://img.shields.io/github/license/crossplane/oam-kubernetes-runtime?style=flat-square)
 [![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/mod/github.com/crossplane/oam-kubernetes-runtime)
+[![docker pulls](https://img.shields.io/docker/pulls/crossplane/oam-kubernetes-runtime?style=flat-square)](https://img.shields.io/docker/pulls/crossplane/oam-kubernetes-runtime?style=flat-square)
+[![github issues](https://img.shields.io/github/issues/crossplane/oam-kubernetes-runtime?style=flat-square)](https://img.shields.io/github/issues/crossplane/oam-kubernetes-runtime?style=flat-square)
+[![github prs](https://img.shields.io/github/issues-pr/crossplane/oam-kubernetes-runtime?style=flat-square)](https://img.shields.io/github/issues-pr/crossplane/oam-kubernetes-runtime?style=flat-square)
 
 The OAM Kubernetes runtime project is a collection of OAM core controllers and Golang helper
 libraries. It is designed to help OAM platform builders to quickly build an end-user facing OAM
