@@ -16,10 +16,3 @@ spec:
           env:
             - name: TEST_ENV
               value: test
-  parameters:
-    - name: instance-name
-      fieldPaths:
-        - metadata.name
-    - name: image
-      fieldPaths:
-        - spec.containers[0].image
