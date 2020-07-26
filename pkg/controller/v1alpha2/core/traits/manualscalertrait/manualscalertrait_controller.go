@@ -95,7 +95,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	eventObj, err := util.LocateParentAppConfig(ctx, r.Client, &manualScalar)
 	if eventObj == nil {
 		// fallback to workload itself
-		mLog.Error(err, "manualScalar", manualScalar.Name)
+		mLog.Error(err, "Failed to find the parent resource", "manualScalar", manualScalar.Name)
 		eventObj = &manualScalar
 	}
 	// Fetch the workload instance this trait is referring to
