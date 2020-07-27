@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/davecgh/go-spew/spew"
 	plur "github.com/gertd/go-pluralize"
@@ -46,6 +48,8 @@ const (
 	ErrUpdateStatus = "cannot apply status"
 	//ErrLocateAppConfig is the error while locating parent application.
 	ErrLocateAppConfig = "cannot locate the parent application configuration to emit event to"
+	// ErrLocateWorkload is the error while locate the workload
+	ErrLocateWorkload = "cannot find the workload that the trait is referencing to"
 )
 
 // A ConditionedObject is an Object type with condition field
@@ -76,6 +80,31 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 		return eventObj, nil
 	}
 	return nil, errors.Errorf(ErrLocateAppConfig)
+}
+
+// FetchWorkload fetch the workload that a trait is reference to
+func FetchWorkload(ctx context.Context, c client.Client, mLog logr.Logger, oamTrait oam.Trait) (
+	*unstructured.Unstructured, ctrl.Result, error) {
+	var workload unstructured.Unstructured
+	workloadRef := oamTrait.GetWorkloadReference()
+	if len(workloadRef.Kind) == 0 || len(workloadRef.APIVersion) == 0 || len(workloadRef.Name) == 0 {
+		err := errors.New("no workload reference")
+		mLog.Error(err, ErrLocateWorkload)
+		return nil, ReconcileWaitResult,
+			PatchCondition(ctx, c, oamTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, ErrLocateWorkload)))
+	}
+	workload.SetAPIVersion(workloadRef.APIVersion)
+	workload.SetKind(workloadRef.Kind)
+	wn := client.ObjectKey{Name: workloadRef.Name, Namespace: oamTrait.GetNamespace()}
+	if err := c.Get(ctx, wn, &workload); err != nil {
+		mLog.Error(err, "Workload not find", "kind", workloadRef.Kind, "workload name", workloadRef.Name)
+		return nil, ReconcileWaitResult,
+			PatchCondition(ctx, c, oamTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, ErrLocateWorkload)))
+	}
+	mLog.Info("Get the workload the trait is pointing to", "workload name", workload.GetName(),
+		"workload APIVersion", workload.GetAPIVersion(), "workload Kind", workload.GetKind(), "workload UID",
+		workload.GetUID())
+	return &workload, ctrl.Result{}, nil
 }
 
 // FetchScopeDefinition fetch corresponding scopeDefinition given a scope
