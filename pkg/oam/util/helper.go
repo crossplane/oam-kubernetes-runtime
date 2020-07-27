@@ -42,12 +42,14 @@ const (
 )
 
 const (
-	//ErrUpdateStatus is the eror while applying status.
+	//ErrUpdateStatus is the error while applying status.
 	ErrUpdateStatus = "cannot apply status"
 	//ErrLocateAppConfig is the error while locating parent application.
 	ErrLocateAppConfig = "cannot locate the parent application configuration to emit event to"
 	// ErrLocateWorkload is the error while locate the workload
 	ErrLocateWorkload = "cannot find the workload that the trait is referencing to"
+	// ErrFetchChildResources is the error while fetching workload child resources
+	ErrFetchChildResources = "failed to fetch workload child resources"
 )
 
 // A ConditionedObject is an Object type with condition field

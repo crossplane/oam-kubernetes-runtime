@@ -43,7 +43,6 @@ import (
 
 // Reconcile error strings.
 const (
-	errFetchChildResources     = "failed to fetch workload child resources"
 	errQueryOpenAPI            = "failed to query openAPI"
 	errPatchTobeScaledResource = "cannot patch the resource for scale"
 	errScaleResource           = "cannot scale the resource"
@@ -108,9 +107,9 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	resources, err := util.FetchWorkloadChildResources(ctx, mLog, r, workload)
 	if err != nil {
 		mLog.Error(err, "Error while fetching the workload child resources", "workload", workload.UnstructuredContent())
-		r.record.Event(eventObj, event.Warning(errFetchChildResources, err))
+		r.record.Event(eventObj, event.Warning(util.ErrFetchChildResources, err))
 		return util.ReconcileWaitResult, util.PatchCondition(ctx, r, &manualScalar,
-			cpv1alpha1.ReconcileError(fmt.Errorf(errFetchChildResources)))
+			cpv1alpha1.ReconcileError(fmt.Errorf(util.ErrFetchChildResources)))
 	}
 	// include the workload itself if there is no child resources
 	if len(resources) == 0 {
