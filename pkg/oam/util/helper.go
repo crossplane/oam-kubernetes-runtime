@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	ctrl "sigs.k8s.io/controller-runtime"
-
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/davecgh/go-spew/spew"
 	plur "github.com/gertd/go-pluralize"
@@ -82,29 +80,27 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 	return nil, errors.Errorf(ErrLocateAppConfig)
 }
 
-// FetchWorkload fetch the workload that a trait is reference to
+// FetchWorkload fetch the workload that a trait refers to
 func FetchWorkload(ctx context.Context, c client.Client, mLog logr.Logger, oamTrait oam.Trait) (
-	*unstructured.Unstructured, ctrl.Result, error) {
+	*unstructured.Unstructured, error) {
 	var workload unstructured.Unstructured
 	workloadRef := oamTrait.GetWorkloadReference()
 	if len(workloadRef.Kind) == 0 || len(workloadRef.APIVersion) == 0 || len(workloadRef.Name) == 0 {
 		err := errors.New("no workload reference")
 		mLog.Error(err, ErrLocateWorkload)
-		return nil, ReconcileWaitResult,
-			PatchCondition(ctx, c, oamTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, ErrLocateWorkload)))
+		return nil, err
 	}
 	workload.SetAPIVersion(workloadRef.APIVersion)
 	workload.SetKind(workloadRef.Kind)
 	wn := client.ObjectKey{Name: workloadRef.Name, Namespace: oamTrait.GetNamespace()}
 	if err := c.Get(ctx, wn, &workload); err != nil {
 		mLog.Error(err, "Workload not find", "kind", workloadRef.Kind, "workload name", workloadRef.Name)
-		return nil, ReconcileWaitResult,
-			PatchCondition(ctx, c, oamTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, ErrLocateWorkload)))
+		return nil, err
 	}
 	mLog.Info("Get the workload the trait is pointing to", "workload name", workload.GetName(),
 		"workload APIVersion", workload.GetAPIVersion(), "workload Kind", workload.GetKind(), "workload UID",
 		workload.GetUID())
-	return &workload, ctrl.Result{}, nil
+	return &workload, nil
 }
 
 // FetchScopeDefinition fetch corresponding scopeDefinition given a scope

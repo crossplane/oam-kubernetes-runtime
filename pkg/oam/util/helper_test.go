@@ -193,9 +193,8 @@ var _ = Describe(" Trait Controller Test", func() {
 			patchStatusFunc test.MockStatusPatchFn
 		}
 		type want struct {
-			wl     *unstructured.Unstructured
-			result ctrl.Result
-			err    error
+			wl  *unstructured.Unstructured
+			err error
 		}
 		cases := map[string]struct {
 			fields fields
@@ -212,9 +211,8 @@ var _ = Describe(" Trait Controller Test", func() {
 					},
 				},
 				want: want{
-					wl:     nil,
-					result: util.ReconcileWaitResult,
-					err:    nil,
+					wl:  nil,
+					err: nil,
 				},
 			},
 			"FetchWorkload fail and update fails when getWorkload fails": {
@@ -228,9 +226,8 @@ var _ = Describe(" Trait Controller Test", func() {
 					},
 				},
 				want: want{
-					wl:     nil,
-					result: util.ReconcileWaitResult,
-					err:    errors.Wrap(updateErr, util.ErrUpdateStatus),
+					wl:  nil,
+					err: errors.Wrap(updateErr, util.ErrUpdateStatus),
 				},
 			},
 			"FetchWorkload succeeds when getWorkload succeeds": {
@@ -246,9 +243,8 @@ var _ = Describe(" Trait Controller Test", func() {
 					},
 				},
 				want: want{
-					wl:     uwl,
-					result: ctrl.Result{},
-					err:    nil,
+					wl:  uwl,
+					err: nil,
 				},
 			},
 		}
@@ -256,11 +252,10 @@ var _ = Describe(" Trait Controller Test", func() {
 			tclient := test.NewMockClient()
 			tclient.MockGet = test.NewMockGetFn(nil, tc.fields.getFunc)
 			tclient.MockStatusPatch = tc.fields.patchStatusFunc
-			gotWL, result, err := util.FetchWorkload(ctx, tclient, log, manualScalar)
+			gotWL, err := util.FetchWorkload(ctx, tclient, log, manualScalar)
 			By(fmt.Sprint("Running test: ", name))
 			Expect(tc.want.err).Should(util.BeEquivalentToError(err))
 			Expect(tc.want.wl).Should(Equal(gotWL))
-			Expect(tc.want.result).Should(Equal(result))
 		}
 	})
 })

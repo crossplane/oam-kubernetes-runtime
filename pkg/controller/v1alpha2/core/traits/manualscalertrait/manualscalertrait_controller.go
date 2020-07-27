@@ -97,10 +97,11 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		eventObj = &manualScalar
 	}
 	// Fetch the workload instance this trait is referring to
-	workload, result, err := util.FetchWorkload(ctx, r, mLog, &manualScalar)
+	workload, err := util.FetchWorkload(ctx, r, mLog, &manualScalar)
 	if err != nil {
 		r.record.Event(eventObj, event.Warning(util.ErrLocateWorkload, err))
-		return result, err
+		return util.ReconcileWaitResult, util.PatchCondition(
+			ctx, r, &manualScalar, cpv1alpha1.ReconcileError(errors.Wrap(err, util.ErrLocateWorkload)))
 	}
 
 	// Fetch the child resources list from the corresponding workload
@@ -116,7 +117,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		resources = append(resources, workload)
 	}
 	// Scale the child resources that we know how to scale
-	result, err = r.scaleResources(ctx, mLog, manualScalar, resources)
+	result, err := r.scaleResources(ctx, mLog, manualScalar, resources)
 	if err != nil {
 		r.record.Event(eventObj, event.Warning(errScaleResource, err))
 		return result, err
