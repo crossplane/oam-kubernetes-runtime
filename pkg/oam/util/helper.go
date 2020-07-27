@@ -173,7 +173,8 @@ func fetchChildResources(ctx context.Context, mLog logr.Logger, r client.Reader,
 			workload.GetUID())
 		if err := r.List(ctx, &crs, client.InNamespace(workload.GetNamespace()),
 			client.MatchingLabels(wcr.Selector)); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("failed to list object %s.%s", crs.GetAPIVersion(), crs.GetKind()))
+			mLog.Error(err, "failed to list object", "api version", crs.GetAPIVersion(), "kind", crs.GetKind())
+			return nil, err
 		}
 		// pick the ones that is owned by the workload
 		for _, cr := range crs.Items {
