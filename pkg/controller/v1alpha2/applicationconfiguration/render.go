@@ -25,12 +25,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
@@ -81,11 +81,10 @@ func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.Application
 }
 
 type components struct {
-	client     client.Reader
-	appsClient clientappv1.AppsV1Interface
-	params     ParameterResolver
-	workload   ResourceRenderer
-	trait      ResourceRenderer
+	client   client.Reader
+	params   ParameterResolver
+	workload ResourceRenderer
+	trait    ResourceRenderer
 }
 
 func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
@@ -251,9 +250,12 @@ func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationC
 	c := &v1alpha2.Component{}
 	var revisionName string
 	if acc.RevisionName != "" {
-		revision, err := r.appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
-		if err != nil {
+		revision := &appsv1.ControllerRevision{}
+		if err := r.client.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: acc.RevisionName}, revision); err != nil {
 			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
+		}
+		if revision.Name == "" {
+			return nil, "", fmt.Errorf("Not found revision %s", acc.RevisionName)
 		}
 		c, err := UnpackRevisionData(revision)
 		if err != nil {

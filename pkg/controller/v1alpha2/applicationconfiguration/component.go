@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -23,11 +23,15 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
+// ControllerRevisionComponentLabel indicate which component the revision belong to
+// This label is to filter revision by client api
+const ControllerRevisionComponentLabel = "controller.oam.dev/component"
+
 // ComponentHandler will watch component change and generate Revision automatically.
 type ComponentHandler struct {
-	Client     client.Client
-	AppsClient clientappv1.AppsV1Interface
-	Logger     logging.Logger
+	Client               client.Client
+	Logger               logging.Logger
+	DefaultRevisionLimit int
 }
 
 // Create implements EventHandler
@@ -100,9 +104,16 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 	if curComp.Status.LatestRevision == nil {
 		return true, 0
 	}
-	oldRev, err := c.AppsClient.ControllerRevisions(mt.GetNamespace()).Get(context.Background(), curComp.Status.LatestRevision.Name, metav1.GetOptions{})
-	if err != nil {
+
+	// client in controller-runtime will use infoermer cache
+	// use client will be more efficient
+	oldRev := &appsv1.ControllerRevision{}
+	if err := c.Client.Get(context.TODO(), client.ObjectKey{Namespace: mt.GetNamespace(), Name: curComp.Status.LatestRevision.Name}, oldRev); err != nil {
 		c.Logger.Info(fmt.Sprintf("get old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
+		return true, curComp.Status.LatestRevision.Revision
+	}
+	if oldRev.Name == "" {
+		c.Logger.Info(fmt.Sprintf("Not found controllerRevision %s", curComp.Status.LatestRevision.Name), "componentName", mt.GetName())
 		return true, curComp.Status.LatestRevision.Revision
 	}
 	oldComp, err := UnpackRevisionData(oldRev)
@@ -111,7 +122,7 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 		return true, oldRev.Revision
 	}
 
-	if reflect.DeepEqual(curComp.Spec, oldComp.Spec) {
+	if curComp.Spec.Equal(&oldComp.Spec) {
 		return false, oldRev.Revision
 	}
 	return true, oldRev.Revision
@@ -154,7 +165,8 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	// set annotation to component
 	revision := appsv1.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: revisionName,
+			Name:      revisionName,
+			Namespace: mt.GetNamespace(),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: v1alpha2.SchemeGroupVersion.String(),
@@ -164,22 +176,89 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 					Controller: newTrue(),
 				},
 			},
+			Labels: map[string]string{
+				ControllerRevisionComponentLabel: curComp.Name,
+			},
 		},
 		Revision: nextRevision,
 		Data:     runtime.RawExtension{Object: curComp},
 	}
-	_, err := c.AppsClient.ControllerRevisions(mt.GetNamespace()).Create(context.Background(), &revision, metav1.CreateOptions{})
+	err := c.Client.Create(context.TODO(), &revision)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
 		return false
+	}
+	c.Logger.Info(fmt.Sprintf("ControllerRevision %s created", revisionName))
+	if int64(c.DefaultRevisionLimit) < nextRevision {
+		if err := c.cleanupControllerRevision(curComp); err != nil {
+			c.Logger.Info(fmt.Sprintf("failed to clean up revisions of Component %v.", err))
+		}
 	}
 	err = c.Client.Status().Update(context.Background(), curComp)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("update component status latestRevision %s err %v", revisionName, err), "componentName", mt.GetName())
 		return false
 	}
-	c.Logger.Info(fmt.Sprintf("ControllerRevision %s created", revisionName))
 	return true
+}
+
+func (c *ComponentHandler) cleanupControllerRevision(curComp *v1alpha2.Component) error {
+	labels := &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			ControllerRevisionComponentLabel: curComp.Name,
+		},
+	}
+	selector, err := metav1.LabelSelectorAsSelector(labels)
+	if err != nil {
+		return err
+	}
+
+	// List and Get Object, controller-runtime will create Informer cache
+	// and will get objects from cache
+	revisions := &appsv1.ControllerRevisionList{}
+	if err := c.Client.List(context.TODO(), revisions, &client.ListOptions{LabelSelector: selector}); err != nil {
+		return err
+	}
+
+	// Get appConfigs and workloads filter controllerRevision used
+	appConfigs := &v1alpha2.ApplicationConfigurationList{}
+	if err := c.Client.List(context.Background(), appConfigs); err != nil {
+		return err
+	}
+
+	// get all revisions used and skipped
+	liveHashes := make(map[string]bool)
+	for _, appConfig := range appConfigs.Items {
+		for _, component := range appConfig.Spec.Components {
+			if component.RevisionName != "" {
+				liveHashes[component.RevisionName] = true
+			}
+		}
+	}
+
+	toKeep := c.DefaultRevisionLimit + len(liveHashes)
+	toKill := len(revisions.Items) - toKeep
+	if toKill <= 0 {
+		return nil
+	}
+	// Clean up old revisions from smallest to highest revision (from oldest to newest)
+	sort.Sort(historiesByRevision(revisions.Items))
+	for _, revision := range revisions.Items {
+		if toKill <= 0 {
+			break
+		}
+		if hash := revision.GetName(); liveHashes[hash] {
+			continue
+		}
+		// Clean up
+		revisionToClean := revision
+		if err := c.Client.Delete(context.TODO(), &revisionToClean); err != nil {
+			return err
+		}
+		c.Logger.Info(fmt.Sprintf("ControllerRevision %s deleted", revision.Name))
+		toKill--
+	}
+	return nil
 }
 
 // ConstructRevisionName will generate revisionName from componentName
@@ -192,4 +271,13 @@ func ConstructRevisionName(componentName string) string {
 func ExtractComponentName(revisionName string) string {
 	splits := strings.Split(revisionName, "-")
 	return strings.Join(splits[0:len(splits)-1], "-")
+}
+
+// historiesByRevision sort controllerRevision by revision
+type historiesByRevision []appsv1.ControllerRevision
+
+func (h historiesByRevision) Len() int      { return len(h) }
+func (h historiesByRevision) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h historiesByRevision) Less(i, j int) bool {
+	return h[i].Revision < h[j].Revision
 }

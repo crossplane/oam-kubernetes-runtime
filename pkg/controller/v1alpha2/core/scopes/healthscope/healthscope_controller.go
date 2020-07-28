@@ -32,6 +32,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
 )
 
 const (
@@ -53,7 +54,7 @@ const (
 )
 
 // Setup adds a controller that reconciles HealthScope.
-func Setup(mgr ctrl.Manager, l logging.Logger) error {
+func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
 	name := "oam/" + strings.ToLower(v1alpha2.HealthScopeGroupKind)
 
 	return ctrl.NewControllerManagedBy(mgr).
