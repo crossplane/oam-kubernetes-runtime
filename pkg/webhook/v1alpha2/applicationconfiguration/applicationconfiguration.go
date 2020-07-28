@@ -15,6 +15,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+const (
+	reasonFmtWorkloadNameNotEmpty = "Versioning-enabled component's workload name MUST NOT be assigned. Expect workload name %q to be empty."
+
+	errFmtCheckWorkloadName = "Error occurs when checking workload name. %q"
+)
+
 var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationconfigurations")
 
 // ValidatingHandler handles CloneSet
@@ -52,6 +58,10 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 			return admission.ValidationResponse(false, reason)
 		}
 		// TODO(wonderflow): Add more validation logic here.
+
+		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, obj); !pass {
+			return admission.ValidationResponse(false, reason)
+		}
 	}
 	return admission.ValidationResponse(true, "")
 }
@@ -60,6 +70,40 @@ func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, stri
 	for _, v := range appConfig.Spec.Components {
 		if v.ComponentName != "" && v.RevisionName != "" {
 			return false, "componentName and revisionName are mutually exclusive, you can only specify one of them"
+		}
+	}
+	return true, ""
+}
+
+// checkWorkloadNameForVersioning check whether versioning-enabled component workload name is empty
+func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
+	for _, v := range appConfig.Spec.Components {
+		acc := v
+		vEnabled, err := checkComponentVersionEnabled(ctx, client, &acc)
+		if err != nil {
+			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
+		}
+		if vEnabled {
+			// only check versioning-enabled compoents
+
+			//TODO(roywang) share almost the same render functions with AppConfig controller
+			// Can we re-use AppConfig controller functions instead of writing again here?
+			c, err := getComponent(ctx, client, acc, appConfig.Namespace)
+			if err != nil {
+				return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
+			}
+			// resolve parameters because workload name may be assigned value by parameters
+			p, err := resolveParams(c.Spec.Parameters, acc.ParameterValues)
+			if err != nil {
+				return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
+			}
+			w, err := renderWorkload(c.Spec.Workload.Raw, p...)
+			if err != nil {
+				return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
+			}
+			if w.GetName() != "" {
+				return false, fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, w.GetName())
+			}
 		}
 	}
 	return true, ""
