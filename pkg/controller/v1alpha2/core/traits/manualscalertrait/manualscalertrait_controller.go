@@ -43,7 +43,6 @@ import (
 
 // Reconcile error strings.
 const (
-	errFetchChildResources     = "failed to fetch workload child resources"
 	errQueryOpenAPI            = "failed to query openAPI"
 	errPatchTobeScaledResource = "cannot patch the resource for scale"
 	errScaleResource           = "cannot scale the resource"
@@ -97,26 +96,27 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		eventObj = &manualScalar
 	}
 	// Fetch the workload instance this trait is referring to
-	workload, result, err := util.FetchWorkload(ctx, r, mLog, &manualScalar)
+	workload, err := util.FetchWorkload(ctx, r, mLog, &manualScalar)
 	if err != nil {
 		r.record.Event(eventObj, event.Warning(util.ErrLocateWorkload, err))
-		return result, err
+		return util.ReconcileWaitResult, util.PatchCondition(
+			ctx, r, &manualScalar, cpv1alpha1.ReconcileError(errors.Wrap(err, util.ErrLocateWorkload)))
 	}
 
 	// Fetch the child resources list from the corresponding workload
 	resources, err := util.FetchWorkloadChildResources(ctx, mLog, r, workload)
 	if err != nil {
 		mLog.Error(err, "Error while fetching the workload child resources", "workload", workload.UnstructuredContent())
-		r.record.Event(eventObj, event.Warning(errFetchChildResources, err))
+		r.record.Event(eventObj, event.Warning(util.ErrFetchChildResources, err))
 		return util.ReconcileWaitResult, util.PatchCondition(ctx, r, &manualScalar,
-			cpv1alpha1.ReconcileError(fmt.Errorf(errFetchChildResources)))
+			cpv1alpha1.ReconcileError(fmt.Errorf(util.ErrFetchChildResources)))
 	}
 	// include the workload itself if there is no child resources
 	if len(resources) == 0 {
 		resources = append(resources, workload)
 	}
 	// Scale the child resources that we know how to scale
-	result, err = r.scaleResources(ctx, mLog, manualScalar, resources)
+	result, err := r.scaleResources(ctx, mLog, manualScalar, resources)
 	if err != nil {
 		r.record.Event(eventObj, event.Warning(errScaleResource, err))
 		return result, err
