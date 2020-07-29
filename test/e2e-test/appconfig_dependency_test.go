@@ -143,7 +143,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, inFooKey, inFoo)
 			},
-			time.Second*15, time.Millisecond*500).Should(&util.NotFoundMatcher{})
+			time.Second*60, time.Second*5).Should(&util.NotFoundMatcher{})
 		By("Checking that resource which provides data is created")
 		outFooKey := client.ObjectKey{
 			Name:      outName,
@@ -155,7 +155,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, outFooKey, outFoo)
 			},
-			time.Second*15, time.Millisecond*500).Should(BeNil())
+			time.Second*60, time.Second*5).Should(BeNil())
 		By("Verify the appconfig's dependency is unsatisfied")
 		appconfigKey := client.ObjectKey{
 			Name:      appConfigName,
@@ -192,7 +192,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				k8sClient.Get(ctx, appconfigKey, appconfig)
 				return appconfig.Status.Dependency
 			},
-			time.Second*15, time.Millisecond*500).Should(Equal(depStatus))
+			time.Second*60, time.Second*5).Should(Equal(depStatus))
 		// fill value to fieldPath
 		err := unstructured.SetNestedField(outFoo.Object, "test", "status", "key")
 		Expect(err).Should(BeNil())
@@ -204,7 +204,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, inFooKey, inFoo)
 			},
-			time.Second*60, time.Second*5).Should(BeNil())
+			time.Second*80, time.Second*5).Should(BeNil())
 		By("Verify the appconfig's dependency is satisfied")
 		appconfig = &v1alpha2.ApplicationConfiguration{}
 		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
@@ -213,7 +213,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				k8sClient.Get(ctx, appconfigKey, appconfig)
 				return appconfig.Status.Dependency.Unsatisfied
 			},
-			time.Second*60, time.Second*5).Should(BeNil())
+			time.Second*80, time.Second*5).Should(BeNil())
 	}
 
 	It("trait depends on another trait", func() {
