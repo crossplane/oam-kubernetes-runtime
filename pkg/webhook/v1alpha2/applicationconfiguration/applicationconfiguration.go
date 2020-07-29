@@ -2,14 +2,21 @@ package applicationconfiguration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -19,6 +26,8 @@ const (
 	reasonFmtWorkloadNameNotEmpty = "Versioning-enabled component's workload name MUST NOT be assigned. Expect workload name %q to be empty."
 
 	errFmtCheckWorkloadName = "Error occurs when checking workload name. %q"
+
+	errFmtUnmarshalWorkload = "Error occurs when unmarshal workload of component %q error: %q"
 )
 
 var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationconfigurations")
@@ -26,6 +35,8 @@ var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationcon
 // ValidatingHandler handles CloneSet
 type ValidatingHandler struct {
 	Client client.Client
+
+	AppsClient clientappv1.AppsV1Interface
 
 	// Decoder decodes objects
 	Decoder *admission.Decoder
@@ -59,7 +70,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		}
 		// TODO(wonderflow): Add more validation logic here.
 
-		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, obj); !pass {
+		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, h.AppsClient, obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
 	}
@@ -76,34 +87,34 @@ func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, stri
 }
 
 // checkWorkloadNameForVersioning check whether versioning-enabled component workload name is empty
-func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
+func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, appsClient clientappv1.ControllerRevisionsGetter, appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
 	for _, v := range appConfig.Spec.Components {
 		acc := v
 		vEnabled, err := checkComponentVersionEnabled(ctx, client, &acc)
 		if err != nil {
 			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
 		}
-		if vEnabled {
-			// only check versioning-enabled compoents
+		if !vEnabled {
+			continue
+		}
+		c, _, err := util.GetComponent(ctx, client, appsClient, acc, appConfig.GetNamespace())
+		if err != nil {
+			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
+		}
 
-			//TODO(roywang) share almost the same render functions with AppConfig controller
-			// Can we re-use AppConfig controller functions instead of writing again here?
-			c, err := getComponent(ctx, client, acc, appConfig.Namespace)
-			if err != nil {
-				return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
-			}
-			// resolve parameters because workload name may be assigned value by parameters
-			p, err := resolveParams(c.Spec.Parameters, acc.ParameterValues)
-			if err != nil {
-				return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
-			}
-			w, err := renderWorkload(c.Spec.Workload.Raw, p...)
-			if err != nil {
-				return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
-			}
-			if w.GetName() != "" {
-				return false, fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, w.GetName())
-			}
+		if ok, workloadName := checkParams(c.Spec.Parameters, acc.ParameterValues); !ok {
+			return false, fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, workloadName)
+		}
+
+		w := &fieldpath.Paved{}
+		if err := json.Unmarshal(c.Spec.Workload.Raw, w); err != nil {
+			return false, fmt.Sprintf(errFmtUnmarshalWorkload, c.GetName(), err.Error())
+		}
+		workload := unstructured.Unstructured{Object: w.UnstructuredContent()}
+		workloadName := workload.GetName()
+
+		if len(workloadName) != 0 {
+			return false, fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, workloadName)
 		}
 	}
 	return true, ""
@@ -126,6 +137,9 @@ func (h *ValidatingHandler) InjectDecoder(d *admission.Decoder) error {
 }
 
 // Register will regsiter application configuration validation to webhook
-func Register(server *webhook.Server) {
-	server.Register("/validating-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{}})
+func Register(mgr manager.Manager) {
+	server := mgr.GetWebhookServer()
+	server.Register("/validating-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{
+		AppsClient: clientappv1.NewForConfigOrDie(mgr.GetConfig()),
+	}})
 }

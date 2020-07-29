@@ -8,6 +8,5 @@ import (
 
 // Add will be called in main and register all validation handlers
 func Add(mgr manager.Manager) {
-	server := mgr.GetWebhookServer()
-	applicationconfiguration.Register(server)
+	applicationconfiguration.Register(mgr)
 }
