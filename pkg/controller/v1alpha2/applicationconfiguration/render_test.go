@@ -94,7 +94,7 @@ func TestRenderComponents(t *testing.T) {
 
 	patchConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-patch", traitName),
+			Name:      fmt.Sprintf(patchNameFmt, traitName),
 			Namespace: namespace,
 		},
 		Data: map[string]string{

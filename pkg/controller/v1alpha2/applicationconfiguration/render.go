@@ -64,6 +64,7 @@ const (
 	StatusKey      = "status"
 	patchConfigKey = "patchConfig"
 	patchKey       = "patch"
+	patchNameFmt   = "%s-cm"
 )
 
 var (
@@ -191,22 +192,30 @@ func (r *components) renderComponent(ctx context.Context, acc *v1alpha2.Applicat
 }
 
 func (r *components) renderComponentFromPatchTrait(ctx context.Context, w *unstructured.Unstructured, acc *v1alpha2.ApplicationConfigurationComponent, t *unstructured.Unstructured) error {
-	patchName := fmt.Sprintf("%s-patch", t.GetName())
+	patchName := fmt.Sprintf(patchNameFmt, t.GetName())
 	dataInput := v1alpha2.DataInput{
 		ValueFrom: v1alpha2.DataInputValueFrom{
 			DataOutputName: patchName,
 		},
 	}
 	acc.DataInputs = append(acc.DataInputs, dataInput)
-	smap, err := fieldpath.Pave(t.Object).GetStringObject(StatusKey)
+	//get trait status
+	targetTraitObject := &unstructured.Unstructured{}
+	targetTraitObject.SetGroupVersionKind(t.GroupVersionKind())
+	if err := r.client.Get(ctx, types.NamespacedName{Name: t.GetName(), Namespace: t.GetNamespace()}, targetTraitObject); err != nil {
+		return err
+	}
+
+	smap, err := fieldpath.Pave(targetTraitObject.Object).GetStringObject(StatusKey)
 	if err != nil && !strings.ContainsAny(err.Error(), errNoSuchField) {
 		return err
 	}
-	if len(smap) == 0 || smap[patchConfigKey] == "" {
+	patchCmName := smap[patchConfigKey]
+	if len(smap) == 0 || patchCmName == "" {
 		return nil
 	}
 	//patch yaml
-	nn := types.NamespacedName{Namespace: w.GetNamespace(), Name: patchName}
+	nn := types.NamespacedName{Namespace: w.GetNamespace(), Name: patchCmName}
 	cm := &corev1.ConfigMap{}
 	var patch string
 	if err := r.client.Get(ctx, nn, cm); err != nil {
@@ -257,7 +266,7 @@ func (r *components) renderTrait(ctx context.Context, ct *v1alpha2.ComponentTrai
 	return t, traitDef, nil
 }
 func (r *components) renderTraitWithOutput(ct *v1alpha2.ComponentTrait, traitName string) {
-	patchName := fmt.Sprintf("%s-patch", traitName)
+	patchName := fmt.Sprintf(patchNameFmt, traitName)
 	//output data
 	dataOutput := v1alpha2.DataOutput{
 		Name:      patchName,
