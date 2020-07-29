@@ -7,7 +7,6 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	json "github.com/json-iterator/go"
@@ -16,24 +15,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func TestApplicationConfigurationValidation(t *testing.T) {
-	var handler admission.Handler = &ValidatingHandler{}
-	mgr := &mock.Manager{
-		Client: &test.MockClient{},
-	}
-	resource := metav1.GroupVersionResource{Group: "core.oam.dev", Version: "v1alpha2", Resource: "applicationconfigurations"}
-	injc := handler.(inject.Client)
-	decoder := handler.(admission.DecoderInjector)
+	handler := &ValidatingHandler{}
+
 	var scheme = runtime.NewScheme()
 	_ = core.AddToScheme(scheme)
 	dec, _ := admission.NewDecoder(scheme)
-	decoder.InjectDecoder(dec)
+	handler.InjectDecoder(dec)
 
+	resource := metav1.GroupVersionResource{Group: "core.oam.dev", Version: "v1alpha2", Resource: "applicationconfigurations"}
+	ctx := context.Background()
+	namespace := "ns"
 	workloadName := "NonEmptyWorkloadName"
 	workloadNameFiledPath := "metadata.name"
 	paramName := "AssignName"
@@ -72,91 +69,109 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 		},
 	}
 
-	cr := appsv1.ControllerRevision{Data: runtime.RawExtension{Object: &v1alpha2.Component{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "",
-			APIVersion: "",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "r1",
-		},
-		Spec: v1alpha2.ComponentSpec{
-			Workload: runtime.RawExtension{
-				Raw: cwRaw,
+	cr := appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: namespace},
+		Data: runtime.RawExtension{Object: &v1alpha2.Component{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "",
+				APIVersion: "",
 			},
-		}}}}
-	crWithWorkloadName := appsv1.ControllerRevision{Data: runtime.RawExtension{Object: &v1alpha2.Component{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "",
-			APIVersion: "",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "r1",
-		},
-		Spec: v1alpha2.ComponentSpec{
-			Workload: runtime.RawExtension{
-				Raw: cwRawWithWorkloadName,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "r1",
+				Namespace: namespace,
 			},
-		}}}}
-	crWithParam := appsv1.ControllerRevision{Data: runtime.RawExtension{Object: &v1alpha2.Component{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "",
-			APIVersion: "",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "r1",
-		},
-		Spec: v1alpha2.ComponentSpec{
-			Workload: runtime.RawExtension{
-				Raw: cwRaw,
-			},
-			Parameters: []v1alpha2.ComponentParameter{
-				{
-					Name:       paramName,
-					FieldPaths: []string{workloadNameFiledPath},
+			Spec: v1alpha2.ComponentSpec{
+				Workload: runtime.RawExtension{
+					Raw: cwRaw,
 				},
+			}}}}
+	crWithWorkloadName := appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: namespace},
+		Data: runtime.RawExtension{Object: &v1alpha2.Component{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "",
+				APIVersion: "",
 			},
-		}}}}
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "r1",
+				Namespace: namespace,
+			},
+			Spec: v1alpha2.ComponentSpec{
+				Workload: runtime.RawExtension{
+					Raw: cwRawWithWorkloadName,
+				},
+			}}}}
+	crWithParam := appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: namespace},
+		Data: runtime.RawExtension{Object: &v1alpha2.Component{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "",
+				APIVersion: "",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "r1",
+				Namespace: namespace,
+			},
+			Spec: v1alpha2.ComponentSpec{
+				Workload: runtime.RawExtension{
+					Raw: cwRaw,
+				},
+				Parameters: []v1alpha2.ComponentParameter{
+					{
+						Name:       paramName,
+						FieldPaths: []string{workloadNameFiledPath},
+					},
+				},
+			}}}}
 
-	appConfigRevisionNameConflict, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			RevisionName:  "r1",
-			ComponentName: "c1",
-		},
-	}}})
-	appConfigCompName, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			ComponentName: "c1",
-			Traits: []v1alpha2.ComponentTrait{
-				{
-					Trait: runtime.RawExtension{
-						Raw: mstRaw,
+	appConfigRevisionNameConflict, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				RevisionName:  "r1",
+				ComponentName: "c1",
+			},
+		}}})
+	appConfigCompName, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				ComponentName: "c1",
+				Traits: []v1alpha2.ComponentTrait{
+					{
+						Trait: runtime.RawExtension{
+							Raw: mstRaw,
+						},
 					},
 				},
 			},
-		},
-	}}})
-	appConfigRevisionName, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			RevisionName: "r1",
-		},
-	}}})
-	appConfigWithParam, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			RevisionName: "r1",
-			ParameterValues: []v1alpha2.ComponentParameterValue{
-				{
-					Name:  paramName,
-					Value: intstr.FromString(workloadName),
+		}}})
+	appConfigRevisionName, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				RevisionName: "r1",
+			},
+		}}})
+	appConfigWithParam, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				RevisionName: "r1",
+				ParameterValues: []v1alpha2.ComponentParameterValue{
+					{
+						Name:  paramName,
+						Value: intstr.FromString(workloadName),
+					},
 				},
 			},
-		},
-	}}})
+		}}})
 
 	tests := []struct {
 		caseName   string
 		req        admission.Request
 		mockGetFun test.MockGetFn
+		mockCR     *appsv1.ControllerRevision
 		pass       bool
 		reason     string
 	}{
@@ -171,6 +186,7 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 			mockGetFun: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 				return nil
 			},
+			mockCR: &cr,
 			pass:   false,
 			reason: "componentName and revisionName are mutually exclusive, you can only specify one of them",
 		},
@@ -182,6 +198,7 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 					Object:   runtime.RawExtension{Raw: appConfigRevisionName},
 				},
 			},
+			mockCR: &cr,
 			mockGetFun: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 				if o, ok := obj.(*appsv1.ControllerRevision); ok {
 					*o = cr
@@ -199,6 +216,7 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 					Object:   runtime.RawExtension{Raw: appConfigRevisionName},
 				},
 			},
+			mockCR: &crWithWorkloadName,
 			mockGetFun: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 				if o, ok := obj.(*appsv1.ControllerRevision); ok {
 					*o = crWithWorkloadName
@@ -217,6 +235,7 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 					Object:   runtime.RawExtension{Raw: appConfigWithParam},
 				},
 			},
+			mockCR: &crWithParam,
 			mockGetFun: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 				if o, ok := obj.(*appsv1.ControllerRevision); ok {
 					*o = crWithParam
@@ -235,6 +254,7 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 					Object:   runtime.RawExtension{Raw: appConfigCompName},
 				},
 			},
+			mockCR: &cr,
 			mockGetFun: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 				if o, ok := obj.(*v1alpha2.TraitDefinition); ok {
 					*o = v1alpha2.TraitDefinition{
@@ -252,14 +272,15 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 		},
 	}
 	for _, tv := range tests {
-		mgr.Client = &test.MockClient{
+		handler.Client = &test.MockClient{
 			MockGet: tv.mockGetFun,
 		}
-		injc.InjectClient(mgr.GetClient())
-		resp := handler.Handle(context.Background(), tv.req)
+		handler.AppsClient = fake.NewSimpleClientset().AppsV1()
+		handler.AppsClient.ControllerRevisions(namespace).Create(ctx, tv.mockCR, metav1.CreateOptions{})
+		resp := handler.Handle(ctx, tv.req)
 		if tv.pass != resp.Allowed {
 			t.Logf("Running Test Case: %v", tv.caseName)
-			t.Errorf("expect %v but got %v from validation;expect reason %v, but got %v", tv.pass, resp.Allowed, tv.reason, resp.Result.Reason)
+			t.Errorf("expect %v but got %v from validation", tv.pass, resp.Allowed)
 		}
 		if tv.reason != "" {
 			if tv.reason != string(resp.Result.Reason) {

@@ -2,6 +2,7 @@ package util_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/adler32"
 	"reflect"
@@ -12,10 +13,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	fakeClient "k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -879,4 +882,127 @@ var _ = Describe("Test PatchCondition helper utils", func() {
 			}
 		}
 	})
+})
+
+var _ = Describe("Test get component helper utils", func() {
+	ctx := context.Background()
+	It("Test Get Component", func() {
+		type Case struct {
+			caseName           string
+			acc                v1alpha2.ApplicationConfigurationComponent
+			expectComponent    *v1alpha2.Component
+			expectRevisionName string
+			expectError        error
+		}
+
+		namespace := "ns"
+		componentName := "newcomponent"
+		revisionName := "newcomponent-aa1111"
+		revisionName2 := "newcomponent-bb1111"
+
+		componnet1 := v1alpha2.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      componentName,
+				Namespace: namespace,
+			},
+			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+			Status: v1alpha2.ComponentStatus{},
+		}
+
+		component2 := v1alpha2.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      componentName,
+				Namespace: namespace,
+			},
+			Spec: v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"apiVersion": "New",
+				},
+			}}}},
+			Status: v1alpha2.ComponentStatus{
+				LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
+			},
+		}
+
+		fakeAppClient := fakeClient.NewSimpleClientset().AppsV1()
+		fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &appsv1.ControllerRevision{
+			ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+			Data:       runtime.RawExtension{Object: &componnet1},
+			Revision:   1,
+		}, metav1.CreateOptions{})
+
+		client := &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+			if o, ok := obj.(*v1alpha2.Component); ok {
+				*o = component2
+			}
+			return nil
+
+		})}
+		testCases := []Case{
+			{
+				caseName:           "get component by revisionName",
+				acc:                v1alpha2.ApplicationConfigurationComponent{RevisionName: revisionName},
+				expectComponent:    &componnet1,
+				expectRevisionName: revisionName,
+				expectError:        nil,
+			},
+			{
+				caseName:           "get component by componentName",
+				acc:                v1alpha2.ApplicationConfigurationComponent{ComponentName: componentName},
+				expectComponent:    &component2,
+				expectRevisionName: revisionName2,
+				expectError:        nil,
+			},
+		}
+
+		for _, tc := range testCases {
+			By("Running:" + tc.caseName)
+			c, r, err := util.GetComponent(ctx, client, fakeAppClient, tc.acc, namespace)
+			Expect(c).Should(Equal(tc.expectComponent))
+			Expect(r).Should(Equal(tc.expectRevisionName))
+			Expect(err).Should(util.BeEquivalentToError(tc.expectError))
+		}
+	})
+
+})
+
+var _ = Describe("Test UnpackRevisionData helper util", func() {
+	It("Test unpack revision data", func() {
+		comp1 := v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}}
+		comp1Raw, _ := json.Marshal(comp1)
+		tests := map[string]struct {
+			rev     *appsv1.ControllerRevision
+			expComp *v1alpha2.Component
+			expErr  error
+			reason  string
+		}{
+			"controllerRevision with Component Obj": {
+				rev:     &appsv1.ControllerRevision{Data: runtime.RawExtension{Object: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}}}},
+				expComp: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}},
+				reason:  "controllerRevision should align with component object",
+			},
+			"controllerRevision with Unknown Obj": {
+				rev:    &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev1"}, Data: runtime.RawExtension{Object: &runtime.Unknown{Raw: comp1Raw}}},
+				reason: "controllerRevision must be decode into component object",
+				expErr: fmt.Errorf("invalid type of revision rev1, type should not be *runtime.Unknown"),
+			},
+			"unmarshal with component data": {
+				rev:     &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev1"}, Data: runtime.RawExtension{Raw: comp1Raw}},
+				reason:  "controllerRevision should unmarshal data and align with component object",
+				expComp: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}},
+			},
+		}
+		for name, ti := range tests {
+			By("Running: " + name)
+			comp, err := util.UnpackRevisionData(ti.rev)
+			if ti.expErr != nil {
+				Expect(err).Should(Equal(ti.expErr))
+			} else {
+				Expect(err).Should(BeNil())
+				Expect(comp).Should(Equal(ti.expComp))
+			}
+		}
+
+	})
+
 })

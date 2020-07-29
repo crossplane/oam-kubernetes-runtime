@@ -17,9 +17,11 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -50,6 +52,11 @@ const (
 	ErrLocateWorkload = "cannot find the workload that the trait is referencing to"
 	// ErrFetchChildResources is the error while fetching workload child resources
 	ErrFetchChildResources = "failed to fetch workload child resources"
+
+	errFmtGetComponentRevision   = "cannot get component revision %q"
+	errFmtControllerRevisionData = "cannot get valid component data from controllerRevision %q"
+	errFmtGetComponent           = "cannot get component %q"
+	errFmtInvalidRevisionType    = "invalid type of revision %s, type should not be %v"
 )
 
 // A ConditionedObject is an Object type with condition field
@@ -277,4 +284,45 @@ func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 		SpewKeys:       true,
 	}
 	_, _ = printer.Fprintf(hasher, "%#v", objectToWrite)
+}
+
+// GetComponent will get Component and RevisionName by AppConfigComponent
+func GetComponent(ctx context.Context, client client.Reader, appsClient clientappv1.ControllerRevisionsGetter, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
+	c := &v1alpha2.Component{}
+	var revisionName string
+	if acc.RevisionName != "" {
+		revision, err := appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
+		if err != nil {
+			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
+		}
+		c, err := UnpackRevisionData(revision)
+		if err != nil {
+			return nil, "", errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
+		}
+		revisionName = acc.RevisionName
+		return c, revisionName, nil
+	}
+	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
+	if err := client.Get(ctx, nn, c); err != nil {
+		return nil, "", errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+	}
+	if c.Status.LatestRevision != nil {
+		revisionName = c.Status.LatestRevision.Name
+	}
+	return c, revisionName, nil
+}
+
+// UnpackRevisionData will unpack revision.Data to Component
+func UnpackRevisionData(rev *appsv1.ControllerRevision) (*v1alpha2.Component, error) {
+	var err error
+	if rev.Data.Object != nil {
+		comp, ok := rev.Data.Object.(*v1alpha2.Component)
+		if !ok {
+			return nil, fmt.Errorf(errFmtInvalidRevisionType, rev.Name, reflect.TypeOf(rev.Data.Object))
+		}
+		return comp, nil
+	}
+	var comp v1alpha2.Component
+	err = json.Unmarshal(rev.Data.Raw, &comp)
+	return &comp, err
 }
