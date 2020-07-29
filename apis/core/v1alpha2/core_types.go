@@ -19,7 +19,6 @@ package v1alpha2
 import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -52,7 +51,7 @@ type WorkloadDefinitionSpec struct {
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
-	Extension *unstructured.Unstructured `json:"extension,omitempty"`
+	Extension runtime.RawExtension `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -101,7 +100,7 @@ type TraitDefinitionSpec struct {
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
-	Extension *unstructured.Unstructured `json:"extension,omitempty"`
+	Extension runtime.RawExtension `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -142,7 +141,7 @@ type ScopeDefinitionSpec struct {
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
-	Extension *unstructured.Unstructured `json:"extension,omitempty"`
+	Extension runtime.RawExtension `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
