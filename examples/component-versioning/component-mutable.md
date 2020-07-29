@@ -2,9 +2,7 @@
 
 ## Prerequisite
 
-1. Make sure [`addon-oam-kubernetes-local`](https://github.com/crossplane/addon-oam-kubernetes-local) was installed.
-2. Before component versioning mechanism released in Crossplane, you can run `go run examples/containerized-workload/main.go`
-   instead of using crossplane. After this feature was released in crossplane, install crossplane will work.
+  Make sure [`OAM runtime`](../../README.md#install-oam-runtime) was installed and started.
 
 ## ApplicationConfiguration always using the latest component
 
@@ -14,7 +12,7 @@ Step 1. Create OAM component
 $ kubectl apply -f examples/containerized-workload/sample_workload_definition.yaml
 $ kubectl apply -f examples/containerized-workload/sample_trait_definition.yaml
 $ kubectl apply -f examples/containerized-workload/sample_scope_definition.yaml
-$ kubectl apply -f examples/containerized-workload/sample_component.yaml
+$ kubectl apply -f examples/component-versioning/sample_component.yaml
 component.core.oam.dev/example-component created
 ``` 
 
@@ -32,6 +30,8 @@ Snapshot of current component stored in this ControllerRevision
 $ kubectl get controllerrevisions.apps example-component-brk71rbipt3d60vfo4t0 -o yaml
 apiVersion: apps/v1
 data:
+  apiVersion: core.oam.dev/v1alpha2
+  kind: Component
   metadata:
     name: example-component
     namespace: default
@@ -51,7 +51,9 @@ data:
           - containerPort: 80
             name: wordpress
   status:
-    latestRevision: ""
+    latestRevision:
+      name: example-component-bsemlvvoceaedeu80kfg
+      revision: 1
 kind: ControllerRevision
 metadata:
   name: example-component-brk71rbipt3d60vfo4t0
@@ -68,7 +70,7 @@ revision: 1
 Step 2. Create AppConfig
 
 ```shell script
-$ kubectl apply -f examples/containerized-workload/sample_application_config.yaml
+$ kubectl apply -f examples/component-versioning/sample_application_config.yaml
 applicationconfiguration.core.oam.dev/example-appconfig created
 ```
 
@@ -188,7 +190,7 @@ component.core.oam.dev "example-component" deleted
 Step 1. The first step is the same. Create OAM component, and check the ControllerRevision.
 
 ```shell script
-$ kubectl apply -f examples/containerized-workload/sample_component.yaml
+$ kubectl apply -f examples/component-versioning/sample_component.yaml
 component.core.oam.dev/example-component created
 ``` 
 
@@ -219,10 +221,10 @@ spec:
               replicaCount: 3
 ```
 
-Assume we name it as `component-mutable-app.yaml` and apply this AppConfig.
+Assume we name it as `examples/component-versioning/component-mutable-app.yaml` and apply this AppConfig.
 
 ```shell script
-$ kubectl apply -f component-mutable-app.yaml
+$ kubectl apply -f examples/component-versioning/component-mutable-app.yaml
 applicationconfiguration.core.oam.dev/example-appconfig created
 ```
 
@@ -270,6 +272,7 @@ component.core.oam.dev/example-component edited
 The controllerRevision was created.
 
 ```shell script
+$ kubectl get controllerrevisions.apps
 NAME                                     CONTROLLER                                 REVISION   AGE
 example-component-brk71b3ipt3d60vfo4sg   component.core.oam.dev/example-component   1          29m
 example-component-brke6rbipt3d60vfo4ug   component.core.oam.dev/example-component   2          73s
