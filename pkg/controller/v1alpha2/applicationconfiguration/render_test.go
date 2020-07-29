@@ -777,7 +777,7 @@ func TestSetWorkloadInstanceName(t *testing.T) {
 				"metadata": []string{},
 			}},
 			c:      &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
-			expErr: errors.Wrapf(errors.New("metadata is not an object"), errSetValueForField, instanceNamePath, "comp"),
+			expErr: errors.Wrapf(errors.New("metadata is not an object"), errSetValueForField, WorkloadNamePath, "comp"),
 		},
 		"set value error for trait revisionEnabled": {
 			u: &unstructured.Unstructured{Object: map[string]interface{}{
@@ -789,7 +789,7 @@ func TestSetWorkloadInstanceName(t *testing.T) {
 				},
 			},
 			c:      &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
-			expErr: errors.Wrapf(errors.New("metadata is not an object"), errSetValueForField, instanceNamePath, "comp"),
+			expErr: errors.Wrapf(errors.New("metadata is not an object"), errSetValueForField, WorkloadNamePath, "comp"),
 		},
 	}
 	for name, ti := range tests {
@@ -821,97 +821,6 @@ func TestSetTraitProperties(t *testing.T) {
 	expU.SetName("comp1")
 	expU.SetNamespace("ns")
 	expU.SetOwnerReferences([]metav1.OwnerReference{{Name: "comp1"}})
-}
-
-func TestGetComponent(t *testing.T) {
-	type Fields struct {
-		client    client.Reader
-		appclient clientappv1.AppsV1Interface
-		params    ParameterResolver
-		workload  ResourceRenderer
-		trait     ResourceRenderer
-	}
-	namespace := "ns"
-	componentName := "newcomponent"
-	revisionName := "newcomponent-aa1111"
-	revisionName2 := "newcomponent-bb1111"
-
-	fakeAppClient := fake.NewSimpleClientset().AppsV1()
-	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
-		Data: runtime.RawExtension{Object: &v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentName,
-				Namespace: namespace,
-			},
-			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
-			Status: v1alpha2.ComponentStatus{},
-		}},
-		Revision: 1,
-	}, metav1.CreateOptions{})
-	var fields = Fields{
-		client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
-			objc, ok := obj.(*v1alpha2.Component)
-			if !ok {
-				return nil
-			}
-
-			c := &v1alpha2.Component{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      componentName,
-					Namespace: namespace,
-				},
-				Spec: v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{Object: map[string]interface{}{
-					"spec": map[string]interface{}{
-						"apiVersion": "New",
-					},
-				}}}},
-				Status: v1alpha2.ComponentStatus{
-					LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
-				},
-			}
-			c.DeepCopyInto(objc)
-			return nil
-		})},
-		appclient: fakeAppClient,
-		params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
-			return nil, nil
-		}),
-		workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
-			w := &unstructured.Unstructured{}
-			return w, nil
-		}),
-	}
-	r := &components{fields.client, fields.appclient, fields.params, fields.workload, fields.trait}
-	c, revision, err := r.getComponent(context.Background(), v1alpha2.ApplicationConfigurationComponent{RevisionName: revisionName}, namespace)
-	assert.NoError(t, err)
-	assert.Equal(t, revisionName, revision)
-	assert.Equal(t, &v1alpha2.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      componentName,
-			Namespace: namespace,
-		},
-		Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
-		Status: v1alpha2.ComponentStatus{},
-	}, c)
-
-	c, revision, err = r.getComponent(context.Background(), v1alpha2.ApplicationConfigurationComponent{ComponentName: componentName}, namespace)
-	assert.NoError(t, err)
-	assert.Equal(t, revisionName2, revision)
-	assert.Equal(t, &v1alpha2.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      componentName,
-			Namespace: namespace,
-		},
-		Spec: v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{Object: map[string]interface{}{
-			"spec": map[string]interface{}{
-				"apiVersion": "New",
-			},
-		}}}},
-		Status: v1alpha2.ComponentStatus{
-			LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
-		},
-	}, c)
 }
 
 var scheme = runtime.NewScheme()

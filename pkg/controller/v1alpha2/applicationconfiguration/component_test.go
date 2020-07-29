@@ -10,7 +10,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/stretchr/testify/assert"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/apps/v1"
 	v12 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -191,42 +190,4 @@ func TestIsMatch(t *testing.T) {
 	appConfigs.Items = nil
 	got, _ = isMatch(&appConfigs, "foo")
 	assert.Equal(t, false, got)
-}
-
-func TestUnpackRevisionData(t *testing.T) {
-	comp1 := v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}}
-	comp1Raw, _ := json.Marshal(comp1)
-	tests := map[string]struct {
-		rev     *appsv1.ControllerRevision
-		expComp *v1alpha2.Component
-		expErr  error
-		reason  string
-	}{
-		"controllerRevision with Component Obj": {
-			rev:     &appsv1.ControllerRevision{Data: runtime.RawExtension{Object: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}}}},
-			expComp: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}},
-			reason:  "controllerRevision should align with component object",
-		},
-		"controllerRevision with Unknown Obj": {
-			rev:    &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev1"}, Data: runtime.RawExtension{Object: &runtime.Unknown{Raw: comp1Raw}}},
-			reason: "controllerRevision must be decode into component object",
-			expErr: fmt.Errorf("invalid type of revision rev1, type should not be *runtime.Unknown"),
-		},
-		"unmarshal with component data": {
-			rev:     &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev1"}, Data: runtime.RawExtension{Raw: comp1Raw}},
-			reason:  "controllerRevision should unmarshal data and align with component object",
-			expComp: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}},
-		},
-	}
-	for name, ti := range tests {
-		t.Run(name, func(t *testing.T) {
-			comp, err := UnpackRevisionData(ti.rev)
-			if ti.expErr != nil {
-				assert.Equal(t, ti.expErr, err, ti.reason)
-			} else {
-				assert.NoError(t, err, ti.reason)
-				assert.Equal(t, ti.expComp, comp, ti.reason)
-			}
-		})
-	}
 }
