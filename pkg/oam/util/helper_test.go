@@ -12,13 +12,13 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	gomegaTypes "github.com/onsi/gomega/types"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	fakeClient "k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -892,13 +892,16 @@ var _ = Describe("Test get component helper utils", func() {
 			acc                v1alpha2.ApplicationConfigurationComponent
 			expectComponent    *v1alpha2.Component
 			expectRevisionName string
-			expectError        error
+			expectErrorMatcher gomegaTypes.GomegaMatcher
 		}
 
 		namespace := "ns"
 		componentName := "newcomponent"
+		invalidComponentName := "invalidComponent"
 		revisionName := "newcomponent-aa1111"
 		revisionName2 := "newcomponent-bb1111"
+		unpackErrorRevisionName := "unpackErrorRevision"
+		errComponentNotFound := errors.New("component not found")
 
 		componnet1 := v1alpha2.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -924,43 +927,82 @@ var _ = Describe("Test get component helper utils", func() {
 			},
 		}
 
-		fakeAppClient := fakeClient.NewSimpleClientset().AppsV1()
-		fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &appsv1.ControllerRevision{
-			ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
-			Data:       runtime.RawExtension{Object: &componnet1},
-			Revision:   1,
-		}, metav1.CreateOptions{})
-
-		client := &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+		client := &test.MockClient{MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 			if o, ok := obj.(*v1alpha2.Component); ok {
-				*o = component2
+				switch key.Name {
+				case componentName:
+					*o = component2
+				case invalidComponentName:
+					return errComponentNotFound
+				default:
+					return nil
+				}
+			}
+			if o, ok := obj.(*appsv1.ControllerRevision); ok {
+				switch key.Name {
+				case revisionName:
+					*o = appsv1.ControllerRevision{
+						ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+						Data:       runtime.RawExtension{Object: &componnet1},
+						Revision:   1,
+					}
+				case unpackErrorRevisionName:
+					*o = appsv1.ControllerRevision{
+						ObjectMeta: metav1.ObjectMeta{Name: unpackErrorRevisionName, Namespace: namespace},
+						Data:       runtime.RawExtension{},
+						Revision:   1,
+					}
+				default:
+					return nil
+				}
 			}
 			return nil
 
-		})}
+		}}
 		testCases := []Case{
 			{
 				caseName:           "get component by revisionName",
 				acc:                v1alpha2.ApplicationConfigurationComponent{RevisionName: revisionName},
 				expectComponent:    &componnet1,
 				expectRevisionName: revisionName,
-				expectError:        nil,
+				expectErrorMatcher: BeNil(),
 			},
 			{
 				caseName:           "get component by componentName",
 				acc:                v1alpha2.ApplicationConfigurationComponent{ComponentName: componentName},
 				expectComponent:    &component2,
 				expectRevisionName: revisionName2,
-				expectError:        nil,
+				expectErrorMatcher: BeNil(),
+			},
+			{
+				caseName:           "not found error occurs when get by revisionName",
+				acc:                v1alpha2.ApplicationConfigurationComponent{RevisionName: "invalidRevisionName"},
+				expectComponent:    nil,
+				expectRevisionName: "",
+				expectErrorMatcher: Not(BeNil()),
+			},
+			{
+				caseName:           "unpack revison data error occurs when get by revisionName",
+				acc:                v1alpha2.ApplicationConfigurationComponent{RevisionName: unpackErrorRevisionName},
+				expectComponent:    nil,
+				expectRevisionName: "",
+				expectErrorMatcher: Not(BeNil()),
+			},
+			{
+				caseName:           "error occurs when get by componentName",
+				acc:                v1alpha2.ApplicationConfigurationComponent{ComponentName: invalidComponentName},
+				expectComponent:    nil,
+				expectRevisionName: "",
+				expectErrorMatcher: Not(BeNil()),
 			},
 		}
 
 		for _, tc := range testCases {
 			By("Running:" + tc.caseName)
-			c, r, err := util.GetComponent(ctx, client, fakeAppClient, tc.acc, namespace)
+			c, r, err := util.GetComponent(ctx, client, tc.acc, namespace)
 			Expect(c).Should(Equal(tc.expectComponent))
 			Expect(r).Should(Equal(tc.expectRevisionName))
-			Expect(err).Should(util.BeEquivalentToError(tc.expectError))
+			Expect(err).Should(tc.expectErrorMatcher)
 		}
 	})
 

@@ -45,15 +45,17 @@ const (
 
 // Render error format strings.
 const (
-	errFmtGetComponent     = "cannot get component %q"
-	errFmtGetScope         = "cannot get scope %q"
-	errFmtResolveParams    = "cannot resolve parameter values for component %q"
-	errFmtRenderWorkload   = "cannot render workload for component %q"
-	errFmtRenderTrait      = "cannot render trait for component %q"
-	errFmtSetParam         = "cannot set parameter %q"
-	errFmtUnsupportedParam = "unsupported parameter %q"
-	errFmtRequiredParam    = "required parameter %q not specified"
-	errSetValueForField    = "can not set value %q for fieldPath %q"
+	errFmtGetComponent           = "cannot get component %q"
+	errFmtGetScope               = "cannot get scope %q"
+	errFmtGetComponentRevision   = "cannot get component revision %q"
+	errFmtResolveParams          = "cannot resolve parameter values for component %q"
+	errFmtRenderWorkload         = "cannot render workload for component %q"
+	errFmtRenderTrait            = "cannot render trait for component %q"
+	errFmtSetParam               = "cannot set parameter %q"
+	errFmtUnsupportedParam       = "unsupported parameter %q"
+	errFmtRequiredParam          = "required parameter %q not specified"
+	errFmtControllerRevisionData = "cannot get valid component data from controllerRevision %q"
+	errSetValueForField          = "can not set value %q for fieldPath %q"
 )
 
 var (
@@ -61,8 +63,7 @@ var (
 	ErrDataOutputNotExist = errors.New("DataOutput does not exist")
 )
 
-// WorkloadNamePath indicates field path of workload name
-const WorkloadNamePath = "metadata.name"
+const instanceNamePath = "metadata.name"
 
 // A ComponentRenderer renders an ApplicationConfiguration's Components into
 // workloads and traits.
@@ -118,7 +119,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	if acc.RevisionName != "" {
 		acc.ComponentName = ExtractComponentName(acc.RevisionName)
 	}
-	c, componentRevisionName, err := util.GetComponent(ctx, r.client, r.appsClient, acc, ac.GetNamespace())
+	c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -223,14 +224,14 @@ func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructur
 	pv := fieldpath.Pave(w.UnstructuredContent())
 	if isRevisionEnabled(traitDefs) {
 		// if revisionEnabled, use revisionName as the workload name
-		if err := pv.SetString(WorkloadNamePath, c.Status.LatestRevision.Name); err != nil {
-			return errors.Wrapf(err, errSetValueForField, WorkloadNamePath, c.Status.LatestRevision)
+		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision.Name); err != nil {
+			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
 		}
 		return nil
 	}
 	// use component name as workload name, which means we will always use one workload for different revisions
-	if err := pv.SetString(WorkloadNamePath, c.GetName()); err != nil {
-		return errors.Wrapf(err, errSetValueForField, WorkloadNamePath, c.GetName())
+	if err := pv.SetString(instanceNamePath, c.GetName()); err != nil {
+		return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.GetName())
 	}
 	w.Object = pv.UnstructuredContent()
 	return nil
@@ -244,6 +245,31 @@ func isRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
 		}
 	}
 	return false
+}
+
+func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
+	c := &v1alpha2.Component{}
+	var revisionName string
+	if acc.RevisionName != "" {
+		revision, err := r.appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
+		if err != nil {
+			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
+		}
+		c, err := UnpackRevisionData(revision)
+		if err != nil {
+			return nil, "", errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
+		}
+		revisionName = acc.RevisionName
+		return c, revisionName, nil
+	}
+	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
+	if err := r.client.Get(ctx, nn, c); err != nil {
+		return nil, "", errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+	}
+	if c.Status.LatestRevision != nil {
+		revisionName = c.Status.LatestRevision.Name
+	}
+	return c, revisionName, nil
 }
 
 // pass through labels and annotation from app-config to workload  or trait
