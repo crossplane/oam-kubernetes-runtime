@@ -51,7 +51,7 @@ var roleBindingName = "oam-role-binding"
 var crd crdv1.CustomResourceDefinition
 
 type DefinitionExtension struct {
-	Alias            string                    `json:alias,omitempty`
+	Alias string `json:alias,omitempty`
 }
 
 func TestAPIs(t *testing.T) {
