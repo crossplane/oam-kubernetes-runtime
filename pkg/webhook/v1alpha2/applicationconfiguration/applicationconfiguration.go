@@ -13,7 +13,6 @@ import (
 
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -28,6 +27,9 @@ const (
 	errFmtCheckWorkloadName = "Error occurs when checking workload name. %q"
 
 	errFmtUnmarshalWorkload = "Error occurs when unmarshal workload of component %q error: %q"
+
+	// WorkloadNamePath indicates field path of workload name
+	WorkloadNamePath = "metadata.name"
 )
 
 var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationconfigurations")
@@ -35,8 +37,6 @@ var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationcon
 // ValidatingHandler handles CloneSet
 type ValidatingHandler struct {
 	Client client.Client
-
-	AppsClient clientappv1.AppsV1Interface
 
 	// Decoder decodes objects
 	Decoder *admission.Decoder
@@ -70,7 +70,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		}
 		// TODO(wonderflow): Add more validation logic here.
 
-		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, h.AppsClient, obj); !pass {
+		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
 	}
@@ -87,7 +87,7 @@ func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, stri
 }
 
 // checkWorkloadNameForVersioning check whether versioning-enabled component workload name is empty
-func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, appsClient clientappv1.ControllerRevisionsGetter, appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
+func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
 	for _, v := range appConfig.Spec.Components {
 		acc := v
 		vEnabled, err := checkComponentVersionEnabled(ctx, client, &acc)
@@ -97,7 +97,7 @@ func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, a
 		if !vEnabled {
 			continue
 		}
-		c, _, err := util.GetComponent(ctx, client, appsClient, acc, appConfig.GetNamespace())
+		c, _, err := util.GetComponent(ctx, client, acc, appConfig.GetNamespace())
 		if err != nil {
 			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
 		}
@@ -139,7 +139,5 @@ func (h *ValidatingHandler) InjectDecoder(d *admission.Decoder) error {
 // Register will regsiter application configuration validation to webhook
 func Register(mgr manager.Manager) {
 	server := mgr.GetWebhookServer()
-	server.Register("/validating-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{
-		AppsClient: clientappv1.NewForConfigOrDie(mgr.GetConfig()),
-	}})
+	server.Register("/validating-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{}})
 }

@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	acCtrl "github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/applicationconfiguration"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -47,7 +46,7 @@ func checkParams(cp []v1alpha2.ComponentParameter, cpv []v1alpha2.ComponentParam
 	targetParams := make(map[string]bool)
 	for _, v := range cp {
 		for _, fp := range v.FieldPaths {
-			if strings.Contains(fp, acCtrl.WorkloadNamePath) {
+			if strings.Contains(fp, WorkloadNamePath) {
 				targetParams[v.Name] = true
 			}
 		}
