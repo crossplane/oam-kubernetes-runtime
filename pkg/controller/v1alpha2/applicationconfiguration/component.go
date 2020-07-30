@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 // ComponentHandler will watch component change and generate Revision automatically.
@@ -106,7 +105,7 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 		c.Logger.Info(fmt.Sprintf("get old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
 		return true, curComp.Status.LatestRevision.Revision
 	}
-	oldComp, err := util.UnpackRevisionData(oldRev)
+	oldComp, err := UnpackRevisionData(oldRev)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("Unmarshal old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
 		return true, oldRev.Revision

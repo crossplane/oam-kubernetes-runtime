@@ -17,11 +17,9 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -287,12 +285,12 @@ func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 }
 
 // GetComponent will get Component and RevisionName by AppConfigComponent
-func GetComponent(ctx context.Context, client client.Reader, appsClient clientappv1.ControllerRevisionsGetter, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
+func GetComponent(ctx context.Context, client client.Reader, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
 	c := &v1alpha2.Component{}
 	var revisionName string
 	if acc.RevisionName != "" {
-		revision, err := appsClient.ControllerRevisions(namespace).Get(ctx, acc.RevisionName, metav1.GetOptions{})
-		if err != nil {
+		revision := &appsv1.ControllerRevision{}
+		if err := client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: acc.RevisionName}, revision); err != nil {
 			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
 		}
 		c, err := UnpackRevisionData(revision)
