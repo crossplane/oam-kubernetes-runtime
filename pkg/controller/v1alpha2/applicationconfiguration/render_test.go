@@ -19,7 +19,6 @@ package applicationconfiguration
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -94,7 +93,7 @@ func TestRenderComponents(t *testing.T) {
 
 	patchConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf(patchNameFmt, traitName),
+			Name:      traitName,
 			Namespace: namespace,
 		},
 		Data: map[string]string{
@@ -265,6 +264,17 @@ func TestRenderComponents(t *testing.T) {
 						ttrait.DeepCopyInto(robj)
 					case *corev1.ConfigMap:
 						patchConfigMap.DeepCopyInto(robj)
+					case *unstructured.Unstructured:
+						t := &unstructured.Unstructured{}
+						content := make(map[string]interface{})
+						patchConfig := make(map[string]interface{})
+						patchConfig["patchConfig"] = patchConfigMap.Name
+						content["status"] = patchConfig
+						//init Object
+						t.SetUnstructuredContent(content)
+						t.SetName(traitName)
+						t.SetNamespace(namespace)
+						t.DeepCopyInto(robj)
 					}
 					return nil
 				})},
@@ -322,7 +332,6 @@ func TestRenderComponents(t *testing.T) {
 								return &Trait{Object: *t}
 							}(),
 						},
-						HasDep: true,
 						Scopes: []unstructured.Unstructured{},
 					},
 				},

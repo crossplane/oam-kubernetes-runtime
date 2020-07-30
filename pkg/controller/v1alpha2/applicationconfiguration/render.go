@@ -64,7 +64,6 @@ const (
 	StatusKey      = "status"
 	patchConfigKey = "patchConfig"
 	patchKey       = "patch"
-	patchNameFmt   = "%s-cm"
 )
 
 var (
@@ -192,10 +191,9 @@ func (r *components) renderComponent(ctx context.Context, acc *v1alpha2.Applicat
 }
 
 func (r *components) renderComponentFromPatchTrait(ctx context.Context, w *unstructured.Unstructured, acc *v1alpha2.ApplicationConfigurationComponent, t *unstructured.Unstructured) error {
-	patchName := fmt.Sprintf(patchNameFmt, t.GetName())
 	dataInput := v1alpha2.DataInput{
 		ValueFrom: v1alpha2.DataInputValueFrom{
-			DataOutputName: patchName,
+			DataOutputName: t.GetName(),
 		},
 	}
 	acc.DataInputs = append(acc.DataInputs, dataInput)
@@ -266,10 +264,9 @@ func (r *components) renderTrait(ctx context.Context, ct *v1alpha2.ComponentTrai
 	return t, traitDef, nil
 }
 func (r *components) renderTraitWithOutput(ct *v1alpha2.ComponentTrait, traitName string) {
-	patchName := fmt.Sprintf(patchNameFmt, traitName)
 	//output data
 	dataOutput := v1alpha2.DataOutput{
-		Name:      patchName,
+		Name:      traitName,
 		FieldPath: fmt.Sprintf("%s.%s", StatusKey, patchConfigKey),
 	}
 	ct.DataOutputs = append(ct.DataOutputs, dataOutput)
