@@ -51,7 +51,7 @@ type WorkloadDefinitionSpec struct {
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
-	Extension runtime.RawExtension `json:"extension,omitempty"`
+	Extension *runtime.RawExtension `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
