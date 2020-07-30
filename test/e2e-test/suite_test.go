@@ -17,7 +17,7 @@ package controllers_test
 
 import (
 	"context"
-	json "github.com/json-iterator/go"
+	"encoding/json"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -50,8 +50,9 @@ var extendedmanualscalertrait v1alpha2.TraitDefinition
 var roleBindingName = "oam-role-binding"
 var crd crdv1.CustomResourceDefinition
 
+// A DefinitionExtension is an Object type for xxxDefinitin.spec.extension
 type DefinitionExtension struct {
-	Alias string `json:alias,omitempty`
+	Alias string `json:"alias,omitempty"`
 }
 
 func TestAPIs(t *testing.T) {
