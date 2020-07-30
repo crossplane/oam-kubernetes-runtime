@@ -35,9 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
@@ -89,28 +87,13 @@ func TestRenderComponents(t *testing.T) {
 			},
 		},
 	}
-	fakeAppClient := fake.NewSimpleClientset().AppsV1()
-	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
-		Data: runtime.RawExtension{Object: &v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentName,
-				Namespace: namespace,
-			},
-			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
-			Status: v1alpha2.ComponentStatus{},
-		}},
-		Revision: 1,
-	}, metav1.CreateOptions{})
-
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 
 	type fields struct {
-		client    client.Reader
-		appclient clientappv1.AppsV1Interface
-		params    ParameterResolver
-		workload  ResourceRenderer
-		trait     ResourceRenderer
+		client   client.Reader
+		params   ParameterResolver
+		workload ResourceRenderer
+		trait    ResourceRenderer
 	}
 	type args struct {
 		ctx context.Context
@@ -231,8 +214,26 @@ func TestRenderComponents(t *testing.T) {
 		"Success-With-RevisionName": {
 			reason: "Workload should successfully be rendered with fixed componentRevision",
 			fields: fields{
-				client:    &test.MockClient{MockGet: test.NewMockGetFn(nil)},
-				appclient: fakeAppClient,
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+					robj, ok := obj.(*v1.ControllerRevision)
+					if ok {
+						rev := &v1.ControllerRevision{
+							ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+							Data: runtime.RawExtension{Object: &v1alpha2.Component{
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      componentName,
+									Namespace: namespace,
+								},
+								Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+								Status: v1alpha2.ComponentStatus{},
+							}},
+							Revision: 1,
+						}
+						rev.DeepCopyInto(robj)
+						return nil
+					}
+					return nil
+				})},
 				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
 					return nil, nil
 				}),
@@ -330,7 +331,7 @@ func TestRenderComponents(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, tc.fields.appclient, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _, err := r.Render(tc.args.ctx, tc.args.ac)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, diff)
@@ -676,7 +677,7 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, nil, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _, _ := r.Render(tc.args.ctx, tc.args.ac)
 			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].Object.GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy()) {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
@@ -825,37 +826,18 @@ func TestSetTraitProperties(t *testing.T) {
 
 func TestGetComponent(t *testing.T) {
 	type Fields struct {
-		client    client.Reader
-		appclient clientappv1.AppsV1Interface
-		params    ParameterResolver
-		workload  ResourceRenderer
-		trait     ResourceRenderer
+		client   client.Reader
+		params   ParameterResolver
+		workload ResourceRenderer
+		trait    ResourceRenderer
 	}
 	namespace := "ns"
 	componentName := "newcomponent"
 	revisionName := "newcomponent-aa1111"
 	revisionName2 := "newcomponent-bb1111"
 
-	fakeAppClient := fake.NewSimpleClientset().AppsV1()
-	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
-		Data: runtime.RawExtension{Object: &v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentName,
-				Namespace: namespace,
-			},
-			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
-			Status: v1alpha2.ComponentStatus{},
-		}},
-		Revision: 1,
-	}, metav1.CreateOptions{})
 	var fields = Fields{
 		client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
-			objc, ok := obj.(*v1alpha2.Component)
-			if !ok {
-				return nil
-			}
-
 			c := &v1alpha2.Component{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      componentName,
@@ -870,10 +852,33 @@ func TestGetComponent(t *testing.T) {
 					LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
 				},
 			}
-			c.DeepCopyInto(objc)
+
+			rev := &v1.ControllerRevision{
+				ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+				Data: runtime.RawExtension{Object: &v1alpha2.Component{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      componentName,
+						Namespace: namespace,
+					},
+					Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+					Status: v1alpha2.ComponentStatus{},
+				}},
+				Revision: 1,
+			}
+
+			objc, ok := obj.(*v1alpha2.Component)
+			if ok {
+				c.DeepCopyInto(objc)
+				return nil
+			}
+			objr, ok := obj.(*v1.ControllerRevision)
+			if ok {
+				rev.DeepCopyInto(objr)
+				return nil
+			}
+
 			return nil
 		})},
-		appclient: fakeAppClient,
 		params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
 			return nil, nil
 		}),
@@ -882,7 +887,7 @@ func TestGetComponent(t *testing.T) {
 			return w, nil
 		}),
 	}
-	r := &components{fields.client, fields.appclient, fields.params, fields.workload, fields.trait}
+	r := &components{fields.client, fields.params, fields.workload, fields.trait}
 	c, revision, err := r.getComponent(context.Background(), v1alpha2.ApplicationConfigurationComponent{RevisionName: revisionName}, namespace)
 	assert.NoError(t, err)
 	assert.Equal(t, revisionName, revision)

@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -25,9 +24,8 @@ import (
 
 // ComponentHandler will watch component change and generate Revision automatically.
 type ComponentHandler struct {
-	Client     client.Client
-	AppsClient clientappv1.AppsV1Interface
-	Logger     logging.Logger
+	Client client.Client
+	Logger logging.Logger
 }
 
 // Create implements EventHandler
@@ -100,9 +98,16 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 	if curComp.Status.LatestRevision == nil {
 		return true, 0
 	}
-	oldRev, err := c.AppsClient.ControllerRevisions(mt.GetNamespace()).Get(context.Background(), curComp.Status.LatestRevision.Name, metav1.GetOptions{})
-	if err != nil {
+
+	// client in controller-runtime will use infoermer cache
+	// use client will be more efficient
+	oldRev := &appsv1.ControllerRevision{}
+	if err := c.Client.Get(context.TODO(), client.ObjectKey{Namespace: mt.GetNamespace(), Name: curComp.Status.LatestRevision.Name}, oldRev); err != nil {
 		c.Logger.Info(fmt.Sprintf("get old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
+		return true, curComp.Status.LatestRevision.Revision
+	}
+	if oldRev.Name == "" {
+		c.Logger.Info(fmt.Sprintf("Not found controllerRevision %s", curComp.Status.LatestRevision.Name), "componentName", mt.GetName())
 		return true, curComp.Status.LatestRevision.Revision
 	}
 	oldComp, err := UnpackRevisionData(oldRev)
@@ -168,7 +173,7 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 		Revision: nextRevision,
 		Data:     runtime.RawExtension{Object: curComp},
 	}
-	_, err := c.AppsClient.ControllerRevisions(mt.GetNamespace()).Create(context.Background(), &revision, metav1.CreateOptions{})
+	err := c.Client.Create(context.TODO(), &revision)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
 		return false
