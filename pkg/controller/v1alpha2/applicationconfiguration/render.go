@@ -25,7 +25,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -45,17 +44,15 @@ const (
 
 // Render error format strings.
 const (
-	errFmtGetComponent           = "cannot get component %q"
-	errFmtGetScope               = "cannot get scope %q"
-	errFmtGetComponentRevision   = "cannot get component revision %q"
-	errFmtResolveParams          = "cannot resolve parameter values for component %q"
-	errFmtRenderWorkload         = "cannot render workload for component %q"
-	errFmtRenderTrait            = "cannot render trait for component %q"
-	errFmtSetParam               = "cannot set parameter %q"
-	errFmtUnsupportedParam       = "unsupported parameter %q"
-	errFmtRequiredParam          = "required parameter %q not specified"
-	errFmtControllerRevisionData = "cannot get valid component data from controllerRevision %q"
-	errSetValueForField          = "can not set value %q for fieldPath %q"
+	errFmtGetComponent     = "cannot get component %q"
+	errFmtGetScope         = "cannot get scope %q"
+	errFmtResolveParams    = "cannot resolve parameter values for component %q"
+	errFmtRenderWorkload   = "cannot render workload for component %q"
+	errFmtRenderTrait      = "cannot render trait for component %q"
+	errFmtSetParam         = "cannot set parameter %q"
+	errFmtUnsupportedParam = "unsupported parameter %q"
+	errFmtRequiredParam    = "required parameter %q not specified"
+	errSetValueForField    = "can not set value %q for fieldPath %q"
 )
 
 var (
@@ -118,7 +115,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	if acc.RevisionName != "" {
 		acc.ComponentName = ExtractComponentName(acc.RevisionName)
 	}
-	c, componentRevisionName, err := r.getComponent(ctx, acc, ac.GetNamespace())
+	c, componentRevisionName, err := util.GetComponent(ctx, r.client, acc, ac.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -244,34 +241,6 @@ func isRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
 		}
 	}
 	return false
-}
-
-func (r *components) getComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
-	c := &v1alpha2.Component{}
-	var revisionName string
-	if acc.RevisionName != "" {
-		revision := &appsv1.ControllerRevision{}
-		if err := r.client.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: acc.RevisionName}, revision); err != nil {
-			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
-		}
-		if revision.Name == "" {
-			return nil, "", fmt.Errorf("Not found revision %s", acc.RevisionName)
-		}
-		c, err := UnpackRevisionData(revision)
-		if err != nil {
-			return nil, "", errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
-		}
-		revisionName = acc.RevisionName
-		return c, revisionName, nil
-	}
-	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
-	if err := r.client.Get(ctx, nn, c); err != nil {
-		return nil, "", errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
-	}
-	if c.Status.LatestRevision != nil {
-		revisionName = c.Status.LatestRevision.Name
-	}
-	return c, revisionName, nil
 }
 
 // pass through labels and annotation from app-config to workload  or trait
