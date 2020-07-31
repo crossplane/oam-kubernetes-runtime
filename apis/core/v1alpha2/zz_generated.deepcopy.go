@@ -1290,7 +1290,8 @@ func (in *ScopeDefinitionSpec) DeepCopyInto(out *ScopeDefinitionSpec) {
 	out.Reference = in.Reference
 	if in.Extension != nil {
 		in, out := &in.Extension, &out.Extension
-		*out = (*in).DeepCopy()
+		*out = new(runtime.RawExtension)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
@@ -1403,7 +1404,8 @@ func (in *TraitDefinitionSpec) DeepCopyInto(out *TraitDefinitionSpec) {
 	}
 	if in.Extension != nil {
 		in, out := &in.Extension, &out.Extension
-		*out = (*in).DeepCopy()
+		*out = new(runtime.RawExtension)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
@@ -1535,7 +1537,8 @@ func (in *WorkloadDefinitionSpec) DeepCopyInto(out *WorkloadDefinitionSpec) {
 	}
 	if in.Extension != nil {
 		in, out := &in.Extension, &out.Extension
-		*out = (*in).DeepCopy()
+		*out = new(runtime.RawExtension)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
