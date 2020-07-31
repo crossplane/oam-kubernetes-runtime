@@ -30,7 +30,6 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -79,9 +78,8 @@ func Setup(mgr ctrl.Manager, l logging.Logger) error {
 		Named(name).
 		For(&v1alpha2.ApplicationConfiguration{}).
 		Watches(&source.Kind{Type: &v1alpha2.Component{}}, &ComponentHandler{
-			Client:     mgr.GetClient(),
-			Logger:     l,
-			AppsClient: clientappv1.NewForConfigOrDie(mgr.GetConfig()),
+			Client: mgr.GetClient(),
+			Logger: l,
 		}).
 		Complete(NewReconciler(mgr,
 			WithLogger(l.WithValues("controller", name)),
@@ -163,11 +161,10 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *OAMApplicationReconci
 		client: m.GetClient(),
 		scheme: m.GetScheme(),
 		components: &components{
-			client:     m.GetClient(),
-			appsClient: clientappv1.NewForConfigOrDie(m.GetConfig()),
-			params:     ParameterResolveFn(resolve),
-			workload:   ResourceRenderFn(renderWorkload),
-			trait:      ResourceRenderFn(renderTrait),
+			client:   m.GetClient(),
+			params:   ParameterResolveFn(resolve),
+			workload: ResourceRenderFn(renderWorkload),
+			trait:    ResourceRenderFn(renderTrait),
 		},
 		workloads: &workloads{
 			client:    resource.NewAPIPatchingApplicator(m.GetClient()),
