@@ -2,7 +2,6 @@ package applicationconfiguration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	util "github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 // ComponentHandler will watch component change and generate Revision automatically.
@@ -110,7 +110,7 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 		c.Logger.Info(fmt.Sprintf("Not found controllerRevision %s", curComp.Status.LatestRevision.Name), "componentName", mt.GetName())
 		return true, curComp.Status.LatestRevision.Revision
 	}
-	oldComp, err := UnpackRevisionData(oldRev)
+	oldComp, err := util.UnpackRevisionData(oldRev)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("Unmarshal old controllerRevision %s error %v, will create new revision", curComp.Status.LatestRevision.Name, err), "componentName", mt.GetName())
 		return true, oldRev.Revision
@@ -120,21 +120,6 @@ func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Co
 		return false, oldRev.Revision
 	}
 	return true, oldRev.Revision
-}
-
-// UnpackRevisionData will unpack revision.Data to Component
-func UnpackRevisionData(rev *appsv1.ControllerRevision) (*v1alpha2.Component, error) {
-	var err error
-	if rev.Data.Object != nil {
-		comp, ok := rev.Data.Object.(*v1alpha2.Component)
-		if !ok {
-			return nil, fmt.Errorf("invalid type of revision %s, type should not be %v", rev.Name, reflect.TypeOf(rev.Data.Object))
-		}
-		return comp, nil
-	}
-	var comp v1alpha2.Component
-	err = json.Unmarshal(rev.Data.Raw, &comp)
-	return &comp, err
 }
 
 func newTrue() *bool {
