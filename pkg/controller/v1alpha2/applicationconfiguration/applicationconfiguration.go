@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
 )
 
 const (
@@ -71,15 +72,16 @@ const (
 )
 
 // Setup adds a controller that reconciles ApplicationConfigurations.
-func Setup(mgr ctrl.Manager, l logging.Logger) error {
+func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
 	name := "oam/" + strings.ToLower(v1alpha2.ApplicationConfigurationGroupKind)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		For(&v1alpha2.ApplicationConfiguration{}).
 		Watches(&source.Kind{Type: &v1alpha2.Component{}}, &ComponentHandler{
-			Client: mgr.GetClient(),
-			Logger: l,
+			Client:        mgr.GetClient(),
+			Logger:        l,
+			RevisionLimit: args.RevisionLimit,
 		}).
 		Complete(NewReconciler(mgr,
 			WithLogger(l.WithValues("controller", name)),

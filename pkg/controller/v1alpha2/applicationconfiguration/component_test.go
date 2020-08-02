@@ -90,8 +90,23 @@ func TestComponentHandler(t *testing.T) {
 				}
 				return nil
 			}),
+			MockDelete: test.NewMockDeleteFn(nil, func(obj runtime.Object) error {
+				if robj, ok := obj.(*appsv1.ControllerRevision); ok {
+					newRevisions := []appsv1.ControllerRevision{}
+					for _, revision := range createdRevisions {
+						if revision.Name == robj.Name {
+							continue
+						}
+
+						newRevisions = append(newRevisions, revision)
+					}
+					createdRevisions = newRevisions
+				}
+				return nil
+			}),
 		},
-		Logger: logging.NewLogrLogger(ctrl.Log.WithName("test")),
+		Logger:        logging.NewLogrLogger(ctrl.Log.WithName("test")),
+		RevisionLimit: 2,
 	}
 	comp := &v1alpha2.Component{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "biz", Name: "comp1"},
@@ -180,6 +195,28 @@ func TestComponentHandler(t *testing.T) {
 		t.Fatal("should not trigger event with nothing changed no change")
 	}
 	// ============ Test Update Event End ===================
+
+	// ============ Test Revisions Start ===================
+	// test clean revision
+	comp4 := &v1alpha2.Component{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "biz", Name: "comp1", Labels: map[string]string{"bar": "foo"}},
+		Spec:       v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &v1.Deployment{Spec: v1.DeploymentSpec{Template: v12.PodTemplateSpec{Spec: v12.PodSpec{Containers: []v12.Container{{Image: "nginx:v3"}}}}}}}},
+	}
+	curComp.Status.DeepCopyInto(&comp4.Status)
+	updateEvt = event.UpdateEvent{
+		ObjectOld: comp2,
+		MetaOld:   comp2.GetObjectMeta(),
+		ObjectNew: comp4,
+		MetaNew:   comp4.GetObjectMeta(),
+	}
+	instance.Update(updateEvt, q)
+	revisions = &appsv1.ControllerRevisionList{}
+	err = instance.Client.List(context.TODO(), revisions)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(revisions.Items), "Expected has two revisions")
+	assert.Equal(t, "comp1", revisions.Items[0].Labels[ControllerRevisionComponentLabel],
+		fmt.Sprintf("Expected revision has label %s: comp1", ControllerRevisionComponentLabel))
+	// ============ Test Revisions End ===================
 }
 
 func TestConstructExtract(t *testing.T) {
