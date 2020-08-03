@@ -20,10 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,15 +46,24 @@ const (
 
 // Render error format strings.
 const (
-	errFmtGetComponent     = "cannot get component %q"
-	errFmtGetScope         = "cannot get scope %q"
-	errFmtResolveParams    = "cannot resolve parameter values for component %q"
-	errFmtRenderWorkload   = "cannot render workload for component %q"
-	errFmtRenderTrait      = "cannot render trait for component %q"
-	errFmtSetParam         = "cannot set parameter %q"
-	errFmtUnsupportedParam = "unsupported parameter %q"
-	errFmtRequiredParam    = "required parameter %q not specified"
-	errSetValueForField    = "can not set value %q for fieldPath %q"
+	errFmtGetComponent          = "cannot get component %q"
+	errFmtGetScope              = "cannot get scope %q"
+	errFmtResolveParams         = "cannot resolve parameter values for component %q"
+	errFmtRenderWorkload        = "cannot render workload for component %q"
+	errFmtRenderTrait           = "cannot render trait for component %q"
+	errFmtSetParam              = "cannot set parameter %q"
+	errFmtUnsupportedParam      = "unsupported parameter %q"
+	errFmtRequiredParam         = "required parameter %q not specified"
+	errSetValueForField         = "can not set value %q for fieldPath %q"
+	errGetConfigMapValueForName = "can not get configMap data for configMapName %q"
+	errNoSuchField              = "status: no such field"
+)
+
+const (
+	//StatusKey stands for the status field of the spec
+	StatusKey      = "status"
+	patchConfigKey = "patchConfig"
+	patchKey       = "patch"
 )
 
 var (
@@ -88,18 +99,21 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 	workloads := make([]*Workload, 0, len(ac.Spec.Components))
 	dag := newDAG()
 
+	newComponents := make([]v1alpha2.ApplicationConfigurationComponent, 0)
 	for _, acc := range ac.Spec.Components {
-		w, err := r.renderComponent(ctx, acc, ac, dag)
+		acc := acc
+		w, err := r.renderComponent(ctx, &acc, ac, dag)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		workloads = append(workloads, w)
+		newComponents = append(newComponents, acc)
 	}
 
 	ds := &v1alpha2.DependencyStatus{}
-	res := make([]Workload, 0, len(ac.Spec.Components))
-	for i, acc := range ac.Spec.Components {
+	res := make([]Workload, 0, len(newComponents))
+	for i, acc := range newComponents {
 		unsatisfied, err := r.handleDependency(ctx, workloads[i], acc, dag)
 		if err != nil {
 			return nil, nil, err
@@ -111,11 +125,12 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 	return res, ds, nil
 }
 
-func (r *components) renderComponent(ctx context.Context, acc v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag *dag) (*Workload, error) {
+func (r *components) renderComponent(ctx context.Context, acc *v1alpha2.ApplicationConfigurationComponent, ac *v1alpha2.ApplicationConfiguration, dag *dag) (*Workload, error) {
 	if acc.RevisionName != "" {
 		acc.ComponentName = ExtractComponentName(acc.RevisionName)
 	}
-	c, componentRevisionName, err := util.GetComponent(ctx, r.client, acc, ac.GetNamespace())
+
+	c, componentRevisionName, err := util.GetComponent(ctx, r.client, *acc, ac.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +154,16 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	traits := make([]*Trait, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
 	for _, ct := range acc.Traits {
-		t, traitDef, err := r.renderTrait(ctx, ct, ac, acc.ComponentName, ref, dag)
+		ct := ct
+		t, traitDef, err := r.renderTrait(ctx, &ct, ac, acc.ComponentName, ref, dag)
 		if err != nil {
 			return nil, err
+		}
+		//Render patch data
+		if traitDef.Spec.Patch {
+			if err := r.renderComponentFromPatchTrait(ctx, w, acc, t); err != nil {
+				return nil, err
+			}
 		}
 
 		// pass through labels and annotation from app-config to trait
@@ -168,14 +190,66 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}, nil
 }
 
-func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, ac *v1alpha2.ApplicationConfiguration,
+func (r *components) renderComponentFromPatchTrait(ctx context.Context, w *unstructured.Unstructured, acc *v1alpha2.ApplicationConfigurationComponent, t *unstructured.Unstructured) error {
+	dataInput := v1alpha2.DataInput{
+		ValueFrom: v1alpha2.DataInputValueFrom{
+			DataOutputName: t.GetName(),
+		},
+	}
+	acc.DataInputs = append(acc.DataInputs, dataInput)
+	//get trait status
+	targetTraitObject := &unstructured.Unstructured{}
+	targetTraitObject.SetGroupVersionKind(t.GroupVersionKind())
+	if err := r.client.Get(ctx, types.NamespacedName{Name: t.GetName(), Namespace: t.GetNamespace()}, targetTraitObject); err != nil {
+		return err
+	}
+
+	smap, err := fieldpath.Pave(targetTraitObject.Object).GetStringObject(StatusKey)
+	if err != nil && !strings.ContainsAny(err.Error(), errNoSuchField) {
+		return err
+	}
+	patchCmName := smap[patchConfigKey]
+	if len(smap) == 0 || patchCmName == "" {
+		return nil
+	}
+	//patch yaml
+	nn := types.NamespacedName{Namespace: w.GetNamespace(), Name: patchCmName}
+	cm := &corev1.ConfigMap{}
+	var patch string
+	if err := r.client.Get(ctx, nn, cm); err != nil {
+		return err
+	}
+
+	if patch = cm.Data[patchKey]; patch == "" {
+		return errors.Wrapf(err, errGetConfigMapValueForName, nn.Name)
+	}
+
+	workloadJSON, err := w.MarshalJSON()
+	if err != nil {
+		return err
+	}
+
+	workloadFullJSON, err := jsonpatch.MergeMergePatches(workloadJSON, []byte(patch))
+	if err != nil {
+		return err
+	}
+
+	var mergePatchObject map[string]interface{}
+	if err = json.Unmarshal(workloadFullJSON, &mergePatchObject); err != nil {
+		return err
+	}
+	w.SetUnstructuredContent(mergePatchObject)
+	return nil
+}
+
+func (r *components) renderTrait(ctx context.Context, ct *v1alpha2.ComponentTrait, ac *v1alpha2.ApplicationConfiguration,
 	componentName string, ref *metav1.OwnerReference, dag *dag) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
 	t, err := r.trait.Render(ct.Trait.Raw)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
 	}
 
-	traitName := getTraitName(ac, componentName, &ct, t)
+	traitName := getTraitName(ac, componentName, ct, t)
 
 	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
 
@@ -183,10 +257,19 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
 	}
-
+	if traitDef.Spec.Patch {
+		r.renderTraitWithOutput(ct, t.GetName())
+	}
 	addDataOutputsToDAG(dag, ct.DataOutputs, t)
-
 	return t, traitDef, nil
+}
+func (r *components) renderTraitWithOutput(ct *v1alpha2.ComponentTrait, traitName string) {
+	//output data
+	dataOutput := v1alpha2.DataOutput{
+		Name:      traitName,
+		FieldPath: fmt.Sprintf("%s.%s", StatusKey, patchConfigKey),
+	}
+	ct.DataOutputs = append(ct.DataOutputs, dataOutput)
 }
 
 func (r *components) renderScope(ctx context.Context, cs v1alpha2.ComponentScope, ns string) (*unstructured.Unstructured, error) {

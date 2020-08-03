@@ -29,12 +29,15 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+
 	v1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -87,6 +90,39 @@ func TestRenderComponents(t *testing.T) {
 			},
 		},
 	}
+
+	patchConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      traitName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"patch": `    {
+      "spec": {
+        "template": {
+          "spec": {
+            "nodeSelector": {
+              "disktype": "ssd"
+            }
+          }
+        }
+      }
+    }`,
+		},
+	}
+	fakeAppClient := fake.NewSimpleClientset().AppsV1()
+	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+		Data: runtime.RawExtension{Object: &v1alpha2.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      componentName,
+				Namespace: namespace,
+			},
+			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+			Status: v1alpha2.ComponentStatus{},
+		}},
+		Revision: 1,
+	}, metav1.CreateOptions{})
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 
 	type fields struct {
@@ -165,6 +201,140 @@ func TestRenderComponents(t *testing.T) {
 			args: args{ac: ac},
 			want: want{
 				err: errors.Wrapf(errBoom, errFmtRenderTrait, componentName),
+			},
+		},
+		"Success-With-Patch-NoPatchConfig-RenderComponent": {
+			reason: "Workload name should successfully be rendered with patchTrait(NoPatchConfig)",
+			fields: fields{
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+					if robj, ok := obj.(*v1alpha2.TraitDefinition); ok {
+						ttrait := v1alpha2.TraitDefinition{ObjectMeta: metav1.ObjectMeta{Name: traitName}, Spec: v1alpha2.TraitDefinitionSpec{Patch: true}}
+						ttrait.DeepCopyInto(robj)
+					}
+					return nil
+				})},
+				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+					return nil, nil
+				}),
+				workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					w := &unstructured.Unstructured{}
+					w.SetName(workloadName)
+					return w, nil
+				}),
+				trait: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					t := &unstructured.Unstructured{}
+					t.SetName(traitName)
+					return t, nil
+				}),
+			},
+			args: args{ac: ac},
+			want: want{
+				w: []Workload{
+					{
+						ComponentName: componentName,
+						Workload: func() *unstructured.Unstructured {
+							w := &unstructured.Unstructured{}
+							w.SetNamespace(namespace)
+							w.SetName(workloadName)
+							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							return w
+						}(),
+						Traits: []*Trait{
+							func() *Trait {
+								t := &unstructured.Unstructured{}
+								t.SetNamespace(namespace)
+								t.SetName(traitName)
+								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								return &Trait{Object: *t}
+							}(),
+						},
+						HasDep: true,
+						Scopes: []unstructured.Unstructured{},
+					},
+				},
+			},
+		},
+		"Success-With-Patch-PatchConfig-RenderComponent": {
+			reason: "Workload name should successfully be rendered with patchTrait",
+			fields: fields{
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+					switch robj := obj.(type) {
+					case *v1alpha2.TraitDefinition:
+						ttrait := v1alpha2.TraitDefinition{ObjectMeta: metav1.ObjectMeta{Name: traitName}, Spec: v1alpha2.TraitDefinitionSpec{Patch: true}}
+						ttrait.DeepCopyInto(robj)
+					case *corev1.ConfigMap:
+						patchConfigMap.DeepCopyInto(robj)
+					case *unstructured.Unstructured:
+						t := &unstructured.Unstructured{}
+						content := make(map[string]interface{})
+						patchConfig := make(map[string]interface{})
+						patchConfig["patchConfig"] = patchConfigMap.Name
+						content["status"] = patchConfig
+						//init Object
+						t.SetUnstructuredContent(content)
+						t.SetName(traitName)
+						t.SetNamespace(namespace)
+						t.DeepCopyInto(robj)
+					}
+					return nil
+				})},
+				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+					return nil, nil
+				}),
+				workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					w := &unstructured.Unstructured{}
+					w.SetName(workloadName)
+					return w, nil
+				}),
+				trait: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					t := &unstructured.Unstructured{}
+					content := make(map[string]interface{})
+					patchConfig := make(map[string]interface{})
+					patchConfig["patchConfig"] = patchConfigMap.Name
+					content["status"] = patchConfig
+					//init Object
+					t.SetUnstructuredContent(content)
+					t.SetName(traitName)
+					return t, nil
+				}),
+			},
+			args: args{ac: ac},
+			want: want{
+				w: []Workload{
+					{
+						ComponentName: componentName,
+						Workload: func() *unstructured.Unstructured {
+							w := &unstructured.Unstructured{}
+
+							data := patchConfigMap.Data[patchKey]
+							var mergePatchObject map[string]interface{}
+							json.Unmarshal([]byte(data), &mergePatchObject)
+							w.SetUnstructuredContent(mergePatchObject)
+
+							w.SetNamespace(namespace)
+							w.SetName(workloadName)
+							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							return w
+						}(),
+						Traits: []*Trait{
+							func() *Trait {
+								t := &unstructured.Unstructured{}
+								content := make(map[string]interface{})
+								patchConfig := make(map[string]interface{})
+								patchConfig["patchConfig"] = patchConfigMap.Name
+								content["status"] = patchConfig
+								//init Object
+								t.SetUnstructuredContent(content)
+
+								t.SetNamespace(namespace)
+								t.SetName(traitName)
+								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								return &Trait{Object: *t}
+							}(),
+						},
+						Scopes: []unstructured.Unstructured{},
+					},
+				},
 			},
 		},
 		"Success": {
