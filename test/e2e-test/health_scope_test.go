@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	var_int32_60 int32 = 60
+	varInt32_60 int32 = 60
 )
 
 var _ = Describe("HealthScope", func() {
@@ -89,7 +89,7 @@ var _ = Describe("HealthScope", func() {
 				Namespace: namespace,
 			},
 			Spec: v1alpha2.HealthScopeSpec{
-				ProbeTimeout: &var_int32_60,
+				ProbeTimeout: &varInt32_60,
 			},
 		}
 		logf.Log.Info("Creating health scope")

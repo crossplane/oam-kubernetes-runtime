@@ -18,436 +18,512 @@ package healthscope
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	corev1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 const (
-	workloadName = "myWorkload"
+	// workloadName = "myWorkload"
+	namespace = "ns"
 )
 
-func TestUpdateHealthStatus(t *testing.T) {
-	type args struct {
-		client      client.Client
-		healthScope *v1alpha2.HealthScope
+var (
+	ctx        = context.Background()
+	errMockErr = errors.New("get error")
+)
+
+func TestCheckContainerziedWorkloadHealth(t *testing.T) {
+	mockClient := test.NewMockClient()
+	cwRef := runtimev1alpha1.TypedReference{}
+	cwRef.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
+	deployRef := runtimev1alpha1.TypedReference{}
+	deployRef.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind(kindDeployment))
+	svcRef := runtimev1alpha1.TypedReference{}
+	svcRef.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind(kindService))
+	cw := corev1alpha2.ContainerizedWorkload{
+		Status: corev1alpha2.ContainerizedWorkloadStatus{
+			Resources: []runtimev1alpha1.TypedReference{deployRef, svcRef},
+		},
 	}
 
-	type want struct {
-		err    error
-		health string
-	}
-
-	cases := map[string]struct {
-		reason string
-		args   args
-		want   want
+	tests := []struct {
+		caseName  string
+		mockGetFn test.MockGetFn
+		wlRef     runtimev1alpha1.TypedReference
+		expect    *HealthCondition
 	}{
-		"NoWorkloadRef": {
-			reason: "Health scope is empty.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						return nil
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{},
+		{
+			caseName: "not matched checker",
+			wlRef:    runtimev1alpha1.TypedReference{},
+			expect:   nil,
+		},
+		{
+			caseName: "healthy workload",
+			wlRef:    cwRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*corev1alpha2.ContainerizedWorkload); ok {
+					*o = cw
+					return nil
+				}
+				if o, ok := obj.(*apps.Deployment); ok {
+					*o = apps.Deployment{
+						Status: apps.DeploymentStatus{
+							ReadyReplicas: 1, // healthy
+						},
+					}
+				}
+				return nil
 			},
-			want: want{
-				err:    nil,
-				health: "healthy",
+			expect: &HealthCondition{
+				IsHealthy: true,
 			},
 		},
-		"ErrorGettingWorkload": {
-			reason: "Health scope reports error if cannot find workload.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						return fmt.Errorf("cannot get workload")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
+		{
+			caseName: "unhealthy for deployment not ready",
+			wlRef:    cwRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*corev1alpha2.ContainerizedWorkload); ok {
+					*o = cw
+					return nil
+				}
+				if o, ok := obj.(*apps.Deployment); ok {
+					*o = apps.Deployment{
+						Status: apps.DeploymentStatus{
+							ReadyReplicas: 0, // unhealthy
 						},
-					},
-				},
+					}
+				}
+				return nil
 			},
-			want: want{
-				err:    errors.Wrapf(fmt.Errorf("cannot get workload"), errNoWorkload, workloadName),
-				health: "",
+			expect: &HealthCondition{
+				IsHealthy: false,
 			},
 		},
-		"WorkloadWithBadData": {
-			reason: "Health scope has one healthy resource.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
-						if key.Name == workloadName {
-							workload := obj.(*unstructured.Unstructured)
-
-							// Bad data injected here.
-							if err := fieldpath.Pave(workload.UnstructuredContent()).SetValue("status", "BAD_DATA"); err == nil {
-								return err
-							}
-
-							return nil
-						}
-
-						return fmt.Errorf("Unexpected key")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
-						},
-					},
-				},
+		{
+			caseName: "unhealthy for ContainerizedWorkload not found",
+			wlRef:    cwRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				return errMockErr
 			},
-			want: want{
-				err:    errors.Wrapf(errors.Errorf("status: not an object"), errNoWorkloadResources, workloadName),
-				health: "",
+			expect: &HealthCondition{
+				IsHealthy: false,
 			},
 		},
-		"OneHealthyWorkloadRef": {
-			reason: "Health scope has one healthy resource.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
-						if key.Name == workloadName {
-							workload := obj.(*unstructured.Unstructured)
-
-							refs := []interface{}{
-								map[string]interface{}{
-									"apiVersion": "myVersion",
-									"kind":       "myKind",
-									"name":       "myName",
-								},
-							}
-
-							if err := fieldpath.Pave(workload.UnstructuredContent()).SetValue("status.resources", refs); err == nil {
-								return err
-							}
-
-							return nil
-						}
-
-						if key.Name == "myName" {
-							return nil
-						}
-
-						return fmt.Errorf("Unexpected key")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
-						},
-					},
-				},
+		{
+			caseName: "unhealthy for deployment not found",
+			wlRef:    cwRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*corev1alpha2.ContainerizedWorkload); ok {
+					*o = cw
+					return nil
+				}
+				if _, ok := obj.(*apps.Deployment); ok {
+					return errMockErr
+				}
+				return nil
 			},
-			want: want{
-				err:    nil,
-				health: "healthy",
+			expect: &HealthCondition{
+				IsHealthy: false,
 			},
 		},
-		"OneUnhealthyWorkloadRefOnly": {
-			reason: "Health scope has one unhealthy resource.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
-						if key.Name == workloadName {
-							workload := obj.(*unstructured.Unstructured)
-
-							refs := []interface{}{
-								map[string]interface{}{
-									"apiVersion": "myVersion",
-									"kind":       "myKind",
-									"name":       "NotFound",
-								},
-							}
-
-							if err := fieldpath.Pave(workload.UnstructuredContent()).SetValue("status.resources", refs); err == nil {
-								return err
-							}
-
-							return nil
-						}
-
-						return fmt.Errorf("Not found")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
+		{
+			caseName: "unhealthy for service not found",
+			wlRef:    cwRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				switch o := obj.(type) {
+				case *corev1alpha2.ContainerizedWorkload:
+					*o = cw
+				case *apps.Deployment:
+					*o = apps.Deployment{
+						Status: apps.DeploymentStatus{
+							ReadyReplicas: 1, // healthy
 						},
-					},
-				},
+					}
+				case *unstructured.Unstructured:
+					return errMockErr
+				}
+				return nil
 			},
-			want: want{
-				err:    nil,
-				health: "unhealthy",
-			},
-		},
-		"OneHealthyDeploymentAndOneUnknownResource": {
-			reason: "Health scope handles Deployment specially and aggregates health checks to unhealthy.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
-						if key.Name == workloadName {
-							workload := obj.(*unstructured.Unstructured)
-
-							refs := []interface{}{
-								map[string]interface{}{
-									"apiVersion": "apps/v1",
-									"kind":       "Deployment",
-									"name":       "myDeployment",
-								},
-								map[string]interface{}{
-									"apiVersion": "myVersion",
-									"kind":       "myKind",
-									"name":       "NotFound",
-								},
-							}
-
-							if err := fieldpath.Pave(workload.UnstructuredContent()).SetValue("status.resources", refs); err == nil {
-								return err
-							}
-
-							return nil
-						}
-
-						if key.Name == "myDeployment" {
-							deployment := obj.(*apps.Deployment)
-
-							deployment.Status.ReadyReplicas = 1
-
-							return nil
-						}
-
-						return fmt.Errorf("Not found")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
-						},
-					},
-				},
-			},
-			want: want{
-				err:    nil,
-				health: "unhealthy",
-			},
-		},
-		"OneHealthyDeploymentAndOneHealthyResource": {
-			reason: "Health scope handles Deployment specially and aggregates health checks to healthy.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
-						if key.Name == workloadName {
-							workload := obj.(*unstructured.Unstructured)
-
-							refs := []interface{}{
-								map[string]interface{}{
-									"apiVersion": "apps/v1",
-									"kind":       "Deployment",
-									"name":       "myDeployment",
-								},
-								map[string]interface{}{
-									"apiVersion": "myVersion",
-									"kind":       "myKind",
-									"name":       "myName",
-								},
-							}
-
-							if err := fieldpath.Pave(workload.UnstructuredContent()).SetValue("status.resources", refs); err == nil {
-								return err
-							}
-
-							return nil
-						}
-
-						if key.Name == "myName" {
-							return nil
-						}
-
-						if key.Name == "myDeployment" {
-							deployment := obj.(*apps.Deployment)
-
-							deployment.Status.ReadyReplicas = 1
-
-							return nil
-						}
-
-						return fmt.Errorf("Unexpected")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
-						},
-					},
-				},
-			},
-			want: want{
-				err:    nil,
-				health: "healthy",
-			},
-		},
-		"DeploymentNotReady": {
-			reason: "Health scope handles Deployment specially for ready instances.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
-						if key.Name == workloadName {
-							workload := obj.(*unstructured.Unstructured)
-
-							refs := []interface{}{
-								map[string]interface{}{
-									"apiVersion": "apps/v1",
-									"kind":       "Deployment",
-									"name":       "myDeployment",
-								},
-							}
-
-							if err := fieldpath.Pave(workload.UnstructuredContent()).SetValue("status.resources", refs); err == nil {
-								return err
-							}
-
-							return nil
-						}
-
-						if key.Name == "myDeployment" {
-							deployment := obj.(*apps.Deployment)
-
-							// artursouza: fails health check for this.
-							deployment.Status.ReadyReplicas = 0
-
-							return nil
-						}
-
-						return fmt.Errorf("Unexpected")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
-						},
-					},
-				},
-			},
-			want: want{
-				err:    nil,
-				health: "unhealthy",
-			},
-		},
-		"DeploymentNotFound": {
-			reason: "Health scope handles Deployment when not found.",
-			args: args{
-				client: &test.MockClient{
-					MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
-						if key.Name == workloadName {
-							workload := obj.(*unstructured.Unstructured)
-
-							refs := []interface{}{
-								map[string]interface{}{
-									"apiVersion": "apps/v1",
-									"kind":       "Deployment",
-									"name":       "myDeploymentNotFound",
-								},
-							}
-
-							if err := fieldpath.Pave(workload.UnstructuredContent()).SetValue("status.resources", refs); err == nil {
-								return err
-							}
-
-							return nil
-						}
-
-						return fmt.Errorf("Not found")
-					},
-				},
-				healthScope: &v1alpha2.HealthScope{
-					Spec: v1alpha2.HealthScopeSpec{
-						WorkloadReferences: []v1alpha1.TypedReference{
-							{
-								APIVersion: "core.oam.dev/v1alpha2",
-								Kind:       "ContainerizedWorkload",
-								Name:       workloadName,
-							},
-						},
-					},
-				},
-			},
-			want: want{
-				err:    nil,
-				health: "unhealthy",
+			expect: &HealthCondition{
+				IsHealthy: false,
 			},
 		},
 	}
 
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			log := logging.NewNopLogger()
-			scope := tc.args.healthScope
-			err := UpdateHealthStatus(context.Background(), log, tc.args.client, scope)
-
-			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("\nReason: %s\nUpdateHealthStatus(...): -want error, +got error:\n%s", tc.reason, diff)
+	for _, tc := range tests {
+		func(t *testing.T) {
+			mockClient.MockGet = tc.mockGetFn
+			result := CheckContainerziedWorkloadHealth(ctx, mockClient, tc.wlRef, namespace)
+			if tc.expect == nil {
+				assert.Nil(t, result, tc.caseName)
+			} else {
+				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
 			}
 
-			if diff := cmp.Diff(tc.want.health, scope.Status.Health, test.EquateErrors()); diff != "" {
-				t.Errorf("\nReason: %s\nUpdateHealthStatus(...): -want health, +got health:\n%s", tc.reason, diff)
+		}(t)
+	}
+}
+
+func TestCheckDeploymentHealth(t *testing.T) {
+	mockClient := test.NewMockClient()
+	deployRef := runtimev1alpha1.TypedReference{}
+	deployRef.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind(kindDeployment))
+
+	tests := []struct {
+		caseName  string
+		mockGetFn test.MockGetFn
+		wlRef     runtimev1alpha1.TypedReference
+		expect    *HealthCondition
+	}{
+		{
+			caseName: "not matched checker",
+			wlRef:    runtimev1alpha1.TypedReference{},
+			expect:   nil,
+		},
+		{
+			caseName: "healthy workload",
+			wlRef:    deployRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.Deployment); ok {
+					*o = apps.Deployment{
+						Status: apps.DeploymentStatus{
+							ReadyReplicas: 1, // healthy
+						},
+					}
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: true,
+			},
+		},
+		{
+			caseName: "unhealthy for deployment not ready",
+			wlRef:    deployRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.Deployment); ok {
+					*o = apps.Deployment{
+						Status: apps.DeploymentStatus{
+							ReadyReplicas: 0, // unhealthy
+						},
+					}
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+		{
+			caseName: "unhealthy for deployment not found",
+			wlRef:    deployRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				return errMockErr
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		func(t *testing.T) {
+			mockClient.MockGet = tc.mockGetFn
+			result := CheckDeploymentHealth(ctx, mockClient, tc.wlRef, namespace)
+			if tc.expect == nil {
+				assert.Nil(t, result, tc.caseName)
+			} else {
+				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
 			}
-		})
+		}(t)
+	}
+}
+
+func TestCheckStatefulsetHealth(t *testing.T) {
+	mockClient := test.NewMockClient()
+	stsRef := runtimev1alpha1.TypedReference{}
+	stsRef.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind(kindStatefulSet))
+
+	tests := []struct {
+		caseName  string
+		mockGetFn test.MockGetFn
+		wlRef     runtimev1alpha1.TypedReference
+		expect    *HealthCondition
+	}{
+		{
+			caseName: "not matched checker",
+			wlRef:    runtimev1alpha1.TypedReference{},
+			expect:   nil,
+		},
+		{
+			caseName: "healthy workload",
+			wlRef:    stsRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.StatefulSet); ok {
+					*o = apps.StatefulSet{
+						Status: apps.StatefulSetStatus{
+							ReadyReplicas: 1, // healthy
+						},
+					}
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: true,
+			},
+		},
+		{
+			caseName: "unhealthy for statefulset not ready",
+			wlRef:    stsRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.StatefulSet); ok {
+					*o = apps.StatefulSet{
+						Status: apps.StatefulSetStatus{
+							ReadyReplicas: 0, // unhealthy
+						},
+					}
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+		{
+			caseName: "unhealthy for statefulset not found",
+			wlRef:    stsRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				return errMockErr
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		func(t *testing.T) {
+			mockClient.MockGet = tc.mockGetFn
+			result := CheckStatefulsetHealth(ctx, mockClient, tc.wlRef, namespace)
+			if tc.expect == nil {
+				assert.Nil(t, result, tc.caseName)
+			} else {
+				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
+			}
+		}(t)
+	}
+}
+
+func TestCheckDaemonsetHealth(t *testing.T) {
+	mockClient := test.NewMockClient()
+	dstRef := runtimev1alpha1.TypedReference{}
+	dstRef.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind(kindDaemonSet))
+
+	tests := []struct {
+		caseName  string
+		mockGetFn test.MockGetFn
+		wlRef     runtimev1alpha1.TypedReference
+		expect    *HealthCondition
+	}{
+		{
+			caseName: "not matched checker",
+			wlRef:    runtimev1alpha1.TypedReference{},
+			expect:   nil,
+		},
+		{
+			caseName: "healthy workload",
+			wlRef:    dstRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.DaemonSet); ok {
+					*o = apps.DaemonSet{
+						Status: apps.DaemonSetStatus{
+							NumberUnavailable: 0, // healthy
+						},
+					}
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: true,
+			},
+		},
+		{
+			caseName: "unhealthy for daemonset not ready",
+			wlRef:    dstRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.DaemonSet); ok {
+					*o = apps.DaemonSet{
+						Status: apps.DaemonSetStatus{
+							NumberUnavailable: 1, // unhealthy
+						},
+					}
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+		{
+			caseName: "unhealthy for daemonset not found",
+			wlRef:    dstRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				return errMockErr
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		func(t *testing.T) {
+			mockClient.MockGet = tc.mockGetFn
+			result := CheckDaemonsetHealth(ctx, mockClient, tc.wlRef, namespace)
+			if tc.expect == nil {
+				assert.Nil(t, result, tc.caseName)
+			} else {
+				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
+			}
+		}(t)
+	}
+}
+
+func TestGeneralHealthCheck(t *testing.T) {
+	mockClient := test.NewMockClient()
+	unknownRef := runtimev1alpha1.TypedReference{
+		APIVersion: "unknown",
+		Kind:       "unknown",
+		Name:       "unknown",
+	}
+
+	tests := []struct {
+		caseName  string
+		mockGetFn test.MockGetFn
+		wlRef     runtimev1alpha1.TypedReference
+		expect    *HealthCondition
+	}{
+		{
+			caseName: "healthy workload",
+			wlRef:    unknownRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := &unstructured.Unstructured{
+						Object: make(map[string]interface{}),
+					}
+					paved := fieldpath.Pave(u.Object)
+					paved.SetValue("status.readyReplicas", 1) // healthy
+					*o = *u
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: true,
+			},
+		},
+		{
+			caseName: "healthy workload",
+			wlRef:    unknownRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := &unstructured.Unstructured{
+						Object: make(map[string]interface{}),
+					}
+					paved := fieldpath.Pave(u.Object)
+					paved.SetValue("status.availableReplicas", 1) // healthy
+					*o = *u
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: true,
+			},
+		},
+		{
+			caseName: "unhealthy for ready replicas is 0",
+			wlRef:    unknownRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := &unstructured.Unstructured{
+						Object: make(map[string]interface{}),
+					}
+					paved := fieldpath.Pave(u.Object)
+					paved.SetValue("status.readyReplicas", 0) // unhealthy
+					*o = *u
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+		{
+			caseName: "unhealthy for available replicas is 0",
+			wlRef:    unknownRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := &unstructured.Unstructured{
+						Object: make(map[string]interface{}),
+					}
+					paved := fieldpath.Pave(u.Object)
+					paved.SetValue("status.availableReplicas", 0) // unhealthy
+					*o = *u
+				}
+				return nil
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+		{
+			caseName: "unhealthy for resource not found",
+			wlRef:    unknownRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				return errMockErr
+			},
+			expect: &HealthCondition{
+				IsHealthy: false,
+			},
+		},
+		{
+			caseName: "no matched health check filed found",
+			wlRef:    unknownRef,
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := &unstructured.Unstructured{
+						Object: make(map[string]interface{}),
+					}
+					paved := fieldpath.Pave(u.Object)
+					paved.SetValue("status.unknownField", 0)
+					*o = *u
+				}
+				return nil
+			},
+			expect: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		func(t *testing.T) {
+			mockClient.MockGet = tc.mockGetFn
+			result := GeneralHealthChecker(ctx, mockClient, tc.wlRef, namespace)
+			if tc.expect == nil {
+				assert.Nil(t, result, tc.caseName)
+			} else {
+				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
+			}
+		}(t)
 	}
 }
