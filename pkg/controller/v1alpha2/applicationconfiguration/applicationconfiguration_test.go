@@ -65,7 +65,11 @@ func withDependencyStatus(s v1alpha2.DependencyStatus) acParam {
 }
 
 func ac(p ...acParam) *v1alpha2.ApplicationConfiguration {
-	ac := &v1alpha2.ApplicationConfiguration{}
+	ac := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Finalizers: []string{workloadScopeFinalizer},
+		},
+	}
 	for _, fn := range p {
 		fn(ac)
 	}
@@ -91,6 +95,8 @@ func TestReconciler(t *testing.T) {
 	trait.SetNamespace(namespace)
 	trait.SetName("trait")
 
+	now := metav1.Now()
+
 	depStatus := v1alpha2.DependencyStatus{
 		Unsatisfied: []v1alpha2.UnstaifiedDependency{{
 			From: v1alpha2.DependencyFromObject{
@@ -110,6 +116,17 @@ func TestReconciler(t *testing.T) {
 				FieldPaths: []string{"spec.key"},
 			},
 		}},
+	}
+
+	mockGetAppConfigFn := func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
+		if o, ok := obj.(*v1alpha2.ApplicationConfiguration); ok {
+			*o = v1alpha2.ApplicationConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Finalizers: []string{workloadScopeFinalizer},
+				},
+			}
+		}
+		return nil
 	}
 
 	type args struct {
@@ -144,7 +161,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet: test.NewMockGetFn(nil),
+						MockGet: mockGetAppConfigFn,
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 
 							want := ac(withConditions(runtimev1alpha1.ReconcileError(errors.Wrap(errBoom, errRenderComponents))))
@@ -172,7 +189,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet: test.NewMockGetFn(nil),
+						MockGet: mockGetAppConfigFn,
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 							want := ac(withConditions(runtimev1alpha1.ReconcileError(errors.Wrap(errBoom, errApplyComponents))))
 							if diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration)); diff != "" {
@@ -187,9 +204,9 @@ func TestReconciler(t *testing.T) {
 					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 						return []Workload{{Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
 					})),
-					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+					WithApplicator(WorkloadApplyFns{ApplyFn: func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return errBoom
-					})),
+					}}),
 				},
 			},
 			want: want{
@@ -201,7 +218,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet:    test.NewMockGetFn(nil),
+						MockGet:    mockGetAppConfigFn,
 						MockDelete: test.NewMockDeleteFn(errBoom),
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 							want := ac(withConditions(runtimev1alpha1.ReconcileError(errors.Wrap(errBoom, errGCComponent))))
@@ -217,9 +234,9 @@ func TestReconciler(t *testing.T) {
 					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 						return []Workload{}, &v1alpha2.DependencyStatus{}, nil
 					})),
-					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+					WithApplicator(WorkloadApplyFns{ApplyFn: (func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
-					})),
+					})}),
 					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
 						return []unstructured.Unstructured{*workload}
 					})),
@@ -234,7 +251,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet:    test.NewMockGetFn(nil),
+						MockGet:    mockGetAppConfigFn,
 						MockDelete: test.NewMockDeleteFn(nil),
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 							want := ac(
@@ -261,9 +278,9 @@ func TestReconciler(t *testing.T) {
 					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 						return []Workload{{ComponentName: componentName, Workload: workload}}, &depStatus, nil
 					})),
-					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+					WithApplicator(WorkloadApplyFns{ApplyFn: (func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
-					})),
+					})}),
 					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
 						return []unstructured.Unstructured{*trait}
 					})),
@@ -278,7 +295,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet:    test.NewMockGetFn(nil),
+						MockGet:    mockGetAppConfigFn,
 						MockDelete: test.NewMockDeleteFn(nil),
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 							want := ac(
@@ -296,9 +313,9 @@ func TestReconciler(t *testing.T) {
 					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
 					})),
-					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+					WithApplicator(WorkloadApplyFns{ApplyFn: (func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
-					})),
+					})}),
 					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
 						return []unstructured.Unstructured{*trait}
 					})),
@@ -322,7 +339,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet:    test.NewMockGetFn(nil),
+						MockGet:    mockGetAppConfigFn,
 						MockDelete: test.NewMockDeleteFn(nil),
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 							want := ac(
@@ -351,9 +368,9 @@ func TestReconciler(t *testing.T) {
 					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
 					})),
-					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+					WithApplicator(WorkloadApplyFns{ApplyFn: (func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
-					})),
+					})}),
 					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
 						return []unstructured.Unstructured{*trait}
 					})),
@@ -374,7 +391,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet:    test.NewMockGetFn(nil),
+						MockGet:    mockGetAppConfigFn,
 						MockDelete: test.NewMockDeleteFn(nil),
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 							want := ac(
@@ -395,9 +412,9 @@ func TestReconciler(t *testing.T) {
 					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
 					})),
-					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+					WithApplicator(WorkloadApplyFns{ApplyFn: (func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
-					})),
+					})}),
 					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
 						return []unstructured.Unstructured{*trait}
 					})),
@@ -424,7 +441,7 @@ func TestReconciler(t *testing.T) {
 			args: args{
 				m: &mock.Manager{
 					Client: &test.MockClient{
-						MockGet:    test.NewMockGetFn(nil),
+						MockGet:    mockGetAppConfigFn,
 						MockDelete: test.NewMockDeleteFn(nil),
 						MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(o runtime.Object) error {
 							want := ac(
@@ -450,9 +467,9 @@ func TestReconciler(t *testing.T) {
 					WithRenderer(ComponentRenderFn(func(_ context.Context, _ *v1alpha2.ApplicationConfiguration) ([]Workload, *v1alpha2.DependencyStatus, error) {
 						return []Workload{{ComponentName: componentName, Workload: workload}}, &v1alpha2.DependencyStatus{}, nil
 					})),
-					WithApplicator(WorkloadApplyFn(func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
+					WithApplicator(WorkloadApplyFns{ApplyFn: (func(_ context.Context, _ []v1alpha2.WorkloadStatus, _ []Workload, _ ...resource.ApplyOption) error {
 						return nil
-					})),
+					})}),
 					WithGarbageCollector(GarbageCollectorFn(func(_ string, _ []v1alpha2.WorkloadStatus, _ []Workload) []unstructured.Unstructured {
 						return []unstructured.Unstructured{*trait}
 					})),
@@ -466,6 +483,101 @@ func TestReconciler(t *testing.T) {
 			},
 			want: want{
 				result: reconcile.Result{RequeueAfter: longWait},
+			},
+		},
+		"RegisterFinalizer": {
+			reason: "Register finalizer successfully",
+			args: args{
+				m: &mock.Manager{
+					Client: &test.MockClient{
+						MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+							o, _ := obj.(*v1alpha2.ApplicationConfiguration)
+							*o = v1alpha2.ApplicationConfiguration{}
+							return nil
+						},
+						MockUpdate: test.NewMockUpdateFn(nil, func(o runtime.Object) error {
+							want := ac()
+							if diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty()); diff != "" {
+								t.Errorf("\nclient.Update(): -want, +got:\n%s", diff)
+								return errUnexpectedStatus
+							}
+							return nil
+						}),
+						MockStatusUpdate: test.NewMockStatusUpdateFn(nil),
+					},
+				},
+			},
+			want: want{
+				result: reconcile.Result{},
+			},
+		},
+		"FinalizerSuccess": {
+			reason: "",
+			args: args{
+				m: &mock.Manager{
+					Client: &test.MockClient{
+						MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+							o, _ := obj.(*v1alpha2.ApplicationConfiguration)
+							*o = v1alpha2.ApplicationConfiguration{ObjectMeta: metav1.ObjectMeta{
+								DeletionTimestamp: &now,
+								Finalizers:        []string{workloadScopeFinalizer},
+							}}
+							return nil
+						},
+						MockUpdate: test.NewMockUpdateFn(nil, func(o runtime.Object) error {
+							want := &v1alpha2.ApplicationConfiguration{ObjectMeta: metav1.ObjectMeta{
+								DeletionTimestamp: &now,
+								Finalizers:        []string{},
+							}}
+							if diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty()); diff != "" {
+								t.Errorf("\nclient.Update(): -want, +got:\n%s", diff)
+								return errUnexpectedStatus
+							}
+							return nil
+						}),
+						MockStatusUpdate: test.NewMockStatusUpdateFn(nil),
+					},
+				},
+			},
+			want: want{
+				result: reconcile.Result{},
+			},
+		},
+		"FinalizerGetError": {
+			reason: "",
+			args: args{
+				m: &mock.Manager{
+					Client: &test.MockClient{
+						MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+							o, _ := obj.(*v1alpha2.ApplicationConfiguration)
+							*o = v1alpha2.ApplicationConfiguration{ObjectMeta: metav1.ObjectMeta{
+								DeletionTimestamp: &now,
+								Finalizers:        []string{workloadScopeFinalizer},
+							}}
+							return nil
+						},
+						MockUpdate: test.NewMockUpdateFn(nil, func(o runtime.Object) error {
+							want := &v1alpha2.ApplicationConfiguration{ObjectMeta: metav1.ObjectMeta{
+								DeletionTimestamp: &now,
+								Finalizers:        []string{workloadScopeFinalizer},
+							}}
+							if diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty()); diff != "" {
+								t.Errorf("\nclient.Update(): -want, +got:\n%s", diff)
+								return errUnexpectedStatus
+							}
+							return nil
+						}),
+						MockStatusUpdate: test.NewMockStatusUpdateFn(nil),
+					},
+				},
+				o: []ReconcilerOption{
+					WithApplicator(WorkloadApplyFns{FinalizeFn: func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) error {
+						return errBoom
+					}}),
+				},
+			},
+			want: want{
+				result: reconcile.Result{},
 			},
 		},
 	}

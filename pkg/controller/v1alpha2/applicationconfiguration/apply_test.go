@@ -375,3 +375,152 @@ func TestApplyWorkloads(t *testing.T) {
 		})
 	}
 }
+
+func TestFinalizeWorkloadScopes(t *testing.T) {
+	namespace := "ns"
+	errMock := errors.New("mock error")
+	workload := &unstructured.Unstructured{}
+	workload.SetAPIVersion("workload.oam.dev")
+	workload.SetKind("workloadKind")
+	workload.SetNamespace(namespace)
+	workload.SetName("workload-example")
+	workload.SetUID(types.UID("workload-uid"))
+
+	ctx := context.Background()
+
+	scope, _ := util.Object2Unstructured(&v1alpha2.HealthScope{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scope-example",
+			Namespace: namespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "scope.oam.dev/v1alpha2",
+			Kind:       "scopeKind",
+		},
+		Spec: v1alpha2.HealthScopeSpec{
+			WorkloadReferences: []v1alpha1.TypedReference{
+				{
+					APIVersion: workload.GetAPIVersion(),
+					Kind:       workload.GetKind(),
+					Name:       workload.GetName(),
+				},
+			},
+		},
+	})
+	scopeDefinition := v1alpha2.ScopeDefinition{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ScopeDefinition",
+			APIVersion: "scopeDef.oam.dev",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scope-example.scope.oam.dev",
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.ScopeDefinitionSpec{
+			Reference: v1alpha2.DefinitionReference{
+				Name: "scope-example.scope.oam.dev",
+			},
+			WorkloadRefsPath: "spec.workloadRefs",
+		},
+	}
+
+	ac := v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Finalizers: []string{workloadScopeFinalizer},
+		},
+		Status: v1alpha2.ApplicationConfigurationStatus{
+			Workloads: []v1alpha2.WorkloadStatus{
+				{
+					Reference: v1alpha1.TypedReference{
+						APIVersion: workload.GetAPIVersion(),
+						Kind:       workload.GetKind(),
+						Name:       workload.GetName(),
+					},
+					Scopes: []v1alpha2.WorkloadScope{
+						{
+							Reference: v1alpha1.TypedReference{
+								APIVersion: scope.GetAPIVersion(),
+								Kind:       scope.GetKind(),
+								Name:       scope.GetName(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cases := []struct {
+		caseName       string
+		client         resource.Applicator
+		rawClient      client.Client
+		wantErr        error
+		wantFinalizers []string
+	}{
+		{
+			caseName: "Finalization successes",
+			client:   resource.ApplyFn(func(_ context.Context, o runtime.Object, _ ...resource.ApplyOption) error { return nil }),
+			rawClient: &test.MockClient{
+				MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+					if key.Name == scope.GetName() {
+						scope := obj.(*unstructured.Unstructured)
+
+						refs := []interface{}{
+							map[string]interface{}{
+								"apiVersion": workload.GetAPIVersion(),
+								"kind":       workload.GetKind(),
+								"name":       workload.GetName(),
+							},
+						}
+
+						if err := fieldpath.Pave(scope.UnstructuredContent()).SetValue("spec.workloadRefs", refs); err == nil {
+							return err
+						}
+
+						return nil
+					}
+					if scopeDef, ok := obj.(*v1alpha2.ScopeDefinition); ok {
+						*scopeDef = scopeDefinition
+						return nil
+					}
+
+					return nil
+				},
+				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+					return nil
+				},
+			},
+			wantErr:        nil,
+			wantFinalizers: []string{},
+		},
+		{
+			caseName: "Finalization fails for error",
+			client:   resource.ApplyFn(func(_ context.Context, o runtime.Object, _ ...resource.ApplyOption) error { return nil }),
+			rawClient: &test.MockClient{
+				MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+					return errMock
+				},
+				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+					return nil
+				},
+			},
+			wantErr:        errors.Wrapf(errMock, errFmtApplyScope, scope.GetAPIVersion(), scope.GetKind(), scope.GetName()),
+			wantFinalizers: []string{workloadScopeFinalizer},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.caseName, func(t *testing.T) {
+			acTest := ac
+			w := workloads{client: tc.client, rawClient: tc.rawClient}
+			err := w.Finalize(ctx, &acTest)
+
+			if diff := cmp.Diff(tc.wantErr, err, test.EquateErrors()); diff != "" {
+				t.Errorf("\n%s\nw.Apply(...): -want error, +got error:\n%s", tc.caseName, diff)
+			}
+			if diff := cmp.Diff(tc.wantFinalizers, acTest.ObjectMeta.Finalizers); diff != "" {
+				t.Errorf("\n%s\nw.Apply(...): -want error, +got error:\n%s", tc.caseName, diff)
+			}
+		})
+	}
+
+}
