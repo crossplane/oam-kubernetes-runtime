@@ -24,6 +24,9 @@ func (r *Reconciler) renderDeployment(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	// pass through label and annotation
+	util.PassLabelAndAnnotation(workload, resources[0])
+
 	deploy, ok := resources[0].(*appsv1.Deployment)
 	if !ok {
 		return nil, fmt.Errorf("internal error, deployment is not rendered correctly")

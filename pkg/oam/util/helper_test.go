@@ -1048,3 +1048,63 @@ var _ = Describe("Test UnpackRevisionData helper util", func() {
 	})
 
 })
+
+var _ = Describe("TestPassThroughObjMeta", func() {
+	ac := &v1alpha2.ApplicationConfiguration{}
+
+	labels := map[string]string{
+		"core.oam.dev/ns":         "oam-system",
+		"core.oam.dev/controller": "oam-kubernetes-runtime",
+	}
+
+	annotation := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+
+	ac.SetLabels(labels)
+	ac.SetAnnotations(annotation)
+
+	It("workload and trait have no labels and annotation", func() {
+		var u unstructured.Unstructured
+		util.PassLabelAndAnnotation(ac, &u)
+		got := u.GetLabels()
+		want := labels
+		Expect(got).Should(BeEquivalentTo(want))
+		gotAnnotation := u.GetAnnotations()
+		wantAnnotation := annotation
+		Expect(gotAnnotation).Should(BeEquivalentTo(wantAnnotation))
+	})
+
+	It("workload and trait contains overlapping keys", func() {
+		var u unstructured.Unstructured
+		existAnnotation := map[string]string{
+			"key1": "exist value1",
+			"key3": "value3",
+		}
+		existLabels := map[string]string{
+			"core.oam.dev/ns":          "kube-system",
+			"core.oam.dev/kube-native": "deployment",
+		}
+		u.SetLabels(existLabels)
+		u.SetAnnotations(existAnnotation)
+
+		util.PassLabelAndAnnotation(ac, &u)
+
+		gotAnnotation := u.GetAnnotations()
+		wantAnnotation := map[string]string{
+			"key1": "exist value1",
+			"key2": "value2",
+			"key3": "value3",
+		}
+		Expect(gotAnnotation).Should(BeEquivalentTo(wantAnnotation))
+
+		gotLabels := u.GetLabels()
+		wantLabels := map[string]string{
+			"core.oam.dev/ns":          "kube-system",
+			"core.oam.dev/kube-native": "deployment",
+			"core.oam.dev/controller":  "oam-kubernetes-runtime",
+		}
+		Expect(gotLabels).Should(BeEquivalentTo(wantLabels))
+	})
+})
