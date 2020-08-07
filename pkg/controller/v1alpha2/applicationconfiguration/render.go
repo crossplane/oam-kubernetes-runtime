@@ -465,8 +465,7 @@ func (r *components) checkSourceReady(ctx context.Context, s *dagSource) (string
 	}
 	paved := fieldpath.Pave(u.UnstructuredContent())
 
-	// TODO: Currently only string value supported. Support more types in the future.
-	val, err := paved.GetString(obj.FieldPath)
+	rawval, err := paved.GetValue(obj.FieldPath)
 	if err != nil {
 		if fieldpath.IsNotFound(err) {
 			return "", false, nil
@@ -474,15 +473,22 @@ func (r *components) checkSourceReady(ctx context.Context, s *dagSource) (string
 		return "", false, fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
 	}
 
-	ok, err := matchValue(s.Conditions, val, paved)
-	if err != nil {
-		return val, false, err
-	}
-	if !ok {
-		return val, false, nil
+	switch val := rawval.(type) {
+	case string:
+		ok, err := matchValue(s.Conditions, val, paved)
+		if err != nil {
+			return val, false, err
+		}
+		if !ok {
+			return val, false, nil
+		}
+
+		return val, true, nil
+	default:
+		// TODO: Currently only string value supported. Support more types in the future.
+		return "", false, fmt.Errorf("unsupported field (%s) type: %T", obj.FieldPath, rawval)
 	}
 
-	return val, true, nil
 }
 
 func matchValue(conds []v1alpha2.ConditionRequirement, val string, paved *fieldpath.Paved) (bool, error) {
