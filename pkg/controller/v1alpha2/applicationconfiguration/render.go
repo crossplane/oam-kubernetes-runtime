@@ -130,7 +130,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	}
 
 	// pass through labels and annotation from app-config to workload
-	r.passThroughObjMeta(ac.ObjectMeta, w)
+	util.PassLabelAndAnnotation(ac, w)
 
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 	w.SetOwnerReferences([]metav1.OwnerReference{*ref})
@@ -145,7 +145,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		}
 
 		// pass through labels and annotation from app-config to trait
-		r.passThroughObjMeta(ac.ObjectMeta, t)
+		util.PassLabelAndAnnotation(ac, t)
 		traits = append(traits, &Trait{Object: *t})
 		traitDefs = append(traitDefs, *traitDef)
 	}
@@ -241,29 +241,6 @@ func isRevisionEnabled(traitDefs []v1alpha2.TraitDefinition) bool {
 		}
 	}
 	return false
-}
-
-// pass through labels and annotation from app-config to workload  or trait
-func (r *components) passThroughObjMeta(oMeta metav1.ObjectMeta, u *unstructured.Unstructured) {
-	mergeMap := func(src, dst map[string]string) map[string]string {
-		if len(src) == 0 {
-			return dst
-		}
-		// make sure dst is initialized
-		if dst == nil {
-			dst = map[string]string{}
-		}
-		for k, v := range src {
-			if _, exist := dst[k]; !exist {
-				dst[k] = v
-			}
-		}
-		return dst
-	}
-	// pass app-config labels
-	u.SetLabels(mergeMap(oMeta.GetLabels(), u.GetLabels()))
-	// pass app-config annotation
-	u.SetAnnotations(mergeMap(oMeta.GetAnnotations(), u.GetAnnotations()))
 }
 
 // A ResourceRenderer renders a Kubernetes-compliant YAML resource into an
