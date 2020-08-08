@@ -144,7 +144,8 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	// set annotation to component
 	revision := appsv1.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: revisionName,
+			Name:      revisionName,
+			Namespace: curComp.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: v1alpha2.SchemeGroupVersion.String(),
