@@ -359,6 +359,34 @@ spec:
 
 Still, the `Traffic` trait should handle garbage collection things for the old workloads when no longer needed.
 
+#### Multiple revisions of one Component can exist together
+
+It's allowed to have multiple revisions of the same Component existing simultaneously.
+
+```yaml
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: my-app-deployment
+  annotations:
+    version: v1.0.0
+    description: "Description of this deployment"
+spec:
+  components:
+    - revisionName: example-component-1
+      traits:
+        - apiversion:core.oam.dev/v1alpha2
+          kind: ManualScaler
+          spec:
+            replicaCount: 3
+    - revisionName: example-component-2
+      traits:
+        - apiversion:core.oam.dev/v1alpha2
+          kind: ManualScaler
+          spec:
+            replicaCount: 2
+```
+
 ## Example: A blue-green workflow
 
 Let's say we have a `Rollout` Trait with definition like below:

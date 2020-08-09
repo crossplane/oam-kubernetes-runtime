@@ -149,7 +149,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		traits = append(traits, &Trait{Object: *t})
 		traitDefs = append(traitDefs, *traitDef)
 	}
-	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
+	if err := SetWorkloadInstanceName(acc.RevisionName, traitDefs, w, c); err != nil {
 		return nil, err
 	}
 
@@ -212,12 +212,20 @@ func setTraitProperties(t *unstructured.Unstructured, traitName, namespace strin
 }
 
 // SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
-func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
+func SetWorkloadInstanceName(revisionName string, traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
 	//Don't override the specified name
 	if w.GetName() != "" {
 		return nil
 	}
 	pv := fieldpath.Pave(w.UnstructuredContent())
+
+	// if specified revisionName assigned, use revisionName as the workload name
+	if revisionName != "" {
+		if err := pv.SetString(instanceNamePath, revisionName); err != nil {
+			return errors.Wrapf(err, errSetValueForField, instanceNamePath, revisionName)
+		}
+		return nil
+	}
 	if isRevisionEnabled(traitDefs) {
 		// if revisionEnabled, use revisionName as the workload name
 		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision.Name); err != nil {
