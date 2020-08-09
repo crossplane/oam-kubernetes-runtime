@@ -255,7 +255,7 @@ func TestRenderComponents(t *testing.T) {
 						Workload: func() *unstructured.Unstructured {
 							w := &unstructured.Unstructured{}
 							w.SetNamespace(namespace)
-							w.SetName(componentName)
+							w.SetName(revisionName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 							return w
 						}(),
@@ -721,6 +721,7 @@ func TestGetCRDName(t *testing.T) {
 
 func TestSetWorkloadInstanceName(t *testing.T) {
 	tests := map[string]struct {
+		rName     string
 		traitDefs []v1alpha2.TraitDefinition
 		u         *unstructured.Unstructured
 		c         *v1alpha2.Component
@@ -741,6 +742,17 @@ func TestSetWorkloadInstanceName(t *testing.T) {
 				},
 			}},
 			reason: "workloadName should not change if already set",
+		},
+		"with a specified revisionName": {
+			rName: "specifiedRevisionName",
+			u:     &unstructured.Unstructured{Object: map[string]interface{}{}},
+			exp: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "specifiedRevisionName",
+				},
+			}},
+			expErr: nil,
+			reason: "workloadName should use specified revisionName if provide",
 		},
 		"revisionEnabled true, set revisionName": {
 			traitDefs: []v1alpha2.TraitDefinition{
@@ -795,9 +807,9 @@ func TestSetWorkloadInstanceName(t *testing.T) {
 	for name, ti := range tests {
 		t.Run(name, func(t *testing.T) {
 			if ti.expErr != nil {
-				assert.Equal(t, ti.expErr.Error(), SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c).Error())
+				assert.Equal(t, ti.expErr.Error(), SetWorkloadInstanceName(ti.rName, ti.traitDefs, ti.u, ti.c).Error())
 			} else {
-				err := SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c)
+				err := SetWorkloadInstanceName(ti.rName, ti.traitDefs, ti.u, ti.c)
 				assert.NoError(t, err)
 				assert.Equal(t, ti.exp, ti.u, ti.reason)
 			}
