@@ -72,6 +72,7 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 	for _, o := range oamObject.GetOwnerReferences() {
 		if o.Kind == reflect.TypeOf(v1alpha2.ApplicationConfiguration{}).Name() {
 			acName = o.Name
+			break
 		}
 	}
 	if len(acName) > 0 {
