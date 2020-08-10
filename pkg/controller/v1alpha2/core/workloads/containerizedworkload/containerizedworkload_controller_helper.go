@@ -41,7 +41,7 @@ func (r *Reconciler) renderDeployment(ctx context.Context,
 			}
 		}
 	}
-	r.log.Info(" rendered a deployment", "deploy", deploy.Spec.Template.Spec)
+	r.log.Info("rendered a deployment", "deploy", deploy.Spec.Template.Spec)
 
 	// set the controller reference so that we can watch this deployment and it will be deleted automatically
 	if err := ctrl.SetControllerReference(workload, deploy, r.Scheme); err != nil {
