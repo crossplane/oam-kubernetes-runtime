@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -423,9 +424,9 @@ func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInp
 		if !ok {
 			return nil, errors.Wrapf(ErrDataOutputNotExist, "DataOutputName (%s)", in.ValueFrom.DataOutputName)
 		}
-		val, ready, err := r.checkSourceReady(ctx, s)
+		val, ready, err := r.getDataInput(ctx, s)
 		if err != nil {
-			return nil, errors.Wrap(err, "checkSourceReady failed")
+			return nil, errors.Wrap(err, "getDataInput failed")
 		}
 		if !ready {
 			uds = append(uds, makeUnsatisfiedDependency(obj, s, in))
@@ -440,18 +441,35 @@ func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInp
 	return uds, nil
 }
 
-func fillValue(obj *unstructured.Unstructured, fs []string, val string) error {
+func fillValue(obj *unstructured.Unstructured, fs []string, val interface{}) error {
 	paved := fieldpath.Pave(obj.Object)
 	for _, fp := range fs {
-		err := paved.SetString(fp, val)
+		toSet := val
+
+		// Special case for slcie because we will append instead of rewriting.
+		if reflect.TypeOf(val).Kind() == reflect.Slice {
+			raw, err := paved.GetValue(fp)
+			if err != nil {
+				if fieldpath.IsNotFound(err) {
+					raw = make([]interface{}, 0)
+				} else {
+					return err
+				}
+			}
+			l := raw.([]interface{})
+			l = append(l, val.([]interface{})...)
+			toSet = l
+		}
+
+		err := paved.SetValue(fp, toSet)
 		if err != nil {
-			return fmt.Errorf("paved.SetString() failed: %w", err)
+			return errors.Wrap(err, "paved.SetValue() failed")
 		}
 	}
 	return nil
 }
 
-func (r *components) checkSourceReady(ctx context.Context, s *dagSource) (string, bool, error) {
+func (r *components) getDataInput(ctx context.Context, s *dagSource) (interface{}, bool, error) {
 	obj := s.ObjectRef
 	key := types.NamespacedName{
 		Namespace: obj.Namespace,
@@ -461,7 +479,7 @@ func (r *components) checkSourceReady(ctx context.Context, s *dagSource) (string
 	u.SetGroupVersionKind(obj.GroupVersionKind())
 	err := r.client.Get(ctx, key, u)
 	if err != nil {
-		return "", false, errors.Wrap(resource.IgnoreNotFound(err), fmt.Sprintf("failed to get object (%s)", key.String()))
+		return nil, false, errors.Wrap(resource.IgnoreNotFound(err), fmt.Sprintf("failed to get object (%s)", key.String()))
 	}
 	paved := fieldpath.Pave(u.UnstructuredContent())
 
@@ -470,43 +488,52 @@ func (r *components) checkSourceReady(ctx context.Context, s *dagSource) (string
 		if fieldpath.IsNotFound(err) {
 			return "", false, nil
 		}
-		return "", false, fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
+		return nil, false, fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
 	}
 
+	var ok bool
 	switch val := rawval.(type) {
 	case string:
-		ok, err := matchValue(s.Conditions, val, paved)
-		if err != nil {
-			return val, false, err
-		}
-		if !ok {
-			return val, false, nil
-		}
-
-		return val, true, nil
+		// For string input we will:
+		// - check its value not empty if no condition is given.
+		// - check its value against conditions if no field path is specified.
+		ok, err = matchValue(s.Conditions, val, paved)
 	default:
-		// TODO: Currently only string value supported. Support more types in the future.
-		return "", false, fmt.Errorf("unsupported field (%s) type: %T", obj.FieldPath, rawval)
+		ok, err = checkConditions(s.Conditions, paved, nil)
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return nil, false, nil
 	}
 
+	return rawval, true, nil
 }
 
 func matchValue(conds []v1alpha2.ConditionRequirement, val string, paved *fieldpath.Paved) (bool, error) {
-	// If no matcher is specified, it is by default to check value not empty.
+	// If no condition is specified, it is by default to check value not empty.
 	if len(conds) == 0 {
 		return val != "", nil
 	}
 
+	return checkConditions(conds, paved, &val)
+}
+
+func checkConditions(conds []v1alpha2.ConditionRequirement, paved *fieldpath.Paved, val *string) (bool, error) {
 	for _, m := range conds {
 		var checkVal string
-		if m.FieldPath != "" {
-			var err error
+		var err error
+		switch {
+		case m.FieldPath != "":
 			checkVal, err = paved.GetString(m.FieldPath)
 			if err != nil {
 				return false, err
 			}
-		} else {
-			checkVal = val
+		case val != nil:
+			checkVal = *val
+		default:
+			return false, errors.New("FieldPath not specified")
 		}
 
 		switch m.Operator {
