@@ -677,6 +677,16 @@ func TestDependency(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	readyWorkloadArrayField := unreadyWorkload.DeepCopy()
+	err = unstructured.SetNestedStringSlice(readyWorkloadArrayField.Object, []string{"a"}, "spec", "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = unstructured.SetNestedStringSlice(readyWorkloadArrayField.Object, []string{"b"}, "status", "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	unreadyTrait := &unstructured.Unstructured{}
 	unreadyTrait.SetAPIVersion("v1")
 	unreadyTrait.SetKind("Trait")
@@ -719,8 +729,8 @@ func TestDependency(t *testing.T) {
 						FieldPath: "status.key",
 					}},
 				}},
-				wl:    unreadyWorkload,
-				trait: unreadyTrait,
+				wl:    unreadyWorkload.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
@@ -765,13 +775,21 @@ func TestDependency(t *testing.T) {
 						FieldPath: "status.key",
 					}},
 				}},
-				wl:    readyWorkload,
-				trait: unreadyTrait,
+				wl:    readyWorkload.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
 					if ws[0].HasDep {
 						t.Error("Workload should be ready to apply")
+					}
+
+					s, _, err := unstructured.NestedString(ws[0].Workload.UnstructuredContent(), "spec", "key")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if diff := cmp.Diff(s, "test"); diff != "" {
+						t.Fatal(diff)
 					}
 				},
 				depStatus: &v1alpha2.DependencyStatus{},
@@ -793,8 +811,8 @@ func TestDependency(t *testing.T) {
 						}},
 					}},
 				}},
-				wl:    unreadyWorkload,
-				trait: unreadyTrait,
+				wl:    unreadyWorkload.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
@@ -840,13 +858,21 @@ func TestDependency(t *testing.T) {
 						}},
 					}},
 				}},
-				wl:    unreadyWorkload,
-				trait: readyTrait,
+				wl:    unreadyWorkload.DeepCopy(),
+				trait: readyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
 					if ws[0].HasDep {
 						t.Error("Workload should be ready to apply")
+					}
+
+					s, _, err := unstructured.NestedString(ws[0].Workload.UnstructuredContent(), "spec", "key")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if diff := cmp.Diff(s, "test"); diff != "" {
+						t.Fatal(diff)
 					}
 				},
 				depStatus: &v1alpha2.DependencyStatus{},
@@ -870,8 +896,8 @@ func TestDependency(t *testing.T) {
 						FieldPath: "status.key",
 					}},
 				}},
-				wl:    unreadyWorkload,
-				trait: unreadyTrait,
+				wl:    unreadyWorkload.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
@@ -919,19 +945,27 @@ func TestDependency(t *testing.T) {
 						FieldPath: "status.key",
 					}},
 				}},
-				wl:    readyWorkload,
-				trait: unreadyTrait,
+				wl:    readyWorkload.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
 					if ws[0].Traits[0].HasDep {
 						t.Error("Trait should be ready to apply")
 					}
+
+					s, _, err := unstructured.NestedString(ws[0].Traits[0].Object.UnstructuredContent(), "spec", "key")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if diff := cmp.Diff(s, "test"); diff != "" {
+						t.Fatal(diff)
+					}
 				},
 				depStatus: &v1alpha2.DependencyStatus{},
 			},
 		},
-		"Trait depends on another unreadyTrait that's unready": {
+		"Trait depends on another Trait that's unready": {
 			args: args{
 				components: []v1alpha2.ApplicationConfigurationComponent{{
 					ComponentName: "test-component-sink",
@@ -949,8 +983,8 @@ func TestDependency(t *testing.T) {
 						}},
 					}},
 				}},
-				wl:    unreadyWorkload,
-				trait: unreadyTrait,
+				wl:    unreadyWorkload.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
@@ -980,7 +1014,7 @@ func TestDependency(t *testing.T) {
 				},
 			},
 		},
-		"Trait depends on another unreadyTrait that's ready": {
+		"Trait depends on another Trait that's ready": {
 			args: args{
 				components: []v1alpha2.ApplicationConfigurationComponent{{
 					ComponentName: "test-component-sink",
@@ -998,13 +1032,21 @@ func TestDependency(t *testing.T) {
 						}},
 					}},
 				}},
-				wl:    unreadyWorkload,
-				trait: readyTrait,
+				wl:    unreadyWorkload.DeepCopy(),
+				trait: readyTrait.DeepCopy(),
 			},
 			want: want{
 				verifyWorkloads: func(ws []Workload) {
 					if ws[0].Traits[0].HasDep {
 						t.Error("Trait should be ready to apply")
+					}
+
+					s, _, err := unstructured.NestedString(ws[0].Traits[0].Object.UnstructuredContent(), "spec", "key")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if diff := cmp.Diff(s, "test"); diff != "" {
+						t.Fatal(diff)
 					}
 				},
 				depStatus: &v1alpha2.DependencyStatus{},
@@ -1018,12 +1060,46 @@ func TestDependency(t *testing.T) {
 						ToFieldPaths: []string{"spec.key"},
 					}},
 				}},
-				wl:    unreadyWorkload,
-				trait: unreadyTrait,
+				wl:    unreadyWorkload.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
 			},
 			want: want{
 				err: ErrDataOutputNotExist,
 			},
+		},
+		"DataInput of array type should append": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+				}, {
+					ComponentName: "test-component-source",
+					DataOutputs: []v1alpha2.DataOutput{{
+						Name:      "test-output",
+						FieldPath: "status.key",
+					}},
+				}},
+				wl:    readyWorkloadArrayField.DeepCopy(),
+				trait: unreadyTrait.DeepCopy(),
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if ws[0].HasDep {
+						t.Error("Workload should be ready to apply")
+					}
+
+					l, _, err := unstructured.NestedStringSlice(ws[0].Workload.UnstructuredContent(), "spec", "key")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if diff := cmp.Diff(l, []string{"a", "b"}); diff != "" {
+						t.Fatal(diff)
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{}},
 		},
 	}
 
