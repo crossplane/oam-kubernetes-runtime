@@ -24,6 +24,9 @@ func (r *Reconciler) renderDeployment(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	// pass through label and annotation
+	util.PassLabelAndAnnotation(workload, resources[0])
+
 	deploy, ok := resources[0].(*appsv1.Deployment)
 	if !ok {
 		return nil, fmt.Errorf("internal error, deployment is not rendered correctly")
@@ -38,7 +41,7 @@ func (r *Reconciler) renderDeployment(ctx context.Context,
 			}
 		}
 	}
-	r.log.Info(" rendered a deployment", "deploy", deploy.Spec.Template.Spec)
+	r.log.Info("rendered a deployment", "deploy", deploy.Spec.Template.Spec)
 
 	// set the controller reference so that we can watch this deployment and it will be deleted automatically
 	if err := ctrl.SetControllerReference(workload, deploy, r.Scheme); err != nil {

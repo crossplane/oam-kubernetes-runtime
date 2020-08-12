@@ -51,6 +51,7 @@ type WorkloadDefinitionSpec struct {
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Extension *runtime.RawExtension `json:"extension,omitempty"`
 }
 
@@ -100,6 +101,7 @@ type TraitDefinitionSpec struct {
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Extension *runtime.RawExtension `json:"extension,omitempty"`
 }
 
@@ -141,6 +143,7 @@ type ScopeDefinitionSpec struct {
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Extension *runtime.RawExtension `json:"extension,omitempty"`
 }
 
@@ -458,6 +461,7 @@ type DataOutput struct {
 }
 
 // DataInput specifies a data input sink to an object.
+// If input is array, it will be appended to the target field paths.
 type DataInput struct {
 	// ValueFrom specifies the value source.
 	ValueFrom DataInputValueFrom `json:"valueFrom,omitempty"`

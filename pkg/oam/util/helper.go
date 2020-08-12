@@ -72,6 +72,7 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 	for _, o := range oamObject.GetOwnerReferences() {
 		if o.Kind == reflect.TypeOf(v1alpha2.ApplicationConfiguration{}).Name() {
 			acName = o.Name
+			break
 		}
 	}
 	if len(acName) > 0 {
@@ -205,6 +206,29 @@ func PatchCondition(ctx context.Context, r client.StatusClient, workload Conditi
 	return errors.Wrap(
 		r.Status().Patch(ctx, workload, workloadPatch, client.FieldOwner(workload.GetUID())),
 		ErrUpdateStatus)
+}
+
+// PassLabelAndAnnotation passes through labels and annotation objectMeta from the parent to the child object
+func PassLabelAndAnnotation(parentObj oam.Object, childObj oam.Object) {
+	mergeMap := func(src, dst map[string]string) map[string]string {
+		if len(src) == 0 {
+			return dst
+		}
+		// make sure dst is initialized
+		if dst == nil {
+			dst = map[string]string{}
+		}
+		for k, v := range src {
+			if _, exist := dst[k]; !exist {
+				dst[k] = v
+			}
+		}
+		return dst
+	}
+	// pass app-config labels
+	childObj.SetLabels(mergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+	// pass app-config annotation
+	childObj.SetAnnotations(mergeMap(parentObj.GetAnnotations(), childObj.GetAnnotations()))
 }
 
 // GetCRDName return the CRD name of any resources
