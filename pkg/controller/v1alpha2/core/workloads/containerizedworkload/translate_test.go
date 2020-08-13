@@ -45,6 +45,20 @@ var (
 
 type deploymentModifier func(*appsv1.Deployment)
 
+func dmWithLabel(label map[string]string) deploymentModifier {
+	return func(cw *appsv1.Deployment) {
+		cw.Labels = label
+		cw.Spec.Template.Labels = label
+	}
+}
+
+func dmWithAnnotation(annotation map[string]string) deploymentModifier {
+	return func(cw *appsv1.Deployment) {
+		cw.Annotations = annotation
+		cw.Spec.Template.Annotations = annotation
+	}
+}
+
 func dmWithOS(os string) deploymentModifier {
 	return func(d *appsv1.Deployment) {
 		if d.Spec.Template.Spec.NodeSelector == nil {
@@ -105,6 +119,18 @@ func deployment(mod ...deploymentModifier) *appsv1.Deployment {
 
 type cwModifier func(*v1alpha2.ContainerizedWorkload)
 
+func cwWithLabel(label map[string]string) cwModifier {
+	return func(cw *v1alpha2.ContainerizedWorkload) {
+		cw.Labels = label
+	}
+}
+
+func cwWithAnnotation(annotation map[string]string) cwModifier {
+	return func(cw *v1alpha2.ContainerizedWorkload) {
+		cw.Annotations = annotation
+	}
+}
+
 func cwWithOS(os string) cwModifier {
 	return func(cw *v1alpha2.ContainerizedWorkload) {
 		oamOS := v1alpha2.OperatingSystem(os)
@@ -143,7 +169,15 @@ func containerizedWorkload(mod ...cwModifier) *v1alpha2.ContainerizedWorkload {
 func TestContainerizedWorkloadTranslator(t *testing.T) {
 
 	envVarSecretVal := "nicesecretvalue"
-
+	cwLabel := map[string]string{
+		"oam.dev/enabled": "true",
+	}
+	dmLabel := cwLabel
+	dmLabel[labelKey] = workloadUID
+	cwAnnotation := map[string]string{
+		"dapr.io/enabled": "true",
+	}
+	dmAnnotation := cwAnnotation
 	type args struct {
 		w oam.Workload
 	}
@@ -171,6 +205,13 @@ func TestContainerizedWorkloadTranslator(t *testing.T) {
 				w: containerizedWorkload(),
 			},
 			want: want{result: []oam.Object{deployment()}},
+		},
+		"SuccessfulWithLabelAndAnnotation": {
+			reason: "A ContainerizedWorkload with label and annotation should be successfully pass onto a deployment.",
+			args: args{
+				w: containerizedWorkload(cwWithLabel(cwLabel), cwWithAnnotation(cwAnnotation)),
+			},
+			want: want{result: []oam.Object{deployment(dmWithLabel(cwLabel), dmWithAnnotation(dmAnnotation))}},
 		},
 		"SuccessfulOS": {
 			reason: "A ContainerizedWorkload should be successfully translateddinto a deployment.",
