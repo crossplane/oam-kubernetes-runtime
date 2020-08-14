@@ -16,18 +16,6 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
-func cwWithLabel(label map[string]string) cwModifier {
-	return func(cw *v1alpha2.ContainerizedWorkload) {
-		cw.Labels = label
-	}
-}
-
-func cwWithAnnotation(annotation map[string]string) cwModifier {
-	return func(cw *v1alpha2.ContainerizedWorkload) {
-		cw.Annotations = annotation
-	}
-}
-
 func TestContainerizedWorkloadReconciler_cleanupResources(t *testing.T) {
 	type args struct {
 		ctx        context.Context
@@ -64,26 +52,36 @@ func TestRenderDeployment(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	wantedLabel := map[string]string{
+	cwLabel := map[string]string{
 		"oam.dev/enabled": "true",
 	}
-
-	wantedAnnotation := map[string]string{
+	dmLabel := cwLabel
+	dmLabel[labelKey] = workloadUID
+	cwAnnotation := map[string]string{
 		"dapr.io/enabled": "true",
 	}
+	dmAnnotation := cwAnnotation
 
-	w := containerizedWorkload(cwWithAnnotation(wantedAnnotation), cwWithLabel(wantedLabel))
+	w := containerizedWorkload(cwWithAnnotation(cwAnnotation), cwWithLabel(cwLabel))
 	deploy, err := r.renderDeployment(context.Background(), w)
 
 	if diff := cmp.Diff(nil, err, test.EquateErrors()); diff != "" {
 		t.Errorf("%s\ncontainerizedWorkloadTranslator(...): -want error, +got error:\n%s", "translate", diff)
 	}
 
-	if diff := cmp.Diff(wantedLabel, deploy.GetLabels()); diff != "" {
+	if diff := cmp.Diff(dmLabel, deploy.GetLabels()); diff != "" {
 		t.Errorf("\nReason: %s\ncontainerizedWorkloadTranslator(...): -want, +got:\n%s", "pass label", diff)
 	}
 
-	if diff := cmp.Diff(wantedAnnotation, deploy.GetAnnotations()); diff != "" {
+	if diff := cmp.Diff(dmAnnotation, deploy.GetAnnotations()); diff != "" {
+		t.Errorf("\nReason: %s\ncontainerizedWorkloadTranslator(...): -want, +got:\n%s", "pass annotation", diff)
+	}
+
+	if diff := cmp.Diff(dmLabel, deploy.Spec.Template.GetLabels()); diff != "" {
+		t.Errorf("\nReason: %s\ncontainerizedWorkloadTranslator(...): -want, +got:\n%s", "pass label", diff)
+	}
+
+	if diff := cmp.Diff(dmAnnotation, deploy.Spec.Template.GetAnnotations()); diff != "" {
 		t.Errorf("\nReason: %s\ncontainerizedWorkloadTranslator(...): -want, +got:\n%s", "pass annotation", diff)
 	}
 
