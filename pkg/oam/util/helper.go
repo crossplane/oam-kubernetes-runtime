@@ -70,7 +70,7 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 	var eventObj = &v1alpha2.ApplicationConfiguration{}
 	// locate the appConf name from the owner list
 	for _, o := range oamObject.GetOwnerReferences() {
-		if o.Kind == reflect.TypeOf(v1alpha2.ApplicationConfiguration{}).Name() {
+		if o.Kind == v1alpha2.ApplicationConfigurationGroupKind {
 			acName = o.Name
 			break
 		}
