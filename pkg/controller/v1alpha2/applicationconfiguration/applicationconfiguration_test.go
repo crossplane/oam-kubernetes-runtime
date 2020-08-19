@@ -492,12 +492,29 @@ func TestReconciler(t *testing.T) {
 					Client: &test.MockClient{
 						MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 							o, _ := obj.(*v1alpha2.ApplicationConfiguration)
-							*o = v1alpha2.ApplicationConfiguration{}
+							*o = v1alpha2.ApplicationConfiguration{
+								Spec: v1alpha2.ApplicationConfigurationSpec{
+									Components: []v1alpha2.ApplicationConfigurationComponent{
+										{
+											ComponentName: componentName,
+											Scopes: []v1alpha2.ComponentScope{
+												{
+													ScopeReference: runtimev1alpha1.TypedReference{
+														APIVersion: "core.oam.dev/v1alpha2",
+														Kind:       "HealthScope",
+														Name:       "example-healthscope",
+													},
+												},
+											},
+										},
+									},
+								},
+							}
 							return nil
 						},
 						MockUpdate: test.NewMockUpdateFn(nil, func(o runtime.Object) error {
 							want := ac()
-							if diff := cmp.Diff(want, o.(*v1alpha2.ApplicationConfiguration), cmpopts.EquateEmpty()); diff != "" {
+							if diff := cmp.Diff(want.GetFinalizers(), o.(*v1alpha2.ApplicationConfiguration).GetFinalizers(), cmpopts.EquateEmpty()); diff != "" {
 								t.Errorf("\nclient.Update(): -want, +got:\n%s", diff)
 								return errUnexpectedStatus
 							}

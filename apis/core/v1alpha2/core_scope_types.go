@@ -34,7 +34,7 @@ type HealthScopeSpec struct {
 	ProbeInterval *int32 `json:"probe-interval,omitempty"`
 
 	// WorkloadReferences to the workloads that are in this scope.
-	WorkloadReferences []runtimev1alpha1.TypedReference `json:"workloadRefs,omitempty"`
+	WorkloadReferences []runtimev1alpha1.TypedReference `json:"workloadRefs"`
 }
 
 // A HealthScopeStatus represents the observed state of a HealthScope.

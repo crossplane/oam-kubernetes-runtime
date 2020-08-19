@@ -206,12 +206,10 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	}
 
 	if ac.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !meta.FinalizerExists(&ac.ObjectMeta, workloadScopeFinalizer) {
-			meta.AddFinalizer(&ac.ObjectMeta, workloadScopeFinalizer)
-			log.Debug("Rgister finalizer", "finalizer", workloadScopeFinalizer)
+		if registerFinalizers(ac) {
+			log.Debug("Register new finalizers", "finalizers", ac.ObjectMeta.Finalizers)
 			return reconcile.Result{}, errors.Wrap(r.client.Update(ctx, ac), errUpdateAppConfigStatus)
 		}
-
 	} else {
 		if err := r.workloads.Finalize(ctx, ac); err != nil {
 			log.Debug("Failed to finalize workloads", "workloads status", ac.Status.Workloads,
@@ -308,6 +306,25 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		ac.Status.Dependency = *depStatus
 	}
 	return reconcile.Result{RequeueAfter: waitTime}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+}
+
+// if any finalizers newly registered, return true
+func registerFinalizers(ac *v1alpha2.ApplicationConfiguration) bool {
+	newFinalizer := false
+	if !meta.FinalizerExists(&ac.ObjectMeta, workloadScopeFinalizer) && hasScope(ac) {
+		meta.AddFinalizer(&ac.ObjectMeta, workloadScopeFinalizer)
+		newFinalizer = true
+	}
+	return newFinalizer
+}
+
+func hasScope(ac *v1alpha2.ApplicationConfiguration) bool {
+	for _, c := range ac.Spec.Components {
+		if len(c.Scopes) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // A Workload produced by an OAM ApplicationConfiguration.

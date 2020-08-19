@@ -84,6 +84,9 @@ var _ = Describe("HealthScope", func() {
 				Name:      healthScopeName,
 				Namespace: namespace,
 			},
+			Spec: v1alpha2.HealthScopeSpec{
+				WorkloadReferences: []v1alpha1.TypedReference{},
+			},
 		}
 		logf.Log.Info("Creating health scope")
 		Expect(k8sClient.Create(ctx, &hs)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
