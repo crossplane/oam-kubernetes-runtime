@@ -216,30 +216,6 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					return nil
 				},
 			},
-			{
-				caseName:       "1 supportted workload and 1 general workload",
-				hsWorkloadRefs: []v1alpha1.TypedReference{cwRef, hGeneralRef},
-				mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-					switch o := obj.(type) {
-					case *corev1alpha2.ContainerizedWorkload:
-						*o = cw
-					case *appsv1.Deployment:
-						*o = hDeploy
-					case *unstructured.Unstructured:
-						*o = *hGeneralWL
-					}
-					return nil
-				},
-			},
-			{
-				caseName:       "2 general workloads",
-				hsWorkloadRefs: []v1alpha1.TypedReference{hGeneralRef, hGeneralRef},
-				mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-					o, _ := obj.(*unstructured.Unstructured)
-					*o = *hGeneralWL
-					return nil
-				},
-			},
 		}
 		for _, tc := range tests {
 			By("Running: " + tc.caseName)

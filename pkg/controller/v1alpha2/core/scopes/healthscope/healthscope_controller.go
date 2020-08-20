@@ -46,7 +46,7 @@ const (
 
 // Reconcile error strings.
 const (
-	errGetHealthScope          = "cannotrget health scope"
+	errGetHealthScope          = "cannot get health scope"
 	errMarshalScopeDiagnosiis  = "cannot marshal diagnosis of the scope"
 	errUpdateHealthScopeStatus = "cannot update health scope status"
 )
@@ -213,19 +213,11 @@ func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1al
 					return
 				}
 			}
-			if wlStatusC == nil {
-				// no matched checker, then try general check
-				wlStatusC = GeneralHealthChecker(ctxWithTimeout, r.client, resRef, healthScope.GetNamespace())
-				if wlStatusC != nil {
-					wlStatusCs <- wlStatusC
-				} else {
-					// unsupportted workload
-					wlStatusCs <- &HealthCondition{
-						Target:    resRef,
-						IsHealthy: false,
-						Diagnosis: fmt.Sprintf(errFmtUnsupportWorkload, resRef.APIVersion, resRef.Kind),
-					}
-				}
+			// unsupportted workload
+			wlStatusCs <- &HealthCondition{
+				Target:    resRef,
+				IsHealthy: false,
+				Diagnosis: fmt.Sprintf(errFmtUnsupportWorkload, resRef.APIVersion, resRef.Kind),
 			}
 		}(workloadRef)
 	}

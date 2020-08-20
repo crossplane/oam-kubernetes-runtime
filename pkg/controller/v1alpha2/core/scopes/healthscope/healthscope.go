@@ -19,9 +19,11 @@ package healthscope
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,7 +31,6 @@ import (
 	corev1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/pkg/errors"
 )
 
@@ -40,20 +41,14 @@ const (
 	errFmtResourceNotReady    = "resource not ready, resource status: %+v"
 
 	defaultTimeout = 10 * time.Second
-
-	kindContainerizedWorkload = "ContainerizedWorkload"
-	kindDeployment            = "Deployment"
-	kindService               = "Service"
-	kindStatefulSet           = "StatefulSet"
-	kindDaemonSet             = "DaemonSet"
 )
 
 var (
-	// for general check on worload's replicas
-	generalReplicaCheckFiled = []string{
-		"status.availableReplicas", // e.g. kruise.CloneSet
-		"status.readyReplicas",
-	}
+	kindContainerizedWorkload = corev1alpha2.ContainerizedWorkloadKind
+	kindDeployment            = reflect.TypeOf(apps.Deployment{}).Name()
+	kindService               = reflect.TypeOf(core.Service{}).Name()
+	kindStatefulSet           = reflect.TypeOf(apps.StatefulSet{}).Name()
+	kindDaemonSet             = reflect.TypeOf(apps.DaemonSet{}).Name()
 )
 
 // HealthCondition holds health status of any resource
@@ -218,45 +213,4 @@ func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtime
 	}
 	r.IsHealthy = true
 	return r
-}
-
-// GeneralHealthChecker checks a list of workload fields
-// if any field check passes, it's a healthy workload
-func GeneralHealthChecker(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
-	o := unstructured.Unstructured{}
-	o.SetAPIVersion(ref.APIVersion)
-	o.SetKind(ref.Kind)
-
-	nk := types.NamespacedName{Namespace: namespace, Name: ref.Name}
-	if err := client.Get(ctx, nk, &o); err != nil {
-		return &HealthCondition{
-			IsHealthy: false,
-			Target:    ref,
-			Diagnosis: errors.Wrap(err, errHealthCheck).Error(),
-		}
-	}
-	ref.UID = o.GetUID()
-	pavedV := fieldpath.Pave(o.UnstructuredContent())
-
-	for _, fp := range generalReplicaCheckFiled {
-		if value, err := pavedV.GetNumber(fp); err == nil {
-			// just check ready/available replica exists
-			if value != 0 {
-				return &HealthCondition{
-					Target:    ref,
-					IsHealthy: true,
-				}
-			}
-			//TODO(roywang) does every workload have status?
-			status, _ := pavedV.GetValue("status")
-			return &HealthCondition{
-				Target:    ref,
-				IsHealthy: false,
-				Diagnosis: fmt.Sprintf(errFmtResourceNotReady, status),
-			}
-
-		}
-	}
-	// no matched general check filed
-	return nil
 }
