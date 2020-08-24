@@ -21,8 +21,10 @@ import (
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,20 +44,33 @@ const (
 	errFmtGetScopeWorkloadRefsPath = "cannot get workloadRefsPath for scope to be dereferenced %q %q %q"
 	errFmtApplyTrait               = "cannot apply trait %q %q %q"
 	errFmtApplyScope               = "cannot apply scope %q %q %q"
+
+	workloadScopeFinalizer = "scope.finalizer.core.oam.dev"
 )
 
-// A WorkloadApplicator creates or updates workloads and their traits.
+// A WorkloadApplicator creates or updates or finalizes workloads and their traits.
 type WorkloadApplicator interface {
 	// Apply a workload and its traits.
 	Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error
+
+	// Finalize implements pre-delete hooks on workloads
+	Finalize(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) error
 }
 
-// A WorkloadApplyFn creates or updates workloads and their traits.
-type WorkloadApplyFn func(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error
+// A WorkloadApplyFns creates or updates or finalizes workloads and their traits.
+type WorkloadApplyFns struct {
+	ApplyFn    func(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error
+	FinalizeFn func(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) error
+}
 
 // Apply a workload and its traits.
-func (fn WorkloadApplyFn) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
-	return fn(ctx, status, w, ao...)
+func (fn WorkloadApplyFns) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
+	return fn.ApplyFn(ctx, status, w, ao...)
+}
+
+// Finalize workloads and its traits/scopes.
+func (fn WorkloadApplyFns) Finalize(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) error {
+	return fn.FinalizeFn(ctx, ac)
 }
 
 type workloads struct {
@@ -110,6 +125,20 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 	return a.dereferenceScope(ctx, namespace, status, w)
 }
 
+func (a *workloads) Finalize(ctx context.Context, ac *v1alpha2.ApplicationConfiguration) error {
+	var namespace = ac.GetNamespace()
+
+	if meta.FinalizerExists(&ac.ObjectMeta, workloadScopeFinalizer) {
+		if err := a.dereferenceAllScopes(ctx, namespace, ac.Status.Workloads); err != nil {
+			return err
+		}
+		meta.RemoveFinalizer(&ac.ObjectMeta, workloadScopeFinalizer)
+	}
+
+	// add finalizer logic here
+	return nil
+}
+
 func (a *workloads) dereferenceScope(ctx context.Context, namespace string, status []v1alpha2.WorkloadStatus, w []Workload) error {
 	for _, st := range status {
 		toBeDeferenced := st.Scopes
@@ -122,7 +151,20 @@ func (a *workloads) dereferenceScope(ctx context.Context, namespace string, stat
 		}
 
 		for _, s := range toBeDeferenced {
-			if err := a.applyScopeRemoval(ctx, namespace, st, s); err != nil {
+			if err := a.applyScopeRemoval(ctx, namespace, st.Reference, s); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// dereferenceAllScope dereferences workloads owned by the appConfig being deleted from the scopes they belong to.
+func (a *workloads) dereferenceAllScopes(ctx context.Context, namespace string, status []v1alpha2.WorkloadStatus) error {
+	for _, st := range status {
+		for _, sc := range st.Scopes {
+			if err := a.applyScopeRemoval(ctx, namespace, st.Reference, sc); err != nil {
 				return err
 			}
 		}
@@ -194,18 +236,17 @@ func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.
 	return nil
 }
 
-func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws v1alpha2.WorkloadStatus, s v1alpha2.WorkloadScope) error {
-	workloadRef := runtimev1alpha1.TypedReference{
-		APIVersion: ws.Reference.APIVersion,
-		Kind:       ws.Reference.Kind,
-		Name:       ws.Reference.Name,
-	}
-
+func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, wr runtimev1alpha1.TypedReference, s v1alpha2.WorkloadScope) error {
 	scopeObject := unstructured.Unstructured{}
 	scopeObject.SetAPIVersion(s.Reference.APIVersion)
 	scopeObject.SetKind(s.Reference.Kind)
 	scopeObjectRef := types.NamespacedName{Namespace: namespace, Name: s.Reference.Name}
 	if err := a.rawClient.Get(ctx, scopeObjectRef, &scopeObject); err != nil {
+		// if the scope is already deleted
+		// treat it as removal done to avoid blocking AppConfig finalizer
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
 		return errors.Wrapf(err, errFmtApplyScope, s.Reference.APIVersion, s.Reference.Kind, s.Reference.Name)
 	}
 
@@ -226,9 +267,9 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 		workloadRefIndex := -1
 		for i, item := range refs {
 			ref := item.(map[string]interface{})
-			if (workloadRef.APIVersion == ref["apiVersion"]) &&
-				(workloadRef.Kind == ref["kind"]) &&
-				(workloadRef.Name == ref["name"]) {
+			if (wr.APIVersion == ref["apiVersion"]) &&
+				(wr.Kind == ref["kind"]) &&
+				(wr.Name == ref["name"]) {
 				workloadRefIndex = i
 				break
 			}
@@ -240,7 +281,7 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, ws 
 			refs = refs[:len(refs)-1]
 
 			if err := fieldpath.Pave(scopeObject.UnstructuredContent()).SetValue(workloadRefsPath, refs); err != nil {
-				return errors.Wrapf(err, errFmtSetScopeWorkloadRef, s.Reference.Name, ws.Reference.Name)
+				return errors.Wrapf(err, errFmtSetScopeWorkloadRef, s.Reference.Name, wr.Name)
 			}
 
 			if err := a.rawClient.Update(ctx, &scopeObject); err != nil {

@@ -26,6 +26,7 @@ import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -54,20 +55,22 @@ const (
 	errRenderComponents      = "cannot render components"
 	errApplyComponents       = "cannot apply components"
 	errGCComponent           = "cannot garbage collect components"
+	errFinalizeWorkloads     = "failed to finalize workloads"
 )
 
 // Reconcile event reasons.
 const (
-	reasonRenderComponents       = "RenderedComponents"
-	reasonExecutePrehook         = "ExecutePrehook"
-	reasonExecutePosthook        = "ExecutePosthook"
-	reasonApplyComponents        = "AppliedComponents"
-	reasonGGComponent            = "GarbageCollectedComponent"
-	reasonCannotExecutePrehooks  = "CannotExecutePrehooks"
-	reasonCannotExecutePosthooks = "CannotExecutePosthooks"
-	reasonCannotRenderComponents = "CannotRenderComponents"
-	reasonCannotApplyComponents  = "CannotApplyComponents"
-	reasonCannotGGComponents     = "CannotGarbageCollectComponents"
+	reasonRenderComponents        = "RenderedComponents"
+	reasonExecutePrehook          = "ExecutePrehook"
+	reasonExecutePosthook         = "ExecutePosthook"
+	reasonApplyComponents         = "AppliedComponents"
+	reasonGGComponent             = "GarbageCollectedComponent"
+	reasonCannotExecutePrehooks   = "CannotExecutePrehooks"
+	reasonCannotExecutePosthooks  = "CannotExecutePosthooks"
+	reasonCannotRenderComponents  = "CannotRenderComponents"
+	reasonCannotApplyComponents   = "CannotApplyComponents"
+	reasonCannotGGComponents      = "CannotGarbageCollectComponents"
+	reasonCannotFinalizeWorkloads = "CannotFinalizeWorkloads"
 )
 
 // Setup adds a controller that reconciles ApplicationConfigurations.
@@ -202,6 +205,22 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetAppConfig)
 	}
 
+	if ac.ObjectMeta.DeletionTimestamp.IsZero() {
+		if registerFinalizers(ac) {
+			log.Debug("Register new finalizers", "finalizers", ac.ObjectMeta.Finalizers)
+			return reconcile.Result{}, errors.Wrap(r.client.Update(ctx, ac), errUpdateAppConfigStatus)
+		}
+	} else {
+		if err := r.workloads.Finalize(ctx, ac); err != nil {
+			log.Debug("Failed to finalize workloads", "workloads status", ac.Status.Workloads,
+				"error", err, "requeue-after", result.RequeueAfter)
+			r.record.Event(ac, event.Warning(reasonCannotFinalizeWorkloads, err))
+			ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errFinalizeWorkloads)))
+			return reconcile.Result{}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+		}
+		return reconcile.Result{}, errors.Wrap(r.client.Update(ctx, ac), errUpdateAppConfigStatus)
+	}
+
 	// execute the posthooks at the end no matter what
 	defer func() {
 		for name, hook := range r.postHooks {
@@ -287,6 +306,25 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		ac.Status.Dependency = *depStatus
 	}
 	return reconcile.Result{RequeueAfter: waitTime}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+}
+
+// if any finalizers newly registered, return true
+func registerFinalizers(ac *v1alpha2.ApplicationConfiguration) bool {
+	newFinalizer := false
+	if !meta.FinalizerExists(&ac.ObjectMeta, workloadScopeFinalizer) && hasScope(ac) {
+		meta.AddFinalizer(&ac.ObjectMeta, workloadScopeFinalizer)
+		newFinalizer = true
+	}
+	return newFinalizer
+}
+
+func hasScope(ac *v1alpha2.ApplicationConfiguration) bool {
+	for _, c := range ac.Spec.Components {
+		if len(c.Scopes) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // A Workload produced by an OAM ApplicationConfiguration.

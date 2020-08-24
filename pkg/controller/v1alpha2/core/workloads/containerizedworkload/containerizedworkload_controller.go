@@ -87,7 +87,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	eventObj, err := util.LocateParentAppConfig(ctx, r.Client, &workload)
 	if eventObj == nil {
 		// fallback to workload itself
-		log.Error(err, "workload", workload.Name)
+		log.Error(err, "workload", "name", workload.Name)
 		eventObj = &workload
 	}
 	deploy, err := r.renderDeployment(ctx, &workload)
