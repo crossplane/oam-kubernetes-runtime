@@ -16,6 +16,6 @@ package controller
 // Args args used by controller
 type Args struct {
 	// RevisionLimit is the maximum number of revisions that will be maintained.
-	// The default value is 10.
+	// The default value is 50.
 	RevisionLimit int
 }

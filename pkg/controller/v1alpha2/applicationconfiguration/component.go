@@ -187,6 +187,33 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	return true
 }
 
+// get sorted controllerRevisions, prepare to delete controllerRevisions
+func sortedControllerRevision(appConfigs []v1alpha2.ApplicationConfiguration, revisions []appsv1.ControllerRevision,
+	revisionLimit int) (sortedRevisions []appsv1.ControllerRevision, toKill int, liveHashes map[string]bool) {
+	liveHashes = make(map[string]bool)
+	sortedRevisions = revisions
+
+	// get all revisions used and skipped
+	for _, appConfig := range appConfigs {
+		for _, component := range appConfig.Spec.Components {
+			if component.RevisionName != "" {
+				liveHashes[component.RevisionName] = true
+			}
+		}
+	}
+
+	toKeep := revisionLimit + len(liveHashes)
+	toKill = len(sortedRevisions) - toKeep
+	if toKill <= 0 {
+		toKill = 0
+		return
+	}
+	// Clean up old revisions from smallest to highest revision (from oldest to newest)
+	sort.Sort(historiesByRevision(sortedRevisions))
+
+	return
+}
+
 // clean revisions when over limits
 func (c *ComponentHandler) cleanupControllerRevision(curComp *v1alpha2.Component) error {
 	labels := &metav1.LabelSelector{
@@ -212,24 +239,9 @@ func (c *ComponentHandler) cleanupControllerRevision(curComp *v1alpha2.Component
 		return err
 	}
 
-	// get all revisions used and skipped
-	liveHashes := make(map[string]bool)
-	for _, appConfig := range appConfigs.Items {
-		for _, component := range appConfig.Spec.Components {
-			if component.RevisionName != "" {
-				liveHashes[component.RevisionName] = true
-			}
-		}
-	}
-
-	toKeep := c.RevisionLimit + len(liveHashes)
-	toKill := len(revisions.Items) - toKeep
-	if toKill <= 0 {
-		return nil
-	}
-	// Clean up old revisions from smallest to highest revision (from oldest to newest)
-	sort.Sort(historiesByRevision(revisions.Items))
-	for _, revision := range revisions.Items {
+	// get sorted revisions
+	controllerRevisions, toKill, liveHashes := sortedControllerRevision(appConfigs.Items, revisions.Items, c.RevisionLimit)
+	for _, revision := range controllerRevisions {
 		if toKill <= 0 {
 			break
 		}

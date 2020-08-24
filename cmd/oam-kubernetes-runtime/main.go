@@ -46,8 +46,8 @@ func main() {
 	flag.StringVar(&logFilePath, "log-file-path", "", "The address the metric endpoint binds to.")
 	flag.IntVar(&logRetainDate, "log-retain-date", 7, "The number of days of logs history to retain.")
 	flag.BoolVar(&logCompress, "log-compress", true, "Enable compression on the rotated logs.")
-	flag.IntVar(&controllerArgs.RevisionLimit, "revision-limit", 10,
-		"RevisionLimit is the maximum number of revisions that will be maintained. The default value is 10.")
+	flag.IntVar(&controllerArgs.RevisionLimit, "revision-limit", 50,
+		"RevisionLimit is the maximum number of revisions that will be maintained. The default value is 50.")
 	flag.Parse()
 
 	// setup logging

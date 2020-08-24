@@ -191,6 +191,12 @@ example-component-brngj9ript3e8125vhf0   3m
 In this workflow, every change of component will trigger a new workload instance created and the old one won't
 be deleted. The `revisionEnabled` trait must be responsible for the garbage collection.
 
+## Clean up Policy
+
+You can use flag `-revision-limit` in `oam-kubernetes-runtime` to specify how many old controllerrevisions you want to retain.
+By default, it is 50. Cleanup will be triggered after the component is created or updated, it will skip controllerrevision that is
+still in use, the rest will be garbage-collected.
+
 ## Containing Trait with revisionEnabled and ApplicationConfiguration specify revision manually
 
 This will be almost the same with [the case without revisionEnabled trait](component-mutable.md#ApplicationConfiguration-specify-revision-manually).
