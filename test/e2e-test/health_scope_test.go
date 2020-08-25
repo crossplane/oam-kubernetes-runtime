@@ -89,7 +89,8 @@ var _ = Describe("HealthScope", func() {
 				Namespace: namespace,
 			},
 			Spec: v1alpha2.HealthScopeSpec{
-				ProbeTimeout: &varInt32_60,
+				ProbeTimeout:       &varInt32_60,
+				WorkloadReferences: []v1alpha1.TypedReference{},
 			},
 		}
 		logf.Log.Info("Creating health scope")

@@ -62,6 +62,8 @@ spec:
                         component.
                       items:
                         description: DataInput specifies a data input sink to an object.
+                          If input is array, it will be appended to the target field
+                          paths.
                         properties:
                           toFieldPaths:
                             description: ToFieldPaths specifies the field paths of
@@ -192,7 +194,8 @@ spec:
                               this trait.
                             items:
                               description: DataInput specifies a data input sink to
-                                an object.
+                                an object. If input is array, it will be appended
+                                to the target field paths.
                               properties:
                                 toFieldPaths:
                                   description: ToFieldPaths specifies the field paths

@@ -70,8 +70,9 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 	var eventObj = &v1alpha2.ApplicationConfiguration{}
 	// locate the appConf name from the owner list
 	for _, o := range oamObject.GetOwnerReferences() {
-		if o.Kind == reflect.TypeOf(v1alpha2.ApplicationConfiguration{}).Name() {
+		if o.Kind == v1alpha2.ApplicationConfigurationKind {
 			acName = o.Name
+			break
 		}
 	}
 	if len(acName) > 0 {
@@ -205,6 +206,37 @@ func PatchCondition(ctx context.Context, r client.StatusClient, workload Conditi
 	return errors.Wrap(
 		r.Status().Patch(ctx, workload, workloadPatch, client.FieldOwner(workload.GetUID())),
 		ErrUpdateStatus)
+}
+
+// A metaObject is a Kubernetes object that has label and annotation
+type labelAnnotationObject interface {
+	GetLabels() map[string]string
+	SetLabels(labels map[string]string)
+	GetAnnotations() map[string]string
+	SetAnnotations(annotations map[string]string)
+}
+
+// PassLabelAndAnnotation passes through labels and annotation objectMeta from the parent to the child object
+func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject) {
+	mergeMap := func(src, dst map[string]string) map[string]string {
+		if len(src) == 0 {
+			return dst
+		}
+		// make sure dst is initialized
+		if dst == nil {
+			dst = map[string]string{}
+		}
+		for k, v := range src {
+			if _, exist := dst[k]; !exist {
+				dst[k] = v
+			}
+		}
+		return dst
+	}
+	// pass app-config labels
+	childObj.SetLabels(mergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+	// pass app-config annotation
+	childObj.SetAnnotations(mergeMap(parentObj.GetAnnotations(), childObj.GetAnnotations()))
 }
 
 // GetCRDName return the CRD name of any resources
