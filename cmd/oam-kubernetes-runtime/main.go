@@ -15,7 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
-	controller "github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
+	appController "github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2"
 	webhook "github.com/crossplane/oam-kubernetes-runtime/pkg/webhook/v1alpha2"
 )
 
@@ -34,6 +35,7 @@ func main() {
 	var certDir string
 	var webhookPort int
 	var useWebhook bool
+	var controllerArgs controller.Args
 
 	flag.BoolVar(&useWebhook, "use-webhook", false, "Enable Admission Webhook")
 	flag.StringVar(&certDir, "webhook-cert-dir", "/k8s-webhook-server/serving-certs", "Admission webhook cert/key dir.")
@@ -44,6 +46,8 @@ func main() {
 	flag.StringVar(&logFilePath, "log-file-path", "", "The address the metric endpoint binds to.")
 	flag.IntVar(&logRetainDate, "log-retain-date", 7, "The number of days of logs history to retain.")
 	flag.BoolVar(&logCompress, "log-compress", true, "Enable compression on the rotated logs.")
+	flag.IntVar(&controllerArgs.RevisionLimit, "revision-limit", 50,
+		"RevisionLimit is the maximum number of revisions that will be maintained. The default value is 50.")
 	flag.Parse()
 
 	// setup logging
@@ -82,7 +86,7 @@ func main() {
 		webhook.Add(mgr)
 	}
 
-	if err = controller.Setup(mgr, logging.NewLogrLogger(oamLog)); err != nil {
+	if err = appController.Setup(mgr, controllerArgs, logging.NewLogrLogger(oamLog)); err != nil {
 		oamLog.Error(err, "unable to setup the oam core controller")
 		os.Exit(1)
 	}

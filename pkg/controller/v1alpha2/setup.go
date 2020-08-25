@@ -21,6 +21,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/applicationconfiguration"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/core/scopes/healthscope"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/core/traits/manualscalertrait"
@@ -28,11 +29,11 @@ import (
 )
 
 // Setup workload controllers.
-func Setup(mgr ctrl.Manager, l logging.Logger) error {
-	for _, setup := range []func(ctrl.Manager, logging.Logger) error{
+func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
+	for _, setup := range []func(ctrl.Manager, controller.Args, logging.Logger) error{
 		applicationconfiguration.Setup, containerizedworkload.Setup, manualscalertrait.Setup, healthscope.Setup,
 	} {
-		if err := setup(mgr, l); err != nil {
+		if err := setup(mgr, args, l); err != nil {
 			return err
 		}
 	}

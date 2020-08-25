@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -47,7 +48,7 @@ const (
 )
 
 // Setup adds a controller that reconciles ContainerizedWorkload.
-func Setup(mgr ctrl.Manager, log logging.Logger) error {
+func Setup(mgr ctrl.Manager, args controller.Args, log logging.Logger) error {
 	reconciler := Reconciler{
 		Client: mgr.GetClient(),
 		log:    ctrl.Log.WithName("ContainerizedWorkload"),
