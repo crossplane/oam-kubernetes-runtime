@@ -294,20 +294,23 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		record.Event(ac, event.Normal(reasonGGComponent, "Successfully garbage collected component"))
 	}
 
+	// patch the final status
+	acPatch := client.MergeFrom(ac.DeepCopyObject())
+
 	ac.Status.Workloads = make([]v1alpha2.WorkloadStatus, len(workloads))
 	for i := range workloads {
 		ac.Status.Workloads[i] = workloads[i].Status()
 	}
-
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
-
 	ac.Status.Dependency = v1alpha2.DependencyStatus{}
 	waitTime := longWait
 	if len(depStatus.Unsatisfied) != 0 {
 		waitTime = dependCheckWait
 		ac.Status.Dependency = *depStatus
 	}
-	return reconcile.Result{RequeueAfter: waitTime}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+
+	return reconcile.Result{RequeueAfter: waitTime},
+		errors.Wrap(r.client.Status().Patch(ctx, ac, acPatch, client.FieldOwner(ac.GetUID())), errUpdateAppConfigStatus)
 }
 
 // if any finalizers newly registered, return true
