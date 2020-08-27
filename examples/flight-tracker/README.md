@@ -12,8 +12,7 @@ For this demo, it is necessary to create a `WorkloadDefinition` for the `Contain
 
 ```bash
 $ kubectl apply -f definitions/
-workloaddefinition.core.oam.dev/containerizedworkloads.core.oam.dev created
-traitdefinition.core.oam.dev/manualscalertraits.core.oam.dev created
+traitdefinition.core.oam.dev/ingresses.extensions created
 ```
 
 ## Install Component

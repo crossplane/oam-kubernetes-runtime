@@ -3,7 +3,7 @@
 ## Prerequisite
 
 1. Make sure [`Simple Rollout`](https://github.com/oam-dev/catalog/tree/master/traits/simplerollouttrait) was installed for this demo.
-2. Make sure [`OAM runtime`](../../README.md#install-oam-runtime) was installed and started.
+2. Make sure [`OAM runtime`](../../README.md#Install-OAM-Kubernetes-Runtime) was installed and started.
 
 
 ## Containing Trait with revisionEnabled and ApplicationConfiguration always using the latest component
