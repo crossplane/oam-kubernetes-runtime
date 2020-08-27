@@ -20,6 +20,10 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
+var (
+	varInt32_60 int32 = 60
+)
+
 var _ = Describe("HealthScope", func() {
 	ctx := context.Background()
 	namespace := "health-scope-test"
@@ -85,6 +89,7 @@ var _ = Describe("HealthScope", func() {
 				Namespace: namespace,
 			},
 			Spec: v1alpha2.HealthScopeSpec{
+				ProbeTimeout:       &varInt32_60,
 				WorkloadReferences: []v1alpha1.TypedReference{},
 			},
 		}
