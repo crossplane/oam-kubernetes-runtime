@@ -214,8 +214,8 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			}, time.Second*30, time.Millisecond*500).Should(Equal(0))
 
 			By("Check AppConfig has been deleted successfully")
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: appConfigName}, &appConfig)).
-				ShouldNot(Succeed())
+			Eventually(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: appConfigName}, &appConfig),
+				time.Second*15, time.Microsecond*500).Should(&util.NotFoundMatcher{})
 		})
 
 	})
