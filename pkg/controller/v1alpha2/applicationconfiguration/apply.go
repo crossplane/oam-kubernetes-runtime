@@ -118,7 +118,9 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 		}
 
 		for _, s := range wl.Scopes {
-			return a.applyScope(ctx, wl, s, workloadRef)
+			if err := a.applyScope(ctx, wl, s, workloadRef); err != nil {
+				return err
+			}
 		}
 	}
 

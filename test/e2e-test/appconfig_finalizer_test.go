@@ -22,7 +22,7 @@ var (
 	workloadScopeFinalizer = "scope.finalizer.core.oam.dev"
 )
 
-var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
+var _ = Describe("Finalizer for HealthScope in ApplicationConfiguration", func() {
 	ctx := context.Background()
 	namespace := "finalizer-test"
 	ns := corev1.Namespace{
