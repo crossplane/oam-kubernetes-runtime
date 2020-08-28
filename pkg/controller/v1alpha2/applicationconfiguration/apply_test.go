@@ -86,7 +86,7 @@ func TestApplyWorkloads(t *testing.T) {
 			Namespace: namespace,
 		},
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "scope.oam.dev",
+			APIVersion: "scope.oam.dev/v1alpha2",
 			Kind:       "scopeKind",
 		},
 		Spec: v1alpha2.HealthScopeSpec{
@@ -272,6 +272,10 @@ func TestApplyWorkloads(t *testing.T) {
 			client: resource.ApplyFn(func(_ context.Context, o runtime.Object, _ ...resource.ApplyOption) error { return nil }),
 			rawClient: &test.MockClient{
 				MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
+					if scopeDef, ok := obj.(*v1alpha2.ScopeDefinition); ok {
+						*scopeDef = scopeDefinition
+						return nil
+					}
 					return nil
 				},
 				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {

@@ -176,7 +176,8 @@ var _ = Describe("HealthScope", func() {
 		logf.Log.Info("Creating component", "Name", comp.Name, "Namespace", comp.Namespace)
 		Expect(k8sClient.Create(ctx, &comp)).Should(BeNil())
 		// Create application configuration
-		workloadInstanceName := "example-appconfig-healthscope"
+		workloadInstanceName1 := "example-appconfig-healthscope-a"
+		workloadInstanceName2 := "example-appconfig-healthscope-b"
 		imageName := "wordpress:php7.2"
 		appConfig := v1alpha2.ApplicationConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
@@ -191,7 +192,29 @@ var _ = Describe("HealthScope", func() {
 						ParameterValues: []v1alpha2.ComponentParameterValue{
 							{
 								Name:  "instance-name",
-								Value: intstr.IntOrString{StrVal: workloadInstanceName, Type: intstr.String},
+								Value: intstr.IntOrString{StrVal: workloadInstanceName1, Type: intstr.String},
+							},
+							{
+								Name:  "image",
+								Value: intstr.IntOrString{StrVal: imageName, Type: intstr.String},
+							},
+						},
+						Scopes: []v1alpha2.ComponentScope{
+							{
+								ScopeReference: v1alpha1.TypedReference{
+									APIVersion: gvks[0].GroupVersion().String(),
+									Kind:       v1alpha2.HealthScopeGroupVersionKind.Kind,
+									Name:       healthScopeName,
+								},
+							},
+						},
+					},
+					{
+						ComponentName: componentName,
+						ParameterValues: []v1alpha2.ComponentParameterValue{
+							{
+								Name:  "instance-name",
+								Value: intstr.IntOrString{StrVal: workloadInstanceName2, Type: intstr.String},
 							},
 							{
 								Name:  "image",
@@ -214,9 +237,9 @@ var _ = Describe("HealthScope", func() {
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
 		// Verification
-		By("Checking deployment is created")
+		By("Checking deployment-a is created")
 		objectKey := client.ObjectKey{
-			Name:      workloadInstanceName,
+			Name:      workloadInstanceName1,
 			Namespace: namespace,
 		}
 		deploy := &appsv1.Deployment{}
@@ -224,6 +247,20 @@ var _ = Describe("HealthScope", func() {
 		Eventually(
 			func() error {
 				return k8sClient.Get(ctx, objectKey, deploy)
+			},
+			time.Second*15, time.Millisecond*500).Should(BeNil())
+
+		// Verify all components declared in AppConfig are created
+		By("Checking deployment-b is created")
+		objectKey2 := client.ObjectKey{
+			Name:      workloadInstanceName2,
+			Namespace: namespace,
+		}
+		deploy2 := &appsv1.Deployment{}
+		logf.Log.Info("Checking on deployment", "Key", objectKey2)
+		Eventually(
+			func() error {
+				return k8sClient.Get(ctx, objectKey2, deploy2)
 			},
 			time.Second*15, time.Millisecond*500).Should(BeNil())
 
@@ -261,6 +298,6 @@ var _ = Describe("HealthScope", func() {
 
 				return healthScope.Status.Health == "healthy"
 			},
-			time.Second*60, time.Second*5).Should(BeEquivalentTo(true))
+			time.Second*120, time.Second*5).Should(BeEquivalentTo(true))
 	})
 })
