@@ -39,6 +39,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -194,6 +195,11 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(workloadName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetLabels(map[string]string{
+								oam.LabelAppComponent:         componentName,
+								oam.LabelAppName:              acName,
+								oam.LabelAppComponentRevision: "",
+							})
 							return w
 						}(),
 						Traits: []*Trait{
@@ -257,6 +263,11 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(componentName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetLabels(map[string]string{
+								oam.LabelAppComponent:         componentName,
+								oam.LabelAppName:              acName,
+								oam.LabelAppComponentRevision: revisionName,
+							})
 							return w
 						}(),
 						Traits: []*Trait{
@@ -311,6 +322,11 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(revisionName2)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetLabels(map[string]string{
+								oam.LabelAppComponent:         componentName,
+								oam.LabelAppName:              acName,
+								oam.LabelAppComponentRevision: revisionName2,
+							})
 							return w
 						}(),
 						Traits: []*Trait{

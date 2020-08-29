@@ -293,7 +293,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 			Eventually(func() string {
 				k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, cwWlV2)
 				return cwWlV2.Spec.Containers[0].Image
-			}, time.Second*30, time.Microsecond*500).Should(Equal(imageV2))
+			}, time.Second*60, time.Microsecond*500).Should(Equal(imageV2))
 		})
 	})
 
