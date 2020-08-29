@@ -1056,3 +1056,52 @@ func TestMatchValue(t *testing.T) {
 		})
 	}
 }
+
+func TestAddWorkloadLabels(t *testing.T) {
+	workload1 := new(unstructured.Unstructured)
+	wantWorkload1 := new(unstructured.Unstructured)
+	wantWorkload1.SetLabels(map[string]string{
+		"newKey": "newValue",
+	})
+	workload2 := new(unstructured.Unstructured)
+	wantWorkload2 := new(unstructured.Unstructured)
+	workload2.SetLabels(map[string]string{
+		"key": "value",
+	})
+	wantWorkload2.SetLabels(map[string]string{
+		"key":    "value",
+		"newKey": "newValue",
+	})
+
+	cases := map[string]struct {
+		workload  *unstructured.Unstructured
+		newLabels map[string]string
+		want      *unstructured.Unstructured
+	}{
+		"add labels to workload without labels": {
+			workload1,
+			map[string]string{
+				"newKey": "newValue",
+			},
+			wantWorkload1,
+		},
+		"add labels to workload with labels": {
+			workload2,
+			map[string]string{
+				"newKey": "newValue",
+			},
+			wantWorkload2,
+		},
+	}
+
+	for name, tc := range cases {
+		workload := tc.workload
+		wantWorkload := tc.want
+		t.Run(name, func(t *testing.T) {
+			addWorkloadLabels(tc.workload, tc.newLabels)
+			if diff := cmp.Diff(wantWorkload, workload); diff != "" {
+				t.Error(diff)
+			}
+		})
+	}
+}
