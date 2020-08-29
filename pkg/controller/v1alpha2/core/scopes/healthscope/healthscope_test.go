@@ -86,7 +86,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: true,
+				HealthStatus: StatusHealthy,
 			},
 		},
 		{
@@ -107,7 +107,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 		{
@@ -117,7 +117,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				return errMockErr
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 		{
@@ -134,7 +134,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 		{
@@ -156,7 +156,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 	}
@@ -168,7 +168,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 			if tc.expect == nil {
 				assert.Nil(t, result, tc.caseName)
 			} else {
-				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
+				assert.Equal(t, tc.expect.HealthStatus, result.HealthStatus, tc.caseName)
 			}
 
 		}(t)
@@ -205,7 +205,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: true,
+				HealthStatus: StatusHealthy,
 			},
 		},
 		{
@@ -222,7 +222,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 		{
@@ -232,7 +232,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 				return errMockErr
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 	}
@@ -244,7 +244,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 			if tc.expect == nil {
 				assert.Nil(t, result, tc.caseName)
 			} else {
-				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
+				assert.Equal(t, tc.expect.HealthStatus, result.HealthStatus, tc.caseName)
 			}
 		}(t)
 	}
@@ -280,7 +280,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: true,
+				HealthStatus: StatusHealthy,
 			},
 		},
 		{
@@ -297,7 +297,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 		{
@@ -307,7 +307,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 				return errMockErr
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 	}
@@ -319,7 +319,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 			if tc.expect == nil {
 				assert.Nil(t, result, tc.caseName)
 			} else {
-				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
+				assert.Equal(t, tc.expect.HealthStatus, result.HealthStatus, tc.caseName)
 			}
 		}(t)
 	}
@@ -355,7 +355,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: true,
+				HealthStatus: StatusHealthy,
 			},
 		},
 		{
@@ -372,7 +372,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 				return nil
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 		{
@@ -382,7 +382,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 				return errMockErr
 			},
 			expect: &HealthCondition{
-				IsHealthy: false,
+				HealthStatus: StatusUnhealthy,
 			},
 		},
 	}
@@ -394,7 +394,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 			if tc.expect == nil {
 				assert.Nil(t, result, tc.caseName)
 			} else {
-				assert.Equal(t, tc.expect.IsHealthy, result.IsHealthy, tc.caseName)
+				assert.Equal(t, tc.expect.HealthStatus, result.HealthStatus, tc.caseName)
 			}
 		}(t)
 	}

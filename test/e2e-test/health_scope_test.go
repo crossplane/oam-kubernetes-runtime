@@ -290,13 +290,13 @@ var _ = Describe("HealthScope", func() {
 					"len(WorkloadReferences)",
 					len(healthScope.Spec.WorkloadReferences),
 					"health",
-					healthScope.Status.Health)
+					healthScope.Status.ScopeHealthCondition)
 				// TODO(artursouza): enable this check once crossplane is updated.
 				//if len(healthScope.Spec.WorkloadReferences) == 0 {
 				//	return false
 				//}
 
-				return healthScope.Status.Health == "healthy"
+				return healthScope.Status.ScopeHealthCondition.HealthStatus == "healthy"
 			},
 			time.Second*120, time.Second*5).Should(BeEquivalentTo(true))
 	})

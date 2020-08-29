@@ -46,11 +46,12 @@ var _ = Describe("HealthScope Controller Reconcile Test", func() {
 	}
 	MockHealthyChecker := WorkloadHealthCheckFn(
 		func(context.Context, client.Client, v1alpha1.TypedReference, string) *HealthCondition {
-			return &HealthCondition{IsHealthy: true}
+
+			return &HealthCondition{HealthStatus: StatusHealthy}
 		})
 	MockUnhealthyChecker := WorkloadHealthCheckFn(
 		func(context.Context, client.Client, v1alpha1.TypedReference, string) *HealthCondition {
-			return &HealthCondition{IsHealthy: false}
+			return &HealthCondition{HealthStatus: StatusUnhealthy}
 		})
 	reconciler := NewReconciler(mockMgr,
 		WithLogger(logging.NewNopLogger().WithValues("HealthScopeReconciler")),
@@ -224,9 +225,9 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			}
 			reconciler.client = mockClient
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
-			result := reconciler.GetScopeHealthStatus(ctx, &hs)
+			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.IsHealthy).Should(Equal(true))
+			Expect(result.HealthStatus).Should(Equal(true))
 		}
 	})
 
@@ -292,9 +293,9 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			}
 			reconciler.client = mockClient
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
-			result := reconciler.GetScopeHealthStatus(ctx, &hs)
+			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.IsHealthy).Should(Equal(false))
+			Expect(result.HealthStatus).Should(Equal(false))
 		}
 	})
 })

@@ -23,6 +23,14 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
+type HealthStatus string
+
+const (
+	StatusHealthy   HealthStatus = "HEALTHY"
+	StatusUnhealthy              = "UNHEALTHY"
+	StatusUnknown                = "UNKNOWN"
+)
+
 var _ oam.Scope = &HealthScope{}
 
 // A HealthScopeSpec defines the desired state of a HealthScope.
@@ -41,7 +49,21 @@ type HealthScopeSpec struct {
 type HealthScopeStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
-	Health string `json:"health"`
+	// ScopeHealthCondition represents health condition summary of the scope
+	ScopeHealthCondition HealthCondition `json:"scopeHealthCondition"`
+
+	// HealthConditions represents health condition of workloads in the scope
+	HealthConditions []*HealthCondition `json:"healthConditions,omitempty"`
+}
+
+type HealthCondition struct {
+	// Name represents the component name if target is a workload
+	Name           string                         `json:"name,omitempty"`
+	TargetWorkload runtimev1alpha1.TypedReference `json:"targetWorkload,omitempty"`
+	HealthStatus   HealthStatus                   `json:"healthStatus"`
+	Diagnosis      string                         `json:"diagnosis,omitempty"`
+	// WorkloadInfo represents status of workloads whose HealthStatus is UNKNOWN.
+	WorkloadInfo string `json:"workloadStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
