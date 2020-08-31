@@ -16,6 +16,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -60,7 +61,8 @@ var _ = Describe("ContainerizedWorkload", func() {
 	})
 
 	It("apply an application config", func() {
-		label := map[string]string{"workload": "containerized-workload"}
+		fakeLabelKey := "workload"
+		label := map[string]string{fakeLabelKey: "containerized-workload"}
 		// create a workload definition
 		wd := v1alpha2.WorkloadDefinition{
 			ObjectMeta: metav1.ObjectMeta{
@@ -192,6 +194,20 @@ var _ = Describe("ContainerizedWorkload", func() {
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
 		// Verification
+		By("Checking containerizedworkload is created")
+		cw := &v1alpha2.ContainerizedWorkload{}
+		Eventually(func() error {
+			return k8sClient.Get(ctx, client.ObjectKey{Name: workloadInstanceName, Namespace: namespace}, cw)
+		}, time.Second*15, time.Millisecond*500).Should(BeNil())
+
+		By("Checking lables")
+		cwLabels := cw.GetLabels()
+		Expect(cwLabels).Should(SatisfyAll(
+			HaveKey(fakeLabelKey), // propogated from appConfig
+			HaveKey(oam.LabelAppComponent),
+			HaveKey(oam.LabelAppComponentRevision),
+			HaveKey(oam.LabelAppName)))
+
 		By("Checking deployment is created")
 		objectKey := client.ObjectKey{
 			Name:      workloadInstanceName,

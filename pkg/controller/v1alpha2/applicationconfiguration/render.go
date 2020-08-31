@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -129,6 +130,13 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	if err != nil {
 		return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
 	}
+
+	compInfoLabels := map[string]string{
+		oam.LabelAppName:              ac.Name,
+		oam.LabelAppComponent:         acc.ComponentName,
+		oam.LabelAppComponentRevision: componentRevisionName,
+	}
+	util.AddLabels(w, compInfoLabels)
 
 	// pass through labels and annotation from app-config to workload
 	util.PassLabelAndAnnotation(ac, w)
