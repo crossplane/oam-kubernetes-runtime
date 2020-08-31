@@ -136,7 +136,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		oam.LabelAppComponent:         acc.ComponentName,
 		oam.LabelAppComponentRevision: componentRevisionName,
 	}
-	addWorkloadLabels(w, compInfoLabels)
+	util.AddLabels(w, compInfoLabels)
 
 	// pass through labels and annotation from app-config to workload
 	util.PassLabelAndAnnotation(ac, w)
@@ -475,17 +475,6 @@ func fillValue(obj *unstructured.Unstructured, fs []string, val interface{}) err
 		}
 	}
 	return nil
-}
-
-func addWorkloadLabels(w *unstructured.Unstructured, labels map[string]string) {
-	workloadLabels := w.GetLabels()
-	if workloadLabels == nil {
-		workloadLabels = map[string]string{}
-	}
-	for k, v := range labels {
-		workloadLabels[k] = v
-	}
-	w.SetLabels(workloadLabels)
 }
 
 func (r *components) getDataInput(ctx context.Context, s *dagSource) (interface{}, bool, error) {

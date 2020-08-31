@@ -1108,3 +1108,51 @@ var _ = Describe("TestPassThroughObjMeta", func() {
 		Expect(gotLabels).Should(BeEquivalentTo(wantLabels))
 	})
 })
+
+var _ = Describe("TestAddLabels", func() {
+	It("Test AddLabels", func() {
+		obj1 := new(unstructured.Unstructured)
+		wantObj1 := new(unstructured.Unstructured)
+		wantObj1.SetLabels(map[string]string{
+			"newKey": "newValue",
+		})
+		obj2 := new(unstructured.Unstructured)
+		wantObj2 := new(unstructured.Unstructured)
+		obj2.SetLabels(map[string]string{
+			"key": "value",
+		})
+		wantObj2.SetLabels(map[string]string{
+			"key":    "value",
+			"newKey": "newValue",
+		})
+
+		cases := map[string]struct {
+			obj       *unstructured.Unstructured
+			newLabels map[string]string
+			want      *unstructured.Unstructured
+		}{
+			"add labels to workload without labels": {
+				obj1,
+				map[string]string{
+					"newKey": "newValue",
+				},
+				wantObj1,
+			},
+			"add labels to workload with labels": {
+				obj2,
+				map[string]string{
+					"newKey": "newValue",
+				},
+				wantObj2,
+			},
+		}
+
+		for name, tc := range cases {
+			By("Running test case: " + name)
+			obj := tc.obj
+			wantObj := tc.want
+			util.AddLabels(obj, tc.newLabels)
+			Expect(obj.GetLabels()).Should(Equal(wantObj.GetLabels()))
+		}
+	})
+})
