@@ -333,8 +333,9 @@ func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac *v1alpha
 			// These workload exists means the component is under progress of rollout
 			// Trait will not work for these remaining workload
 			revisionStatus = append(revisionStatus, v1alpha2.WorkloadStatus{
-				ComponentName:         w.ComponentName,
-				ComponentRevisionName: v.GetName(),
+				ComponentName:          w.ComponentName,
+				ComponentRevisionName:  v.GetName(),
+				HistoryWorkingRevision: true,
 				Reference: v1alpha1.TypedReference{
 					APIVersion: v.GetAPIVersion(),
 					Kind:       v.GetKind(),

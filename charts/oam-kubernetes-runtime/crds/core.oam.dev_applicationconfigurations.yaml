@@ -385,6 +385,10 @@ spec:
                     componentRevisionName:
                       description: ComponentRevisionName of current component
                       type: string
+                    currentWorkingRevision:
+                      description: HistoryWorkingRevision is a flag showing if it's
+                        history revision but still working
+                      type: boolean
                     scopes:
                       description: Scopes associated with this workload.
                       items:
