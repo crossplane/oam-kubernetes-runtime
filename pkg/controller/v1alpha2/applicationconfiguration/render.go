@@ -223,7 +223,7 @@ func setTraitProperties(t *unstructured.Unstructured, traitName, namespace strin
 
 // SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
 func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
-	//Don't override the specified name
+	// Don't override the specified name
 	if w.GetName() != "" {
 		return nil
 	}

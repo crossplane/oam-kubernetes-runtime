@@ -44,7 +44,7 @@ type ValidatingHandler struct {
 
 var _ admission.Handler = &ValidatingHandler{}
 
-//Handle validate ApplicationConfiguration Spec here
+// Handle validate ApplicationConfiguration Spec here
 func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	obj := &v1alpha2.ApplicationConfiguration{}
 	if req.Resource.String() != appConfigResource.String() {
