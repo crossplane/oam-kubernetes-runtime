@@ -364,6 +364,9 @@ type WorkloadStatus struct {
 	// if it needs a single place to summarize the entire status of the workload
 	Status string `json:"status,omitempty"`
 
+	// HistoryWorkingRevision is a flag showing if it's history revision but still working
+	HistoryWorkingRevision bool `json:"currentWorkingRevision,omitempty"`
+
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
 

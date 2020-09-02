@@ -3,7 +3,13 @@ package controllers_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/ghodss/yaml"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -297,6 +303,184 @@ var _ = Describe("Versioning mechanism of components", func() {
 		})
 	})
 
-	//TODO(roywang) Components have componentName and have revision-enabled trait
-	//TODO(roywang) Components have componentName and have no revision-enabled trait
+	When("Components have componentName and have revision-enabled trait", func() {
+		It("should create workloads with name of revision and keep the old revision", func() {
+
+			By("Create trait definition")
+			var td v1alpha2.TraitDefinition
+			Expect(readYaml("testdata/revision/trait-def.yaml", &td)).Should(BeNil())
+
+			var gtd v1alpha2.TraitDefinition
+			if err := k8sClient.Get(ctx, client.ObjectKey{Name: td.Name, Namespace: td.Namespace}, &gtd); err != nil {
+				Expect(k8sClient.Create(ctx, &td)).Should(Succeed())
+			} else {
+				td.ResourceVersion = gtd.ResourceVersion
+				Expect(k8sClient.Update(ctx, &td)).Should(Succeed())
+			}
+
+			By("Create Component v1")
+			var comp1 v1alpha2.Component
+			Expect(readYaml("testdata/revision/comp-v1.yaml", &comp1)).Should(BeNil())
+			Expect(k8sClient.Create(ctx, &comp1)).Should(Succeed())
+
+			By("Create AppConfig with component")
+			var appconfig v1alpha2.ApplicationConfiguration
+			Expect(readYaml("testdata/revision/app.yaml", &appconfig)).Should(BeNil())
+			Expect(k8sClient.Create(ctx, &appconfig)).Should(Succeed())
+
+			By("Get Component latest status after ControllerRevision created")
+			Eventually(
+				func() *v1alpha2.Revision {
+					k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &comp1)
+					return comp1.Status.LatestRevision
+				},
+				time.Second*30, time.Millisecond*500).ShouldNot(BeNil())
+
+			revisionNameV1 := comp1.Status.LatestRevision.Name
+
+			By("Workload created with revisionName v1")
+			var w1 unstructured.Unstructured
+			Eventually(
+				func() error {
+					w1.SetAPIVersion("example.com/v1")
+					w1.SetKind("Bar")
+					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: revisionNameV1}, &w1)
+				},
+				time.Second*15, time.Millisecond*500).Should(BeNil())
+			k1, _, _ := unstructured.NestedString(w1.Object, "spec", "key")
+			Expect(k1).Should(BeEquivalentTo("v1"), fmt.Sprintf("%v", w1.Object))
+
+			By("Create Component v2")
+			var comp2 v1alpha2.Component
+			Expect(readYaml("testdata/revision/comp-v2.yaml", &comp2)).Should(BeNil())
+			comp2.ResourceVersion = comp1.ResourceVersion
+			Expect(k8sClient.Update(ctx, &comp2)).Should(Succeed())
+
+			By("Get Component latest status after ControllerRevision created")
+			Eventually(
+				func() *v1alpha2.Revision {
+					k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &comp2)
+					if comp2.Status.LatestRevision != nil && comp2.Status.LatestRevision.Revision > 1 {
+						return comp2.Status.LatestRevision
+					}
+					return nil
+				},
+				time.Second*30, time.Millisecond*500).ShouldNot(BeNil())
+
+			revisionNameV2 := comp2.Status.LatestRevision.Name
+
+			By("Workload exist with revisionName v2")
+			var w2 unstructured.Unstructured
+			Eventually(
+				func() error {
+					w2.SetAPIVersion("example.com/v1")
+					w2.SetKind("Bar")
+					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: revisionNameV2}, &w2)
+				},
+				time.Second*15, time.Millisecond*500).Should(BeNil())
+			k2, _, _ := unstructured.NestedString(w2.Object, "spec", "key")
+			Expect(k2).Should(BeEquivalentTo("v2"), fmt.Sprintf("%v", w2.Object))
+
+			By("Check AppConfig status")
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: appconfig.Name}, &appconfig)
+				},
+				time.Second*15, time.Millisecond*500).Should(BeNil())
+
+			Expect(len(appconfig.Status.Workloads)).Should(BeEquivalentTo(2))
+			Expect(appconfig.Status.Workloads[0].ComponentRevisionName).Should(BeEquivalentTo(revisionNameV2))
+			Expect(appconfig.Status.Workloads[0].HistoryWorkingRevision).Should(BeEquivalentTo(false))
+			Expect(appconfig.Status.Workloads[1].ComponentRevisionName).Should(BeEquivalentTo(revisionNameV1))
+			Expect(appconfig.Status.Workloads[1].HistoryWorkingRevision).Should(BeEquivalentTo(true))
+
+			//Clean
+			k8sClient.Delete(ctx, &appconfig)
+			k8sClient.Delete(ctx, &comp1)
+			k8sClient.Delete(ctx, &comp2)
+		})
+	})
+
+	When("Components have componentName and without revision-enabled trait", func() {
+		It("should create workloads with name of component and replace the old revision", func() {
+
+			By("Create trait definition")
+			var td v1alpha2.TraitDefinition
+			Expect(readYaml("testdata/revision/trait-def-no-revision.yaml", &td)).Should(BeNil())
+			var gtd v1alpha2.TraitDefinition
+			if err := k8sClient.Get(ctx, client.ObjectKey{Name: td.Name, Namespace: td.Namespace}, &gtd); err != nil {
+				Expect(k8sClient.Create(ctx, &td)).Should(Succeed())
+			} else {
+				td.ResourceVersion = gtd.ResourceVersion
+				Expect(k8sClient.Update(ctx, &td)).Should(Succeed())
+			}
+
+			By("Create Component v1")
+			var comp1 v1alpha2.Component
+			Expect(readYaml("testdata/revision/comp-v1.yaml", &comp1)).Should(BeNil())
+			Expect(k8sClient.Create(ctx, &comp1)).Should(Succeed())
+
+			By("Create AppConfig with component")
+			var appconfig v1alpha2.ApplicationConfiguration
+			Expect(readYaml("testdata/revision/app.yaml", &appconfig)).Should(BeNil())
+			Expect(k8sClient.Create(ctx, &appconfig)).Should(Succeed())
+
+			By("Workload created with component name")
+			var w1 unstructured.Unstructured
+			Eventually(
+				func() error {
+					w1.SetAPIVersion("example.com/v1")
+					w1.SetKind("Bar")
+					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &w1)
+				},
+				time.Second*15, time.Millisecond*500).Should(BeNil())
+
+			k1, _, _ := unstructured.NestedString(w1.Object, "spec", "key")
+			Expect(k1).Should(BeEquivalentTo("v1"), fmt.Sprintf("%v", w1.Object))
+
+			By("Create Component v2")
+			var comp2 v1alpha2.Component
+			Expect(readYaml("testdata/revision/comp-v2.yaml", &comp2)).Should(BeNil())
+			k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &comp1)
+			comp2.ResourceVersion = comp1.ResourceVersion
+			Expect(k8sClient.Update(ctx, &comp2)).Should(Succeed())
+
+			By("Workload exist with revisionName v2")
+			var w2 unstructured.Unstructured
+			Eventually(
+				func() string {
+					w2.SetAPIVersion("example.com/v1")
+					w2.SetKind("Bar")
+					err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &w2)
+					if err != nil {
+						return ""
+					}
+					k2, _, _ := unstructured.NestedString(w2.Object, "spec", "key")
+					return k2
+				},
+				time.Second*15, time.Millisecond*500).Should(BeEquivalentTo("v2"))
+
+			By("Check AppConfig status")
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: appconfig.Name}, &appconfig)
+				},
+				time.Second*15, time.Millisecond*500).Should(BeNil())
+
+			Expect(len(appconfig.Status.Workloads)).Should(BeEquivalentTo(1))
+
+			//Clean
+			k8sClient.Delete(ctx, &appconfig)
+			k8sClient.Delete(ctx, &comp1)
+			k8sClient.Delete(ctx, &comp2)
+		})
+	})
 })
+
+func readYaml(path string, object runtime.Object) error {
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal(data, object)
+}
