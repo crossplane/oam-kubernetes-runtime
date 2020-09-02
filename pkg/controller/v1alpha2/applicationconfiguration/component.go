@@ -6,10 +6,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/rs/xid"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -141,7 +139,7 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 		return false
 	}
 	nextRevision := curRevision + 1
-	revisionName := ConstructRevisionName(mt.GetName())
+	revisionName := ConstructRevisionName(mt.GetName(), nextRevision)
 
 	curComp.Status.LatestRevision = &v1alpha2.Revision{
 		Name:     revisionName,
@@ -260,9 +258,9 @@ func (c *ComponentHandler) cleanupControllerRevision(curComp *v1alpha2.Component
 }
 
 // ConstructRevisionName will generate revisionName from componentName
-// hash suffix char set added to componentName is (0-9, a-v)
-func ConstructRevisionName(componentName string) string {
-	return strings.Join([]string{componentName, xid.NewWithTime(time.Now()).String()}, "-")
+// will be <componentName>-v<RevisionNumber>, for example: comp-v1
+func ConstructRevisionName(componentName string, revision int64) string {
+	return strings.Join([]string{componentName, fmt.Sprintf("v%d", revision)}, "-")
 }
 
 // ExtractComponentName will extract componentName from revisionName
