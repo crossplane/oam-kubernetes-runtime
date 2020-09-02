@@ -218,6 +218,51 @@ var _ = BeforeSuite(func(done Done) {
 	}
 	Expect(k8sClient.Create(context.Background(), &crd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
 	By("Created a crd for appconfig dependency test")
+
+	crd = crdv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "bars.example.com",
+			Labels: map[string]string{"crd": "revision-test"},
+		},
+		Spec: crdv1.CustomResourceDefinitionSpec{
+			Group: "example.com",
+			Names: crdv1.CustomResourceDefinitionNames{
+				Kind:     "Bar",
+				ListKind: "BarList",
+				Plural:   "bars",
+				Singular: "bar",
+			},
+			Versions: []crdv1.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1",
+					Served:  true,
+					Storage: true,
+					Schema: &crdv1.CustomResourceValidation{
+						OpenAPIV3Schema: &crdv1.JSONSchemaProps{
+							Type: "object",
+							Properties: map[string]crdv1.JSONSchemaProps{
+								"spec": {
+									Type: "object",
+									Properties: map[string]crdv1.JSONSchemaProps{
+										"key": {Type: "string"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Scope: crdv1.NamespaceScoped,
+		},
+	}
+	Expect(k8sClient.Create(context.Background(), &crd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
+	By("Created a crd for revision mechanism test")
+
+	By("Create workload definition for revision mechanism test")
+	var nwd v1alpha2.WorkloadDefinition
+	Expect(readYaml("testdata/revision/workload-def.yaml", &nwd)).Should(BeNil())
+	Expect(k8sClient.Create(context.Background(), &nwd)).Should(Succeed())
+
 	close(done)
 }, 300)
 
@@ -247,6 +292,28 @@ var _ = AfterSuite(func() {
 		},
 	}
 	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
+
+	crd = crdv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "bars.example.com",
+			Labels: map[string]string{"crd": "revision-test"},
+		},
+	}
+	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
 	By("Deleted the custom resource definition")
+
+	td := v1alpha2.TraitDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "bars.example.com",
+		},
+	}
+	k8sClient.Delete(context.Background(), &td)
+
+	wd := v1alpha2.WorkloadDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "bars.example.com",
+		},
+	}
+	k8sClient.Delete(context.Background(), &wd)
 
 })

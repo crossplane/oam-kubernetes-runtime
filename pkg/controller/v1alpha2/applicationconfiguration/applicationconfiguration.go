@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
@@ -297,11 +299,8 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	// patch the final status
 	acPatch := client.MergeFrom(ac.DeepCopyObject())
 
-	ac.Status.Workloads = make([]v1alpha2.WorkloadStatus, len(workloads))
-	for i := range workloads {
-		ac.Status.Workloads[i] = workloads[i].Status()
-	}
-	ac.SetConditions(v1alpha1.ReconcileSuccess())
+	r.updateStatus(ctx, ac, workloads)
+
 	ac.Status.Dependency = v1alpha2.DependencyStatus{}
 	waitTime := longWait
 	if len(depStatus.Unsatisfied) != 0 {
@@ -311,6 +310,44 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 	return reconcile.Result{RequeueAfter: waitTime},
 		errors.Wrap(r.client.Status().Patch(ctx, ac, acPatch, client.FieldOwner(ac.GetUID())), errUpdateAppConfigStatus)
+}
+
+func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, workloads []Workload) {
+	ac.Status.Workloads = make([]v1alpha2.WorkloadStatus, len(workloads))
+	revisionStatus := make([]v1alpha2.WorkloadStatus, 0)
+	for i, w := range workloads {
+		ac.Status.Workloads[i] = workloads[i].Status()
+		if !w.RevisionEnabled {
+			continue
+		}
+		var ul unstructured.UnstructuredList
+		ul.SetKind(w.Workload.GetKind())
+		ul.SetAPIVersion(w.Workload.GetAPIVersion())
+		if err := r.client.List(ctx, &ul, client.MatchingLabels{oam.LabelAppName: ac.Name, oam.LabelAppComponent: w.ComponentName}); err != nil {
+			continue
+		}
+		for _, v := range ul.Items {
+			if v.GetName() == w.ComponentRevisionName {
+				continue
+			}
+			// These workload exists means the component is under progress of rollout
+			// Trait will not work for these remaining workload
+			revisionStatus = append(revisionStatus, v1alpha2.WorkloadStatus{
+				ComponentName:          w.ComponentName,
+				ComponentRevisionName:  v.GetName(),
+				HistoryWorkingRevision: true,
+				Reference: v1alpha1.TypedReference{
+					APIVersion: v.GetAPIVersion(),
+					Kind:       v.GetKind(),
+					Name:       v.GetName(),
+					UID:        v.GetUID(),
+				},
+			})
+		}
+	}
+	ac.Status.Workloads = append(ac.Status.Workloads, revisionStatus...)
+
+	ac.SetConditions(v1alpha1.ReconcileSuccess())
 }
 
 // if any finalizers newly registered, return true
@@ -348,6 +385,9 @@ type Workload struct {
 
 	// Traits associated with this workload.
 	Traits []*Trait
+
+	// RevisionEnabled means multiple workloads of same component will possibly be alive.
+	RevisionEnabled bool
 
 	// Scopes associated with this workload.
 	Scopes []unstructured.Unstructured

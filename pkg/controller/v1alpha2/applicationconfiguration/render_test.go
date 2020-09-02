@@ -338,7 +338,8 @@ func TestRenderComponents(t *testing.T) {
 								return &Trait{Object: *t}
 							}(),
 						},
-						Scopes: []unstructured.Unstructured{},
+						RevisionEnabled: true,
+						Scopes:          []unstructured.Unstructured{},
 					},
 				},
 			},

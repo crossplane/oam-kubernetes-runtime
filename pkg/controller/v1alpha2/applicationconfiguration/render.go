@@ -174,7 +174,8 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 
 	addDataOutputsToDAG(dag, acc.DataOutputs, w)
 
-	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName, Workload: w, Traits: traits, Scopes: scopes}, nil
+	return &Workload{ComponentName: acc.ComponentName, ComponentRevisionName: componentRevisionName,
+		Workload: w, Traits: traits, RevisionEnabled: isRevisionEnabled(traitDefs), Scopes: scopes}, nil
 }
 
 func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, ac *v1alpha2.ApplicationConfiguration,
