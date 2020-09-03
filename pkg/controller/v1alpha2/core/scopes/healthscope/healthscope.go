@@ -18,6 +18,7 @@ package healthscope
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"time"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	corev1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/pkg/errors"
@@ -43,12 +45,16 @@ const (
 	defaultTimeout = 10 * time.Second
 )
 
+// HealthStatus represents health status strings.
 type HealthStatus = v1alpha2.HealthStatus
 
 const (
-	StatusHealthy   = v1alpha2.StatusHealthy
+	// StatusHealthy represents healthy status.
+	StatusHealthy = v1alpha2.StatusHealthy
+	// StatusUnhealthy represents unhealthy status.
 	StatusUnhealthy = v1alpha2.StatusUnhealthy
-	StatusUnknown   = v1alpha2.StatusUnknown
+	// StatusUnknown represents unknown status.
+	StatusUnknown = v1alpha2.StatusUnknown
 )
 
 var (
@@ -77,7 +83,7 @@ func (fn WorkloadHealthCheckFn) Check(ctx context.Context, c client.Client, tr r
 	return fn(ctx, c, tr, ns)
 }
 
-// CheckContainerziedWorkloadHealth check health status of ContainerizedWorkload
+// CheckContainerziedWorkloadHealth check health condition of ContainerizedWorkload
 func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
 	if ref.GroupVersionKind() != corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload) {
 		return nil
@@ -89,10 +95,15 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 	cwObj := corev1alpha2.ContainerizedWorkload{}
 	cwObj.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Name}, &cwObj); err != nil {
+		r.HealthStatus = StatusUnhealthy
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
-	//TODO get component name from labels
+	compName, exist := cwObj.GetLabels()[oam.LabelAppComponent]
+	if !exist {
+		compName = "UNKNOWN NAME"
+	}
+	r.ComponentName = compName
 	r.TargetWorkload.UID = cwObj.GetUID()
 
 	subConditions := []*HealthCondition{}
@@ -129,7 +140,7 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 	return r
 }
 
-// CheckDeploymentHealth checks health status of Deployment
+// CheckDeploymentHealth checks health condition of Deployment
 func CheckDeploymentHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
 	if ref.GroupVersionKind() != apps.SchemeGroupVersion.WithKind(kindDeployment) {
 		return nil
@@ -145,18 +156,29 @@ func CheckDeploymentHealth(ctx context.Context, client client.Client, ref runtim
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
+	compName, exist := deployment.GetLabels()[oam.LabelAppComponent]
+	if !exist {
+		compName = "UNKNOWN NAME"
+	}
+	r.ComponentName = compName
 	r.TargetWorkload.UID = deployment.GetUID()
-	r.Diagnosis = fmt.Sprintf(infoFmtReady, deployment.Status.ReadyReplicas, *deployment.Spec.Replicas)
+
+	requiredReplicas := int32(0)
+	if deployment.Spec.Replicas != nil {
+		requiredReplicas = *deployment.Spec.Replicas
+	}
+
+	r.Diagnosis = fmt.Sprintf(infoFmtReady, deployment.Status.ReadyReplicas, requiredReplicas)
 
 	// Health criteria
-	if deployment.Status.ReadyReplicas != *deployment.Spec.Replicas {
+	if deployment.Status.ReadyReplicas != requiredReplicas {
 		return r
 	}
 	r.HealthStatus = StatusHealthy
 	return r
 }
 
-// CheckStatefulsetHealth checks health status of StatefulSet
+// CheckStatefulsetHealth checks health condition of StatefulSet
 func CheckStatefulsetHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
 	if ref.GroupVersionKind() != apps.SchemeGroupVersion.WithKind(kindStatefulSet) {
 		return nil
@@ -173,18 +195,27 @@ func CheckStatefulsetHealth(ctx context.Context, client client.Client, ref runti
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
+	compName, exist := statefulset.GetLabels()[oam.LabelAppComponent]
+	if !exist {
+		compName = "UNKNOWN NAME"
+	}
+	r.ComponentName = compName
 	r.TargetWorkload.UID = statefulset.GetUID()
-	r.Diagnosis = fmt.Sprintf(infoFmtReady, statefulset.Status.ReadyReplicas, *statefulset.Spec.Replicas)
+	requiredReplicas := int32(0)
+	if statefulset.Spec.Replicas != nil {
+		requiredReplicas = *statefulset.Spec.Replicas
+	}
+	r.Diagnosis = fmt.Sprintf(infoFmtReady, statefulset.Status.ReadyReplicas, requiredReplicas)
 
 	// Health criteria
-	if statefulset.Status.ReadyReplicas != *statefulset.Spec.Replicas {
+	if statefulset.Status.ReadyReplicas != requiredReplicas {
 		return r
 	}
-	r.HealthStatus = StatusUnhealthy
+	r.HealthStatus = StatusHealthy
 	return r
 }
 
-// CheckDaemonsetHealth checks health status of DaemonSet
+// CheckDaemonsetHealth checks health condition of DaemonSet
 func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
 	if ref.GroupVersionKind() != apps.SchemeGroupVersion.WithKind(kindDaemonSet) {
 		return nil
@@ -201,49 +232,30 @@ func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtime
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
+	compName, exist := daemonset.GetLabels()[oam.LabelAppComponent]
+	if !exist {
+		compName = "UNKNOWN NAME"
+	}
+	r.ComponentName = compName
 	r.TargetWorkload.UID = daemonset.GetUID()
 	r.Diagnosis = fmt.Sprintf(infoFmtReady, daemonset.Status.NumberReady, daemonset.Status.DesiredNumberScheduled)
 
 	// Health criteria
-	if daemonset.Status.NumberReady != daemonset.Status.DesiredNumberScheduled {
+	if daemonset.Status.NumberUnavailable != 0 {
 		return r
 	}
 	r.HealthStatus = StatusHealthy
 	return r
 }
 
-// func (r *Reconciler) listHealthCheckTrait(ctx context.Context, ns string) ([]unstructured.Unstructured, error) {
-//     //TODO Get HealthCheckTrait GVK dynamically
-//     hcTraitList := &unstructured.UnstructuredList{}
-//     hcTraitList.SetAPIVersion("extend.oam.dev/v1alpha2")
-//     hcTraitList.SetKind("HealthCheckTrait")
-//
-//     if err := r.client.List(ctx, hcTraitList); err != nil {
-//         return nil, err
-//     }
-//     return hcTraitList.Items, nil
-//
-// }
-
-func (r *Reconciler) getHealthConditionFromTrait(ctx context.Context, wlRef runtimev1alpha1.TypedReference, ns string) (*HealthCondition, error) {
-	// get workload instance
-
-	// get component name
-
-	// get trait name by component name
-
-	hcTraitList := &unstructured.UnstructuredList{}
-	hcTraitList.SetAPIVersion("extend.oam.dev/v1alpha2")
-	hcTraitList.SetKind("HealthCheckTrait")
-
-	if err := r.client.List(ctx, hcTraitList); err != nil {
-		return nil, err
-	}
-
-	return nil, nil
+// CheckByHealthCheckTrait checks health condition through HealthCheckTrait.
+func CheckByHealthCheckTrait(ctx context.Context, c client.Client, wlRef runtimev1alpha1.TypedReference, ns string) *HealthCondition {
+	//TODO(roywang) implement HealthCheckTrait feature
+	return nil
 }
 
-func (r *Reconciler) getUnknownWorkloadHealthCondition(ctx context.Context, wlRef runtimev1alpha1.TypedReference, ns string) *HealthCondition {
+// CheckUnknownWorkload handles unknown type workloads.
+func CheckUnknownWorkload(ctx context.Context, c client.Client, wlRef runtimev1alpha1.TypedReference, ns string) *HealthCondition {
 	healthCondition := &HealthCondition{
 		TargetWorkload: wlRef,
 		HealthStatus:   StatusUnknown,
@@ -252,15 +264,19 @@ func (r *Reconciler) getUnknownWorkloadHealthCondition(ctx context.Context, wlRe
 
 	wl := &unstructured.Unstructured{}
 	wl.SetGroupVersionKind(wlRef.GroupVersionKind())
-	if err := r.client.Get(ctx, client.ObjectKey{Namespace: ns, Name: wlRef.Name}, wl); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: wlRef.Name}, wl); err != nil {
 		healthCondition.Diagnosis += errors.Wrap(err, errHealthCheck).Error()
 		return healthCondition
 	}
-	wlBytes, err := wl.MarshalJSON()
+	healthCondition.ComponentName = wl.GetLabels()[oam.LabelAppComponent]
+
+	// for unknown workloads, just show status instead of precise diagnosis
+	wlStatus, _, _ := unstructured.NestedMap(wl.UnstructuredContent(), "status")
+	wlStatusR, err := json.Marshal(wlStatus)
 	if err != nil {
 		healthCondition.Diagnosis += errors.Wrap(err, errHealthCheck).Error()
 		return healthCondition
 	}
-	healthCondition.WorkloadInfo = string(wlBytes)
+	healthCondition.WorkloadStatus = string(wlStatusR)
 	return healthCondition
 }

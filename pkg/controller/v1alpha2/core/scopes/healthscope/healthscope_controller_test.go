@@ -155,25 +155,20 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 	cwRef.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
 	deployRef.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindDeployment))
 	svcRef.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindService))
-	hGeneralRef := v1alpha1.TypedReference{
-		APIVersion: "unknown",
-		Kind:       "unknown",
-		Name:       "healthyGeneral",
-	}
 
 	cw := corev1alpha2.ContainerizedWorkload{}
 	cw.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
 	cw.Status.Resources = []v1alpha1.TypedReference{deployRef, svcRef}
 
 	hDeploy := appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &varInt1,
+		},
 		Status: appsv1.DeploymentStatus{
 			ReadyReplicas: 1, // healthy
 		},
 	}
 	hDeploy.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindDeployment))
-	hGeneralWL := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	fieldpath.Pave(hGeneralWL.Object).SetValue("status.readyReplicas", 1)         // healthy
-	fieldpath.Pave(hGeneralWL.Object).SetValue("metadata.name", "healthyGeneral") // healthy
 
 	uhGeneralRef := v1alpha1.TypedReference{
 		APIVersion: "unknown",
@@ -227,7 +222,7 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
 			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.HealthStatus).Should(Equal(true))
+			Expect(result.HealthStatus).Should(Equal(StatusHealthy))
 		}
 	})
 
@@ -250,21 +245,6 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					case *unstructured.Unstructured:
 						// return err when get svc of cw, then check fails
 						return errMockErr
-					}
-					return nil
-				},
-			},
-			{
-				caseName:       "2 general workloads but one is unhealthy",
-				hsWorkloadRefs: []v1alpha1.TypedReference{hGeneralRef, uhGeneralRef},
-				mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-					if key.Name == "healthyGeneral" {
-						o, _ := obj.(*unstructured.Unstructured)
-						*o = *hGeneralWL
-					}
-					if key.Name == "unhealthyGeneral" {
-						o, _ := obj.(*unstructured.Unstructured)
-						*o = *uhGeneralWL
 					}
 					return nil
 				},
@@ -295,7 +275,7 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
 			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.HealthStatus).Should(Equal(false))
+			Expect(result.HealthStatus).Should(Equal(HealthStatus(StatusUnhealthy)))
 		}
 	})
 })

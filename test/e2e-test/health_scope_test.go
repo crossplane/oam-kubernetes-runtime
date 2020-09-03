@@ -296,7 +296,7 @@ var _ = Describe("HealthScope", func() {
 				//	return false
 				//}
 
-				return healthScope.Status.ScopeHealthCondition.HealthStatus == "healthy"
+				return healthScope.Status.ScopeHealthCondition.HealthStatus == v1alpha2.StatusHealthy
 			},
 			time.Second*120, time.Second*5).Should(BeEquivalentTo(true))
 	})

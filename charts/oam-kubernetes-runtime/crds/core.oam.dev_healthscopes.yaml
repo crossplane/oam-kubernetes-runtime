@@ -123,14 +123,16 @@ spec:
                 description: HealthConditions represents health condition of workloads
                   in the scope
                 items:
+                  description: HealthCondition represents informative health condition.
                   properties:
+                    componentName:
+                      description: ComponentName represents the component name if
+                        target is a workload
+                      type: string
                     diagnosis:
                       type: string
                     healthStatus:
-                      type: string
-                    name:
-                      description: Name represents the component name if target is
-                        a workload
+                      description: HealthStatus represents health status strings.
                       type: string
                     targetWorkload:
                       description: A TypedReference refers to an object by Name, Kind,
@@ -155,7 +157,7 @@ spec:
                       - name
                       type: object
                     workloadStatus:
-                      description: WorkloadInfo represents status of workloads whose
+                      description: WorkloadStatus represents status of workloads whose
                         HealthStatus is UNKNOWN.
                       type: string
                   required:
@@ -166,13 +168,14 @@ spec:
                 description: ScopeHealthCondition represents health condition summary
                   of the scope
                 properties:
+                  componentName:
+                    description: ComponentName represents the component name if target
+                      is a workload
+                    type: string
                   diagnosis:
                     type: string
                   healthStatus:
-                    type: string
-                  name:
-                    description: Name represents the component name if target is a
-                      workload
+                    description: HealthStatus represents health status strings.
                     type: string
                   targetWorkload:
                     description: A TypedReference refers to an object by Name, Kind,
@@ -197,7 +200,7 @@ spec:
                     - name
                     type: object
                   workloadStatus:
-                    description: WorkloadInfo represents status of workloads whose
+                    description: WorkloadStatus represents status of workloads whose
                       HealthStatus is UNKNOWN.
                     type: string
                 required:

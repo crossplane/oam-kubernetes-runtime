@@ -41,6 +41,7 @@ const (
 var (
 	ctx        = context.Background()
 	errMockErr = errors.New("get error")
+	varInt1    = int32(1)
 )
 
 func TestCheckContainerziedWorkloadHealth(t *testing.T) {
@@ -78,6 +79,9 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				}
 				if o, ok := obj.(*apps.Deployment); ok {
 					*o = apps.Deployment{
+						Spec: apps.DeploymentSpec{
+							Replicas: &varInt1,
+						},
 						Status: apps.DeploymentStatus{
 							ReadyReplicas: 1, // healthy
 						},
@@ -99,6 +103,9 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				}
 				if o, ok := obj.(*apps.Deployment); ok {
 					*o = apps.Deployment{
+						Spec: apps.DeploymentSpec{
+							Replicas: &varInt1,
+						},
 						Status: apps.DeploymentStatus{
 							ReadyReplicas: 0, // unhealthy
 						},
@@ -197,6 +204,9 @@ func TestCheckDeploymentHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				if o, ok := obj.(*apps.Deployment); ok {
 					*o = apps.Deployment{
+						Spec: apps.DeploymentSpec{
+							Replicas: &varInt1,
+						},
 						Status: apps.DeploymentStatus{
 							ReadyReplicas: 1, // healthy
 						},
@@ -214,6 +224,9 @@ func TestCheckDeploymentHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				if o, ok := obj.(*apps.Deployment); ok {
 					*o = apps.Deployment{
+						Spec: apps.DeploymentSpec{
+							Replicas: &varInt1,
+						},
 						Status: apps.DeploymentStatus{
 							ReadyReplicas: 0, // unhealthy
 						},
@@ -272,6 +285,9 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				if o, ok := obj.(*apps.StatefulSet); ok {
 					*o = apps.StatefulSet{
+						Spec: apps.StatefulSetSpec{
+							Replicas: &varInt1,
+						},
 						Status: apps.StatefulSetStatus{
 							ReadyReplicas: 1, // healthy
 						},
@@ -289,6 +305,9 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				if o, ok := obj.(*apps.StatefulSet); ok {
 					*o = apps.StatefulSet{
+						Spec: apps.StatefulSetSpec{
+							Replicas: &varInt1,
+						},
 						Status: apps.StatefulSetStatus{
 							ReadyReplicas: 0, // unhealthy
 						},
