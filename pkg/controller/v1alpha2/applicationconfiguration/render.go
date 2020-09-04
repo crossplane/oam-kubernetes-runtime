@@ -135,6 +135,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		oam.LabelAppName:              ac.Name,
 		oam.LabelAppComponent:         acc.ComponentName,
 		oam.LabelAppComponentRevision: componentRevisionName,
+		oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
 	}
 	util.AddLabels(w, compInfoLabels)
 
@@ -147,12 +148,13 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 
 	traits := make([]*Trait, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
+	compInfoLabels[oam.LabelOAMResourceType] = oam.ResourceTypeTrait
 	for _, ct := range acc.Traits {
 		t, traitDef, err := r.renderTrait(ctx, ct, ac, acc.ComponentName, ref, dag)
 		if err != nil {
 			return nil, err
 		}
-
+		util.AddLabels(t, compInfoLabels)
 		// pass through labels and annotation from app-config to trait
 		util.PassLabelAndAnnotation(ac, t)
 		traits = append(traits, &Trait{Object: *t})
