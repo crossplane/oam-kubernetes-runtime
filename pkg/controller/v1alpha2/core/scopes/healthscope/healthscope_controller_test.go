@@ -195,9 +195,10 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 	// use ContainerizedWorkload and Deployment checker
 	It("Test healthy scope", func() {
 		tests := []struct {
-			caseName       string
-			hsWorkloadRefs []v1alpha1.TypedReference
-			mockGetFn      test.MockGetFn
+			caseName           string
+			hsWorkloadRefs     []v1alpha1.TypedReference
+			mockGetFn          test.MockGetFn
+			wantScopeCondition ScopeHealthCondition
 		}{
 			{
 				caseName:       "2 supportted workloads(cw,deploy)",
@@ -211,6 +212,13 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					}
 					return nil
 				},
+				wantScopeCondition: ScopeHealthCondition{
+					HealthStatus:       StatusHealthy,
+					Total:              int64(2),
+					HealthyWorkloads:   int64(2),
+					UnhealthyWorkloads: 0,
+					UnknownWorkloads:   0,
+				},
 			},
 		}
 		for _, tc := range tests {
@@ -222,16 +230,17 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
 			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.HealthStatus).Should(Equal(StatusHealthy))
+			Expect(result).Should(Equal(tc.wantScopeCondition))
 		}
 	})
 
 	// use ContainerizedWorkload and Deployment checker
 	It("Test unhealthy scope", func() {
 		tests := []struct {
-			caseName       string
-			hsWorkloadRefs []v1alpha1.TypedReference
-			mockGetFn      test.MockGetFn
+			caseName           string
+			hsWorkloadRefs     []v1alpha1.TypedReference
+			mockGetFn          test.MockGetFn
+			wantScopeCondition ScopeHealthCondition
 		}{
 			{
 				caseName:       "2 supportted workloads but one is unhealthy",
@@ -248,6 +257,13 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					}
 					return nil
 				},
+				wantScopeCondition: ScopeHealthCondition{
+					HealthStatus:       StatusUnhealthy,
+					Total:              int64(2),
+					HealthyWorkloads:   int64(1),
+					UnhealthyWorkloads: int64(1),
+					UnknownWorkloads:   0,
+				},
 			},
 			{
 				caseName:       "1 healthy supportted workload and 1 unsupportted workloads",
@@ -263,6 +279,13 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					}
 					return nil
 				},
+				wantScopeCondition: ScopeHealthCondition{
+					HealthStatus:       StatusUnhealthy,
+					Total:              int64(2),
+					HealthyWorkloads:   int64(1),
+					UnhealthyWorkloads: 0,
+					UnknownWorkloads:   int64(1),
+				},
 			},
 		}
 
@@ -275,7 +298,7 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
 			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.HealthStatus).Should(Equal(HealthStatus(StatusUnhealthy)))
+			Expect(result).Should(Equal(tc.wantScopeCondition))
 		}
 	})
 })

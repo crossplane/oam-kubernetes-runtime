@@ -18,7 +18,6 @@ package healthscope
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -47,10 +46,6 @@ const (
 const (
 	errGetHealthScope          = "cannot get health scope"
 	errUpdateHealthScopeStatus = "cannot update health scope status"
-)
-
-const (
-	infoFmtScopeDiagnosis = "total workloads: %d, healthy workloads: %d, unhealthy workloads: %d, unknown workloads: %d"
 )
 
 // Reconcile event reasons.
@@ -174,21 +169,15 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	elapsed := time.Since(start)
 	hs.Status.ScopeHealthCondition = scopeCondition
-	hs.Status.HealthConditions = wlConditions
+	hs.Status.WorkloadHealthConditions = wlConditions
 
 	return reconcile.Result{RequeueAfter: interval - elapsed}, errors.Wrap(r.client.Status().Update(ctx, hs), errUpdateHealthScopeStatus)
 }
 
 // GetScopeHealthStatus get the status of the healthscope based on workload resources.
-func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1alpha2.HealthScope) (HealthCondition, []*HealthCondition) {
+func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1alpha2.HealthScope) (ScopeHealthCondition, []*HealthCondition) {
 	log := r.log.WithValues("get scope health status", healthScope.GetName())
-	scopeCondition := HealthCondition{
-		TargetWorkload: runtimev1alpha1.TypedReference{
-			APIVersion: healthScope.APIVersion,
-			Kind:       healthScope.Kind,
-			Name:       healthScope.Name,
-			UID:        healthScope.UID,
-		},
+	scopeCondition := ScopeHealthCondition{
 		HealthStatus: StatusHealthy, //if no workload referenced, scope is healthy by default
 	}
 	scopeWLRefs := healthScope.Spec.WorkloadReferences
@@ -241,7 +230,7 @@ func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1al
 		close(workloadHealthConditionsC)
 	}()
 
-	var healthyCount, unhealthyCount, unknownCount int
+	var healthyCount, unhealthyCount, unknownCount int64
 	workloadHealthConditions := []*HealthCondition{}
 	for wlC := range workloadHealthConditionsC {
 		workloadHealthConditions = append(workloadHealthConditions, wlC)
@@ -260,6 +249,10 @@ func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1al
 		// ANY unhealthy or unknown worloads make the whole scope unhealthy
 		scopeCondition.HealthStatus = StatusUnhealthy
 	}
-	scopeCondition.Diagnosis = fmt.Sprintf(infoFmtScopeDiagnosis, len(scopeWLRefs), healthyCount, unhealthyCount, unknownCount)
+	scopeCondition.Total = int64(len(scopeWLRefs))
+	scopeCondition.HealthyWorkloads = healthyCount
+	scopeCondition.UnhealthyWorkloads = unhealthyCount
+	scopeCondition.UnknownWorkloads = unknownCount
+
 	return scopeCondition, workloadHealthConditions
 }

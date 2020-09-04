@@ -25,6 +25,7 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,6 +41,7 @@ import (
 const (
 	infoFmtUnknownWorkload = "APIVersion %v Kind %v workload is unknown for HealthScope "
 	infoFmtReady           = "Ready: %d/%d "
+	infoFmtNoChildRes      = "cannot get child resource references of ContainerizedWorkload %v"
 	errHealthCheck         = "error occurs in health check "
 
 	defaultTimeout = 10 * time.Second
@@ -66,7 +68,10 @@ var (
 )
 
 // HealthCondition holds health status of any resource
-type HealthCondition = v1alpha2.HealthCondition
+type HealthCondition = v1alpha2.WorkloadHealthCondition
+
+// ScopeHealthCondition holds health condition of a scope
+type ScopeHealthCondition = v1alpha2.ScopeHealthCondition
 
 // A WorloadHealthChecker checks health status of specified resource
 // and saves status into an HealthCondition object.
@@ -99,15 +104,18 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
-	compName, exist := cwObj.GetLabels()[oam.LabelAppComponent]
-	if !exist {
-		compName = "UNKNOWN NAME"
-	}
-	r.ComponentName = compName
+
+	r.ComponentName = getComponentNameFromLabel(&cwObj)
 	r.TargetWorkload.UID = cwObj.GetUID()
 
 	subConditions := []*HealthCondition{}
 	childRefs := cwObj.Status.Resources
+	if len(childRefs) != 2 {
+		// one deployment and one svc are required by containerizedworkload
+		r.Diagnosis = fmt.Sprintf(infoFmtNoChildRes, ref.Name)
+		r.HealthStatus = StatusUnhealthy
+		return r
+	}
 
 	for _, childRef := range childRefs {
 		switch childRef.Kind {
@@ -156,11 +164,7 @@ func CheckDeploymentHealth(ctx context.Context, client client.Client, ref runtim
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
-	compName, exist := deployment.GetLabels()[oam.LabelAppComponent]
-	if !exist {
-		compName = "UNKNOWN NAME"
-	}
-	r.ComponentName = compName
+	r.ComponentName = getComponentNameFromLabel(&deployment)
 	r.TargetWorkload.UID = deployment.GetUID()
 
 	requiredReplicas := int32(0)
@@ -195,11 +199,7 @@ func CheckStatefulsetHealth(ctx context.Context, client client.Client, ref runti
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
-	compName, exist := statefulset.GetLabels()[oam.LabelAppComponent]
-	if !exist {
-		compName = "UNKNOWN NAME"
-	}
-	r.ComponentName = compName
+	r.ComponentName = getComponentNameFromLabel(&statefulset)
 	r.TargetWorkload.UID = statefulset.GetUID()
 	requiredReplicas := int32(0)
 	if statefulset.Spec.Replicas != nil {
@@ -232,11 +232,7 @@ func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtime
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
-	compName, exist := daemonset.GetLabels()[oam.LabelAppComponent]
-	if !exist {
-		compName = "UNKNOWN NAME"
-	}
-	r.ComponentName = compName
+	r.ComponentName = getComponentNameFromLabel(&daemonset)
 	r.TargetWorkload.UID = daemonset.GetUID()
 	r.Diagnosis = fmt.Sprintf(infoFmtReady, daemonset.Status.NumberReady, daemonset.Status.DesiredNumberScheduled)
 
@@ -265,7 +261,7 @@ func CheckUnknownWorkload(ctx context.Context, c client.Client, wlRef runtimev1a
 	wl := &unstructured.Unstructured{}
 	wl.SetGroupVersionKind(wlRef.GroupVersionKind())
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: wlRef.Name}, wl); err != nil {
-		healthCondition.Diagnosis += errors.Wrap(err, errHealthCheck).Error()
+		healthCondition.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return healthCondition
 	}
 	healthCondition.ComponentName = wl.GetLabels()[oam.LabelAppComponent]
@@ -274,9 +270,17 @@ func CheckUnknownWorkload(ctx context.Context, c client.Client, wlRef runtimev1a
 	wlStatus, _, _ := unstructured.NestedMap(wl.UnstructuredContent(), "status")
 	wlStatusR, err := json.Marshal(wlStatus)
 	if err != nil {
-		healthCondition.Diagnosis += errors.Wrap(err, errHealthCheck).Error()
+		healthCondition.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return healthCondition
 	}
 	healthCondition.WorkloadStatus = string(wlStatusR)
 	return healthCondition
+}
+
+func getComponentNameFromLabel(o metav1.Object) string {
+	compName, exist := o.GetLabels()[oam.LabelAppComponent]
+	if !exist {
+		compName = ""
+	}
+	return compName
 }

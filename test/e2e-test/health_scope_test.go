@@ -95,6 +95,11 @@ var _ = Describe("HealthScope", func() {
 		}
 		logf.Log.Info("Creating health scope")
 		Expect(k8sClient.Create(ctx, &hs)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
+		By("Check empty health scope is healthy")
+		Eventually(func() v1alpha2.HealthStatus {
+			k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: healthScopeName}, &hs)
+			return hs.Status.ScopeHealthCondition.HealthStatus
+		}, time.Second*30, time.Millisecond*500).Should(Equal(v1alpha2.StatusHealthy))
 
 		label := map[string]string{"workload": "containerized-workload"}
 		// create a workload definition
@@ -284,20 +289,20 @@ var _ = Describe("HealthScope", func() {
 		healthScope := &v1alpha2.HealthScope{}
 		By("Verify health scope")
 		Eventually(
-			func() bool {
+			func() v1alpha2.ScopeHealthCondition {
+				*healthScope = v1alpha2.HealthScope{}
 				k8sClient.Get(ctx, healthScopeObject, healthScope)
 				logf.Log.Info("Checking on health scope",
 					"len(WorkloadReferences)",
 					len(healthScope.Spec.WorkloadReferences),
 					"health",
 					healthScope.Status.ScopeHealthCondition)
-				// TODO(artursouza): enable this check once crossplane is updated.
-				//if len(healthScope.Spec.WorkloadReferences) == 0 {
-				//	return false
-				//}
-
-				return healthScope.Status.ScopeHealthCondition.HealthStatus == v1alpha2.StatusHealthy
+				return healthScope.Status.ScopeHealthCondition
 			},
-			time.Second*120, time.Second*5).Should(BeEquivalentTo(true))
+			time.Second*120, time.Second*5).Should(Equal(v1alpha2.ScopeHealthCondition{
+			HealthStatus:     v1alpha2.StatusHealthy,
+			Total:            int64(2),
+			HealthyWorkloads: int64(2),
+		}))
 	})
 })

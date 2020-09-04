@@ -54,14 +54,23 @@ type HealthScopeStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
 	// ScopeHealthCondition represents health condition summary of the scope
-	ScopeHealthCondition HealthCondition `json:"scopeHealthCondition"`
+	ScopeHealthCondition ScopeHealthCondition `json:"scopeHealthCondition"`
 
-	// HealthConditions represents health condition of workloads in the scope
-	HealthConditions []*HealthCondition `json:"healthConditions,omitempty"`
+	// WorkloadHealthConditions represents health condition of workloads in the scope
+	WorkloadHealthConditions []*WorkloadHealthCondition `json:"healthConditions,omitempty"`
 }
 
-// HealthCondition represents informative health condition.
-type HealthCondition struct {
+// ScopeHealthCondition represents health condition summary of a scope.
+type ScopeHealthCondition struct {
+	HealthStatus       HealthStatus `json:"healthStatus"`
+	Total              int64        `json:"total,omitempty"`
+	HealthyWorkloads   int64        `json:"healthyWorkloads,omitempty"`
+	UnhealthyWorkloads int64        `json:"unhealthyWorkloads,omitempty"`
+	UnknownWorkloads   int64        `json:"unknownWorkloads,omitempty"`
+}
+
+// WorkloadHealthCondition represents informative health condition.
+type WorkloadHealthCondition struct {
 	// ComponentName represents the component name if target is a workload
 	ComponentName  string                         `json:"componentName,omitempty"`
 	TargetWorkload runtimev1alpha1.TypedReference `json:"targetWorkload,omitempty"`
