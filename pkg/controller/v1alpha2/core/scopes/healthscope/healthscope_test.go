@@ -62,7 +62,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 		caseName  string
 		mockGetFn test.MockGetFn
 		wlRef     runtimev1alpha1.TypedReference
-		expect    *HealthCondition
+		expect    *WorkloadHealthCondition
 	}{
 		{
 			caseName: "not matched checker",
@@ -89,7 +89,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusHealthy,
 			},
 		},
@@ -113,7 +113,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -123,7 +123,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				return errMockErr
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -140,7 +140,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -162,7 +162,7 @@ func TestCheckContainerziedWorkloadHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -191,7 +191,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 		caseName  string
 		mockGetFn test.MockGetFn
 		wlRef     runtimev1alpha1.TypedReference
-		expect    *HealthCondition
+		expect    *WorkloadHealthCondition
 	}{
 		{
 			caseName: "not matched checker",
@@ -214,7 +214,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusHealthy,
 			},
 		},
@@ -234,7 +234,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -244,7 +244,7 @@ func TestCheckDeploymentHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				return errMockErr
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -272,7 +272,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 		caseName  string
 		mockGetFn test.MockGetFn
 		wlRef     runtimev1alpha1.TypedReference
-		expect    *HealthCondition
+		expect    *WorkloadHealthCondition
 	}{
 		{
 			caseName: "not matched checker",
@@ -295,7 +295,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusHealthy,
 			},
 		},
@@ -315,7 +315,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -325,7 +325,7 @@ func TestCheckStatefulsetHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				return errMockErr
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -353,7 +353,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 		caseName  string
 		mockGetFn test.MockGetFn
 		wlRef     runtimev1alpha1.TypedReference
-		expect    *HealthCondition
+		expect    *WorkloadHealthCondition
 	}{
 		{
 			caseName: "not matched checker",
@@ -373,7 +373,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusHealthy,
 			},
 		},
@@ -390,7 +390,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 				}
 				return nil
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},
@@ -400,7 +400,7 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				return errMockErr
 			},
-			expect: &HealthCondition{
+			expect: &WorkloadHealthCondition{
 				HealthStatus: StatusUnhealthy,
 			},
 		},

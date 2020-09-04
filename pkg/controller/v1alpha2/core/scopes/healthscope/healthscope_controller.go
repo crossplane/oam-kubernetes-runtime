@@ -175,14 +175,14 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 }
 
 // GetScopeHealthStatus get the status of the healthscope based on workload resources.
-func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1alpha2.HealthScope) (ScopeHealthCondition, []*HealthCondition) {
+func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1alpha2.HealthScope) (ScopeHealthCondition, []*WorkloadHealthCondition) {
 	log := r.log.WithValues("get scope health status", healthScope.GetName())
 	scopeCondition := ScopeHealthCondition{
 		HealthStatus: StatusHealthy, //if no workload referenced, scope is healthy by default
 	}
 	scopeWLRefs := healthScope.Spec.WorkloadReferences
 	if len(scopeWLRefs) == 0 {
-		return scopeCondition, []*HealthCondition{}
+		return scopeCondition, []*WorkloadHealthCondition{}
 	}
 
 	timeout := defaultTimeout
@@ -193,14 +193,14 @@ func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1al
 	defer cancel()
 
 	// process workloads concurrently
-	workloadHealthConditionsC := make(chan *HealthCondition, len(scopeWLRefs))
+	workloadHealthConditionsC := make(chan *WorkloadHealthCondition, len(scopeWLRefs))
 	var wg sync.WaitGroup
 	wg.Add(len(scopeWLRefs))
 
 	for _, workloadRef := range scopeWLRefs {
 		go func(resRef runtimev1alpha1.TypedReference) {
 			defer wg.Done()
-			var wlHealthCondition *HealthCondition
+			var wlHealthCondition *WorkloadHealthCondition
 
 			wlHealthCondition = r.traitChecker.Check(ctx, r.client, resRef, healthScope.GetNamespace())
 			if wlHealthCondition != nil {
@@ -231,7 +231,7 @@ func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1al
 	}()
 
 	var healthyCount, unhealthyCount, unknownCount int64
-	workloadHealthConditions := []*HealthCondition{}
+	workloadHealthConditions := []*WorkloadHealthCondition{}
 	for wlC := range workloadHealthConditionsC {
 		workloadHealthConditions = append(workloadHealthConditions, wlC)
 		switch wlC.HealthStatus {

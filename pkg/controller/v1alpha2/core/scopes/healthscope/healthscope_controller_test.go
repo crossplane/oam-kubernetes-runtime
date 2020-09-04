@@ -45,13 +45,13 @@ var _ = Describe("HealthScope Controller Reconcile Test", func() {
 		Client: &test.MockClient{},
 	}
 	MockHealthyChecker := WorkloadHealthCheckFn(
-		func(context.Context, client.Client, v1alpha1.TypedReference, string) *HealthCondition {
+		func(context.Context, client.Client, v1alpha1.TypedReference, string) *WorkloadHealthCondition {
 
-			return &HealthCondition{HealthStatus: StatusHealthy}
+			return &WorkloadHealthCondition{HealthStatus: StatusHealthy}
 		})
 	MockUnhealthyChecker := WorkloadHealthCheckFn(
-		func(context.Context, client.Client, v1alpha1.TypedReference, string) *HealthCondition {
-			return &HealthCondition{HealthStatus: StatusUnhealthy}
+		func(context.Context, client.Client, v1alpha1.TypedReference, string) *WorkloadHealthCondition {
+			return &WorkloadHealthCondition{HealthStatus: StatusUnhealthy}
 		})
 	reconciler := NewReconciler(mockMgr,
 		WithLogger(logging.NewNopLogger().WithValues("HealthScopeReconciler")),

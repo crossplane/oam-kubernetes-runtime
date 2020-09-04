@@ -67,8 +67,8 @@ var (
 	kindDaemonSet             = reflect.TypeOf(apps.DaemonSet{}).Name()
 )
 
-// HealthCondition holds health status of any resource
-type HealthCondition = v1alpha2.WorkloadHealthCondition
+// WorkloadHealthCondition holds health status of any resource
+type WorkloadHealthCondition = v1alpha2.WorkloadHealthCondition
 
 // ScopeHealthCondition holds health condition of a scope
 type ScopeHealthCondition = v1alpha2.ScopeHealthCondition
@@ -76,24 +76,24 @@ type ScopeHealthCondition = v1alpha2.ScopeHealthCondition
 // A WorloadHealthChecker checks health status of specified resource
 // and saves status into an HealthCondition object.
 type WorloadHealthChecker interface {
-	Check(context.Context, client.Client, runtimev1alpha1.TypedReference, string) *HealthCondition
+	Check(context.Context, client.Client, runtimev1alpha1.TypedReference, string) *WorkloadHealthCondition
 }
 
 // WorkloadHealthCheckFn checks health status of specified resource
 // and saves status into an HealthCondition object.
-type WorkloadHealthCheckFn func(context.Context, client.Client, runtimev1alpha1.TypedReference, string) *HealthCondition
+type WorkloadHealthCheckFn func(context.Context, client.Client, runtimev1alpha1.TypedReference, string) *WorkloadHealthCondition
 
 // Check the health status of specified resource
-func (fn WorkloadHealthCheckFn) Check(ctx context.Context, c client.Client, tr runtimev1alpha1.TypedReference, ns string) *HealthCondition {
+func (fn WorkloadHealthCheckFn) Check(ctx context.Context, c client.Client, tr runtimev1alpha1.TypedReference, ns string) *WorkloadHealthCondition {
 	return fn(ctx, c, tr, ns)
 }
 
 // CheckContainerziedWorkloadHealth check health condition of ContainerizedWorkload
-func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
+func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref runtimev1alpha1.TypedReference, namespace string) *WorkloadHealthCondition {
 	if ref.GroupVersionKind() != corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload) {
 		return nil
 	}
-	r := &HealthCondition{
+	r := &WorkloadHealthCondition{
 		HealthStatus:   StatusHealthy,
 		TargetWorkload: ref,
 	}
@@ -108,7 +108,7 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 	r.ComponentName = getComponentNameFromLabel(&cwObj)
 	r.TargetWorkload.UID = cwObj.GetUID()
 
-	subConditions := []*HealthCondition{}
+	subConditions := []*WorkloadHealthCondition{}
 	childRefs := cwObj.Status.Resources
 	if len(childRefs) != 2 {
 		// one deployment and one svc are required by containerizedworkload
@@ -124,7 +124,7 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 			childCondition := CheckDeploymentHealth(ctx, c, childRef, namespace)
 			subConditions = append(subConditions, childCondition)
 		case kindService:
-			childCondition := &HealthCondition{
+			childCondition := &WorkloadHealthCondition{
 				TargetWorkload: childRef,
 				HealthStatus:   StatusHealthy,
 			}
@@ -149,11 +149,11 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 }
 
 // CheckDeploymentHealth checks health condition of Deployment
-func CheckDeploymentHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
+func CheckDeploymentHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *WorkloadHealthCondition {
 	if ref.GroupVersionKind() != apps.SchemeGroupVersion.WithKind(kindDeployment) {
 		return nil
 	}
-	r := &HealthCondition{
+	r := &WorkloadHealthCondition{
 		HealthStatus:   StatusUnhealthy,
 		TargetWorkload: ref,
 	}
@@ -183,11 +183,11 @@ func CheckDeploymentHealth(ctx context.Context, client client.Client, ref runtim
 }
 
 // CheckStatefulsetHealth checks health condition of StatefulSet
-func CheckStatefulsetHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
+func CheckStatefulsetHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *WorkloadHealthCondition {
 	if ref.GroupVersionKind() != apps.SchemeGroupVersion.WithKind(kindStatefulSet) {
 		return nil
 	}
-	r := &HealthCondition{
+	r := &WorkloadHealthCondition{
 		HealthStatus:   StatusUnhealthy,
 		TargetWorkload: ref,
 	}
@@ -216,11 +216,11 @@ func CheckStatefulsetHealth(ctx context.Context, client client.Client, ref runti
 }
 
 // CheckDaemonsetHealth checks health condition of DaemonSet
-func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *HealthCondition {
+func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtimev1alpha1.TypedReference, namespace string) *WorkloadHealthCondition {
 	if ref.GroupVersionKind() != apps.SchemeGroupVersion.WithKind(kindDaemonSet) {
 		return nil
 	}
-	r := &HealthCondition{
+	r := &WorkloadHealthCondition{
 		HealthStatus:   StatusUnhealthy,
 		TargetWorkload: ref,
 	}
@@ -245,14 +245,14 @@ func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtime
 }
 
 // CheckByHealthCheckTrait checks health condition through HealthCheckTrait.
-func CheckByHealthCheckTrait(ctx context.Context, c client.Client, wlRef runtimev1alpha1.TypedReference, ns string) *HealthCondition {
+func CheckByHealthCheckTrait(ctx context.Context, c client.Client, wlRef runtimev1alpha1.TypedReference, ns string) *WorkloadHealthCondition {
 	//TODO(roywang) implement HealthCheckTrait feature
 	return nil
 }
 
 // CheckUnknownWorkload handles unknown type workloads.
-func CheckUnknownWorkload(ctx context.Context, c client.Client, wlRef runtimev1alpha1.TypedReference, ns string) *HealthCondition {
-	healthCondition := &HealthCondition{
+func CheckUnknownWorkload(ctx context.Context, c client.Client, wlRef runtimev1alpha1.TypedReference, ns string) *WorkloadHealthCondition {
+	healthCondition := &WorkloadHealthCondition{
 		TargetWorkload: wlRef,
 		HealthStatus:   StatusUnknown,
 		Diagnosis:      fmt.Sprintf(infoFmtUnknownWorkload, wlRef.APIVersion, wlRef.Kind),
