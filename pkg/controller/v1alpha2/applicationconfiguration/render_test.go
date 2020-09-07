@@ -199,6 +199,7 @@ func TestRenderComponents(t *testing.T) {
 								oam.LabelAppComponent:         componentName,
 								oam.LabelAppName:              acName,
 								oam.LabelAppComponentRevision: "",
+								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
 							})
 							return w
 						}(),
@@ -208,6 +209,12 @@ func TestRenderComponents(t *testing.T) {
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								t.SetLabels(map[string]string{
+									oam.LabelAppComponent:         componentName,
+									oam.LabelAppName:              acName,
+									oam.LabelAppComponentRevision: "",
+									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+								})
 								return &Trait{Object: *t}
 							}(),
 						},
@@ -267,6 +274,7 @@ func TestRenderComponents(t *testing.T) {
 								oam.LabelAppComponent:         componentName,
 								oam.LabelAppName:              acName,
 								oam.LabelAppComponentRevision: revisionName,
+								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
 							})
 							return w
 						}(),
@@ -276,6 +284,12 @@ func TestRenderComponents(t *testing.T) {
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								t.SetLabels(map[string]string{
+									oam.LabelAppComponent:         componentName,
+									oam.LabelAppName:              acName,
+									oam.LabelAppComponentRevision: revisionName,
+									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+								})
 								return &Trait{Object: *t}
 							}(),
 						},
@@ -326,6 +340,7 @@ func TestRenderComponents(t *testing.T) {
 								oam.LabelAppComponent:         componentName,
 								oam.LabelAppName:              acName,
 								oam.LabelAppComponentRevision: revisionName2,
+								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
 							})
 							return w
 						}(),
@@ -335,6 +350,12 @@ func TestRenderComponents(t *testing.T) {
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								t.SetLabels(map[string]string{
+									oam.LabelAppComponent:         componentName,
+									oam.LabelAppName:              acName,
+									oam.LabelAppComponentRevision: revisionName2,
+									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+								})
 								return &Trait{Object: *t}
 							}(),
 						},

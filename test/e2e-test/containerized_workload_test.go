@@ -200,13 +200,27 @@ var _ = Describe("ContainerizedWorkload", func() {
 			return k8sClient.Get(ctx, client.ObjectKey{Name: workloadInstanceName, Namespace: namespace}, cw)
 		}, time.Second*15, time.Millisecond*500).Should(BeNil())
 
-		By("Checking lables")
+		By("Checking ManuelScalerTrait is created")
+		Eventually(func() error {
+			return k8sClient.Get(ctx, client.ObjectKey{Name: mts.Name, Namespace: namespace}, &mts)
+		}, time.Second*15, time.Millisecond*500).Should(BeNil())
+
+		By("Checking labels")
 		cwLabels := cw.GetLabels()
 		Expect(cwLabels).Should(SatisfyAll(
 			HaveKey(fakeLabelKey), // propogated from appConfig
 			HaveKey(oam.LabelAppComponent),
 			HaveKey(oam.LabelAppComponentRevision),
-			HaveKey(oam.LabelAppName)))
+			HaveKey(oam.LabelAppName),
+			HaveKey(oam.LabelOAMResourceType)))
+
+		cwLabels = mts.GetLabels()
+		Expect(cwLabels).Should(SatisfyAll(
+			HaveKey(fakeLabelKey), // propogated from appConfig
+			HaveKey(oam.LabelAppComponent),
+			HaveKey(oam.LabelAppComponentRevision),
+			HaveKey(oam.LabelAppName),
+			HaveKey(oam.LabelOAMResourceType)))
 
 		By("Checking deployment is created")
 		objectKey := client.ObjectKey{
