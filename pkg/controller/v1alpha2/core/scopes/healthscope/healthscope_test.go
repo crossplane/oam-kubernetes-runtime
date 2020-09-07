@@ -18,7 +18,7 @@ package healthscope
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,7 +28,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
+
+	"github.com/pkg/errors"
 
 	corev1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
@@ -414,6 +417,67 @@ func TestCheckDaemonsetHealth(t *testing.T) {
 				assert.Nil(t, result, tc.caseName)
 			} else {
 				assert.Equal(t, tc.expect.HealthStatus, result.HealthStatus, tc.caseName)
+			}
+		}(t)
+	}
+}
+
+func TestCheckUnknownWorkload(t *testing.T) {
+	mockError := fmt.Errorf("mock error")
+	mockClient := test.NewMockClient()
+	unknownWL := runtimev1alpha1.TypedReference{}
+	tests := []struct {
+		caseName  string
+		mockGetFn test.MockGetFn
+		expect    *WorkloadHealthCondition
+	}{
+		{
+			caseName: "cannot get workload",
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				return mockError
+			},
+			expect: &WorkloadHealthCondition{
+				HealthStatus: StatusUnknown,
+				Diagnosis:    errors.Wrap(mockError, errHealthCheck).Error(),
+			},
+		},
+		{
+			caseName: "unknown workload with status",
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				o, _ := obj.(*unstructured.Unstructured)
+				*o = unstructured.Unstructured{}
+				o.Object = make(map[string]interface{})
+				fieldpath.Pave(o.Object).SetValue("status.unknown", 1)
+				return nil
+			},
+			expect: &WorkloadHealthCondition{
+				HealthStatus:   StatusUnknown,
+				Diagnosis:      fmt.Sprintf(infoFmtUnknownWorkload, "", ""),
+				WorkloadStatus: "{\"unknown\":1}",
+			},
+		},
+		{
+			caseName: "unknown workload without status",
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				o, _ := obj.(*unstructured.Unstructured)
+				*o = unstructured.Unstructured{}
+				return nil
+			},
+			expect: &WorkloadHealthCondition{
+				HealthStatus:   StatusUnknown,
+				Diagnosis:      fmt.Sprintf(infoFmtUnknownWorkload, "", ""),
+				WorkloadStatus: "null",
+			},
+		},
+	}
+	for _, tc := range tests {
+		func(t *testing.T) {
+			mockClient.MockGet = tc.mockGetFn
+			result := CheckUnknownWorkload(ctx, mockClient, unknownWL, namespace)
+			if tc.expect == nil {
+				assert.Nil(t, result, tc.caseName)
+			} else {
+				assert.Equal(t, tc.expect, result, tc.caseName)
 			}
 		}(t)
 	}

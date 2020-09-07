@@ -143,7 +143,7 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 		if sc.HealthStatus != StatusHealthy {
 			r.HealthStatus = StatusUnhealthy
 		}
-		r.Diagnosis += sc.Diagnosis
+		r.Diagnosis = fmt.Sprintf("%s%s", r.Diagnosis, sc.Diagnosis)
 	}
 	return r
 }
@@ -264,7 +264,7 @@ func CheckUnknownWorkload(ctx context.Context, c client.Client, wlRef runtimev1a
 		healthCondition.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return healthCondition
 	}
-	healthCondition.ComponentName = wl.GetLabels()[oam.LabelAppComponent]
+	healthCondition.ComponentName = getComponentNameFromLabel(wl)
 
 	// for unknown workloads, just show status instead of precise diagnosis
 	wlStatus, _, _ := unstructured.NestedMap(wl.UnstructuredContent(), "status")
@@ -278,6 +278,9 @@ func CheckUnknownWorkload(ctx context.Context, c client.Client, wlRef runtimev1a
 }
 
 func getComponentNameFromLabel(o metav1.Object) string {
+	if o == nil {
+		return ""
+	}
 	compName, exist := o.GetLabels()[oam.LabelAppComponent]
 	if !exist {
 		compName = ""
