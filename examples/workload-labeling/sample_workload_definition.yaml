@@ -1,0 +1,9 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: WorkloadDefinition
+metadata:
+  name: deployments.apps
+  labels:
+    definition.oam.dev/unique-pod: pod-template-hash
+spec:
+  definitionRef:
+    name: deployments.apps
