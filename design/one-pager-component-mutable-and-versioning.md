@@ -102,9 +102,9 @@ data:
 
 Then `ControllerRevision` will have three parts of information that could be used:
 
-1. labels: a label `controller.oam.dev/component` with value of componentName will be automatically added.
-2. revision number: the revision number will increase progressively with new revision created.
-3. data: the data field will contain the snapshot information of component.
+1. labels: a label `controller.oam.dev/component` with the `componentName` as its value is added automatically.
+2. revision number: the revision number increases monotonically with each new revision created.
+3. data: the data field contains the snapshot information of the component.
 
 And it will be recorded in the status of `component.yaml`.
 
@@ -139,7 +139,7 @@ If you make a change to `component.yaml`:
 A new `ControllerRevision` will be automatically generated:
 
 ```shell script
-$ kubectl get controllerrevisions.apps
+$ kubectl get controllerrevisions
 NAMESPACE     NAME                  CONTROLLER               REVISION   AGE
 default       frontend-v1    core.oam.dev/component   1          2d15h
 default       frontend-v2    core.oam.dev/component   2          2d14h
@@ -263,14 +263,9 @@ The real workload instance will be created with the same name as the RevisionNam
       - "bash lscpu"
 ```
 
-**NOTICE:** In this case, many workload instances of `frontend` will be created by OAM runtime, and will be running.
-It's the traits' responsibility to handle garbage collection. In our cases here, OAM runtime will leave all revision
-running, the `FancyTrait` should ensure only the latest along with the one whose name is `frontend-c8bb659c5` can be
-running, and delete the rest. 
+**NOTICE:** In this case, many workload instances of `frontend` are created by the OAM runtime, and can keep running. It's the traits' responsibility to handle the garbage collection of the workload instances it references. In our case here, OAM runtime will leave all revision running, the `FancyTrait` should ensure only the latest along with the other workload whose name is `frontend-v1` is running, and delete the rest. 
 
 ### Always Using the latest revision when using componentName field
-
-This mechanism usually used in development and test.
 
 When we use a Component with componentName in ApplicationConfiguration, OAM runtime will always use the latest
 component revision to update/create workload and all corresponding traits. 
@@ -503,11 +498,11 @@ spec:
 
 Then the rollout trait will take control of the blue-green deploy progress.
 
-1. It will find out all controllerRevisions belongs to the component by label `controller.oam.dev/component=frontend`.
-2. With the controllerRevisions, it will find out all existing workload instance.
-2. It will start to do rolling update, decrease the replica of old workloads and increase the new workload. 
+1. It will find out all the controllerRevisions that belong to the component with the label `controller.oam.dev/component=frontend`.
+2. With the controllerRevision, it will find out all existing workload instances.
+2. It will start to do a rolling update, decrease the replica of old workloads, and increase the new workload. 
 
-Finally, the old workload will be removed by rollout trait, getting into another stable state.
+Finally, the old workload will be removed by the rollout trait, getting into another stable state.
 
 
 ## Impact to the existing system
