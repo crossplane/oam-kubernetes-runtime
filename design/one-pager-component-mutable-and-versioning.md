@@ -3,6 +3,7 @@
 * Owner: Lei Zhang (@resouer), Jianbo Sun (@wonderflow)
 * Reviewers: Crossplane Maintainers
 * Status: Implemented
+* Updated at 2020-09-04 by @wonderflow
 
 ## Terminology
 
@@ -77,13 +78,15 @@ A `ControllerRevision` object will be created.
 ```shell script
 $ kubectl get controllerrevisions
 NAMESPACE     NAME                  CONTROLLER               REVISION   AGE
-default       frontend-c8bb659c5    core.oam.dev/component   1          2d15h
+default       frontend-v1    core.oam.dev/component   1          2d15h
 
 $ kubectl get controllerrevisions frontend-c8bb659c5 -o yaml
 apiVersion: apps/v1
 kind: ControllerRevision
 metadata:
-  name: frontend-c8bb659c5 # you could name this anything you wanted, but just appending the semver would be good practice
+  name: frontend-v1 # you could name this anything you wanted, but just appending the semver would be good practice
+  labels:
+    controller.oam.dev/component: frontend
 revision: 1
 data:
   workload:
@@ -96,6 +99,12 @@ data:
         cmd:
         - "bash lscpu"
 ```
+
+Then `ControllerRevision` will have three parts of information that could be used:
+
+1. labels: a label `controller.oam.dev/component` with the `componentName` as its value is added automatically.
+2. revision number: the revision number increases monotonically with each new revision created.
+3. data: the data field contains the snapshot information of the component.
 
 And it will be recorded in the status of `component.yaml`.
 
@@ -115,7 +124,7 @@ spec:
         cmd:
         - "bash lscpu"
 status:
-  latestRevision: frontend-c8bb659c5
+  latestRevision: frontend-v1
 ```
 
 
@@ -130,16 +139,18 @@ If you make a change to `component.yaml`:
 A new `ControllerRevision` will be automatically generated:
 
 ```shell script
-$ kubectl get ControllerRevisions
+$ kubectl get controllerrevisions
 NAMESPACE     NAME                  CONTROLLER               REVISION   AGE
-default       frontend-c8bb659c5    core.oam.dev/component   1          2d15h
-default       frontend-a75588698    core.oam.dev/component   2          2d14h
+default       frontend-v1    core.oam.dev/component   1          2d15h
+default       frontend-v2    core.oam.dev/component   2          2d14h
 
 $ kubectl get ControllerRevisions frontend-a75588698 -o yaml
 apiVersion: apps/v1
 kind: ControllerRevision
 metadata:
-  name: frontend-a75588698 # you could name this anything you wanted, but just appending the semver would be good practice
+  name: frontend-v2
+  labels:
+    controller.oam.dev/component: frontend
 revision: 2
 spec:
   workload:
@@ -183,6 +194,8 @@ Workload instance's name emitted by OAM runtime will be decided by the `revision
    control existing workloads to do rolling update and garbage collection. 
 
 So the essential difference between true or false of `revisionEnabled` is whether we create or update workload.
+
+---
 
 For example, when we don't use any trait who has revisionEnabled as true, things will work like below:
 
@@ -229,8 +242,7 @@ spec:
             kind: FancyTrait
             spec:
               traffic:
-                - revisionName: frontend-c8bb659c5
-                # revision: 1  # optional here, which can replace revisionName for UX              
+                - revisionName: frontend-v1
                   percent: 80%
                 - revision: latest
                   percent: 20%                 
@@ -242,7 +254,7 @@ The real workload instance will be created with the same name as the RevisionNam
   apiVersion: core.oam.dev/v1alpha2
   kind: ContainerizedWorkload
   metadata:
-    name: frontend-c8bb659c5
+    name: frontend-v1
   spec:
     containers:
     - name: my-cool-workload
@@ -251,8 +263,7 @@ The real workload instance will be created with the same name as the RevisionNam
       - "bash lscpu"
 ```
 
-**NOTICE:** In this case, many workload instances of `frontend` will be created by OAM runtime.
-The `FancyTrait` should ensure only the latest workload and the one whose name is `frontend-c8bb659c5` can be running. 
+**NOTICE:** In this case, many workload instances of `frontend` are created by the OAM runtime, and can keep running. It's the traits' responsibility to handle the garbage collection of the workload instances it references. In our case here, OAM runtime will leave all revision running, the `FancyTrait` should ensure only the latest along with the other workload whose name is `frontend-v1` is running, and delete the rest. 
 
 ### Always Using the latest revision when using componentName field
 
@@ -298,10 +309,12 @@ an upgrade for the application.
 1. Because the component has a revisionEnabled trait binding with it, so we will aways create new workload instead of update. 
 2. Create a workload according to the new component revision. 
 3. Update all traits pointing their target workloadRef to the new workload.
-4. Rollout trait will do rolling update from `frontend-c8bb659c5`(revision: 1) to the new one, and finally delete the source workload.
+4. Rollout trait will do rolling update from `frontend-v1`(revision: 1) to the new one, and finally delete the source workload.
 
 
 ### Using revisionName field can specify a fixed component version
+
+This mechanism usually used in production.
 
 When a `ControllerRevision` is specified in ApplicationConfiguration like below:
 
@@ -312,7 +325,7 @@ metadata:
   name: example-appconfig
 spec:
   components:
-    - revisionName: frontend-c8bb659c5
+    - revisionName: frontend-v1
       traits:
         - trait:
             apiVersion: core.oam.dev/v1alpha2
@@ -344,16 +357,16 @@ metadata:
   name: example-appconfig
 spec:
   components:
-    - revisionName: frontend-a75588698
+    - revisionName: frontend-v2
       traits:
         - trait:
             apiVersion: core.oam.dev/v1alpha2
             kind: Traffic
             spec:
               route:
-                - revision: frontend-c8bb659c5 # old revision
+                - revision: frontend-v1 # old revision
                   percent: 60%
-                - revision: frontend-a75588698 # the new one
+                - revision: frontend-v2 # the new one
                   percent: 40%
 ```
 
@@ -400,7 +413,7 @@ Before changing the component, the App will be running in a stable state like be
 apiVersion: core.oam.dev/v1alpha2
 kind: ContainerizedWorkload
   metadata:
-    name: frontend-c8bb659c5
+    name: frontend-v1
 spec:
   containers:
     - name: my-cool-workload
@@ -417,16 +430,28 @@ spec:
   workloadRef:
     apiVersion: core.oam.dev/v1alpha2
     kind: ContainerizedWorkload
-    name: frontend-c8bb659c5
-status:
-  currentWorkloadRef:
-    apiVersion: core.oam.dev/v1alpha2
-    kind: ContainerizedWorkload
-    name: frontend-c8bb659c5
+    name: frontend-v1
 ```
 
-When `frontend` component changed, new workload will be created with rollout trait updated,
-and the old workload will still be there.
+Also, we will have ControllerRevisions running like below:
+
+```
+$ kubectl get controllerrevisions.apps
+NAMESPACE     NAME                  CONTROLLER               REVISION   AGE
+default       frontend-v1    core.oam.dev/component   1          2d15h
+```
+
+
+When we upgrade `frontend` component, new workload will be created with the new revision created.
+
+```
+$ kubectl get controllerrevisions.apps
+NAMESPACE     NAME                  CONTROLLER               REVISION   AGE
+default       frontend-v1    core.oam.dev/component   1          2d15h
+default       frontend-v2    core.oam.dev/component   2          15s
+```
+
+The old workload will still be there running as rollout trait has flag `revisionEnabled=true`.
 
 
 ```yaml
@@ -434,7 +459,7 @@ and the old workload will still be there.
 apiVersion: core.oam.dev/v1alpha2
 kind: ContainerizedWorkload
   metadata:
-    name: frontend-c8bb659c5
+    name: frontend-v1
 spec:
   containers:
     - name: my-cool-workload
@@ -446,14 +471,18 @@ spec:
 apiVersion: core.oam.dev/v1alpha2
 kind: ContainerizedWorkload
 metadata:
-  name: frontend-a75588698
+  name: frontend-v2
 spec:
   containers:
     - name: my-cool-workload
       image: example/very-cool-workload:new
       cmd:
         - "bash top"
----
+```
+
+The CR of rollout trait will be automatically updated by OAM runtime:
+
+```yaml
 # rollout spec was pointing to the new workload, but status is still refer to the old.
 apiVersion: extend.oam.dev/v1
 kind: Rollout
@@ -465,17 +494,15 @@ spec:
     apiVersion: core.oam.dev/v1alpha2
     kind: ContainerizedWorkload
     name: frontend-a75588698
-status:
-  currentWorkloadRef:
-    apiVersion: core.oam.dev/v1alpha2
-    kind: ContainerizedWorkload
-    name: frontend-c8bb659c5
 ```
 
 Then the rollout trait will take control of the blue-green deploy progress.
 
-Finally the old workload will be removed by rollout trait and the status of rollout trait will align with the spec.
-Getting into another stable state.
+1. It will find out all the controllerRevisions that belong to the component with the label `controller.oam.dev/component=frontend`.
+2. With the controllerRevision, it will find out all existing workload instances.
+2. It will start to do a rolling update, decrease the replica of old workloads, and increase the new workload. 
+
+Finally, the old workload will be removed by the rollout trait, getting into another stable state.
 
 
 ## Impact to the existing system
