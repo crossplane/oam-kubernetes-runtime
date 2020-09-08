@@ -28,23 +28,23 @@ import (
 )
 
 var (
-	//KindDeployment is the k8s Deployment kind.
+	// KindDeployment is the k8s Deployment kind.
 	KindDeployment = reflect.TypeOf(appsv1.Deployment{}).Name()
-	//KindService is the k8s Service kind.
+	// KindService is the k8s Service kind.
 	KindService = reflect.TypeOf(corev1.Service{}).Name()
 	// ReconcileWaitResult is the time to wait between reconciliation.
 	ReconcileWaitResult = reconcile.Result{RequeueAfter: 30 * time.Second}
 )
 
 const (
-	//TraitPrefixKey is prefix of trait name
+	// TraitPrefixKey is prefix of trait name
 	TraitPrefixKey = "trait"
 )
 
 const (
-	//ErrUpdateStatus is the error while applying status.
+	// ErrUpdateStatus is the error while applying status.
 	ErrUpdateStatus = "cannot apply status"
-	//ErrLocateAppConfig is the error while locating parent application.
+	// ErrLocateAppConfig is the error while locating parent application.
 	ErrLocateAppConfig = "cannot locate the parent application configuration to emit event to"
 	// ErrLocateWorkload is the error while locate the workload
 	ErrLocateWorkload = "cannot find the workload that the trait is referencing to"

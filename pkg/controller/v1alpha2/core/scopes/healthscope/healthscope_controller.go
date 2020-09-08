@@ -170,7 +170,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	// sava diagnosis into status.conditions
-	//TODO(roywang) is there a better way to show diagnosis
+	// TODO(roywang) is there a better way to show diagnosis
 	hs.SetConditions(v1alpha1.ReconcileSuccess().
 		WithMessage(string(diagnosis)))
 
@@ -186,7 +186,7 @@ func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1al
 			Name:       healthScope.Name,
 			UID:        healthScope.UID,
 		},
-		IsHealthy:     true, //if no workload referenced, scope is healthy by default
+		IsHealthy:     true, // if no workload referenced, scope is healthy by default
 		SubConditions: []*HealthCondition{},
 	}
 	timeout := defaultTimeout

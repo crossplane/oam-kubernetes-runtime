@@ -157,7 +157,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileSuccess())
 }
 
-//SetupWithManager setups up k8s controller.
+// SetupWithManager setups up k8s controller.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	src := &v1alpha2.ContainerizedWorkload{}
 	name := "oam/" + strings.ToLower(v1alpha2.ContainerizedWorkloadKind)
