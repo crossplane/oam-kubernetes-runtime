@@ -17,16 +17,10 @@ limitations under the License.
 package v1alpha2
 
 import (
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-)
-
-const (
-	// ReasonDependencyDone indicates that all dependencies are satisfied
-	ReasonDependencyDone = "All dependencies satisfied"
 )
 
 // A DefinitionReference refers to a CustomResourceDefinition by name.
@@ -54,6 +48,11 @@ type WorkloadDefinitionSpec struct {
 
 	// ChildResourceKinds are the list of GVK of the child resources this workload generates
 	ChildResourceKinds []ChildResourceKind `json:"childResourceKinds,omitempty"`
+
+	// Extension is used for extension needs by OAM platform builders
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Extension *runtime.RawExtension `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -99,6 +98,11 @@ type TraitDefinitionSpec struct {
 	// all workload kinds.
 	// +optional
 	AppliesToWorkloads []string `json:"appliesToWorkloads,omitempty"`
+
+	// Extension is used for extension needs by OAM platform builders
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Extension *runtime.RawExtension `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -130,9 +134,17 @@ type ScopeDefinitionSpec struct {
 	// Reference to the CustomResourceDefinition that defines this scope kind.
 	Reference DefinitionReference `json:"definitionRef"`
 
+	// WorkloadRefsPath indicates if/where a scope accepts workloadRef objects
+	WorkloadRefsPath string `json:"workloadRefsPath,omitempty"`
+
 	// AllowComponentOverlap specifies whether an OAM component may exist in
 	// multiple instances of this kind of scope.
 	AllowComponentOverlap bool `json:"allowComponentOverlap"`
+
+	// Extension is used for extension needs by OAM platform builders
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Extension *runtime.RawExtension `json:"extension,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -226,6 +238,7 @@ type Revision struct {
 // +kubebuilder:resource:categories={crossplane,oam}
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.workload.kind",name=WORKLOAD-KIND,type=string
+// +kubebuilder:printcolumn:name="age",type="date",JSONPath=".metadata.creationTimestamp"
 type Component struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -322,20 +335,38 @@ type ApplicationConfigurationSpec struct {
 // A TraitStatus represents the state of a trait.
 type TraitStatus string
 
-// A WorkloadTrait represents a trait associated with a workload.
+// A WorkloadTrait represents a trait associated with a workload and its status
 type WorkloadTrait struct {
+	// Status is a place holder for a customized controller to fill
+	// if it needs a single place to summarize the status of the trait
+	Status TraitStatus `json:"status,omitempty"`
+
 	// Reference to a trait created by an ApplicationConfiguration.
 	Reference runtimev1alpha1.TypedReference `json:"traitRef"`
 }
 
-// A WorkloadScope represents a trait associated with a workload.
+// A ScopeStatus represents the state of a scope.
+type ScopeStatus string
+
+// A WorkloadScope represents a scope associated with a workload and its status
 type WorkloadScope struct {
+	// Status is a place holder for a customized controller to fill
+	// if it needs a single place to summarize the status of the scope
+	Status ScopeStatus `json:"status,omitempty"`
+
 	// Reference to a scope created by an ApplicationConfiguration.
 	Reference runtimev1alpha1.TypedReference `json:"scopeRef"`
 }
 
 // A WorkloadStatus represents the status of a workload.
 type WorkloadStatus struct {
+	// Status is a place holder for a customized controller to fill
+	// if it needs a single place to summarize the entire status of the workload
+	Status string `json:"status,omitempty"`
+
+	// HistoryWorkingRevision is a flag showing if it's history revision but still working
+	HistoryWorkingRevision bool `json:"currentWorkingRevision,omitempty"`
+
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
 
@@ -352,13 +383,47 @@ type WorkloadStatus struct {
 	Scopes []WorkloadScope `json:"scopes,omitempty"`
 }
 
+// A ApplicationStatus represents the state of the entire application.
+type ApplicationStatus string
+
 // An ApplicationConfigurationStatus represents the observed state of a
 // ApplicationConfiguration.
 type ApplicationConfigurationStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
+	// Status is a place holder for a customized controller to fill
+	// if it needs a single place to summarize the status of the entire application
+	Status ApplicationStatus `json:"status,omitempty"`
+
+	Dependency DependencyStatus `json:"dependency"`
+
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`
+}
+
+// DependencyStatus represents the observed state of the dependency of
+// an ApplicationConfiguration.
+type DependencyStatus struct {
+	Unsatisfied []UnstaifiedDependency `json:"unsatisfied,omitempty"`
+}
+
+// UnstaifiedDependency describes unsatisfied dependency flow between
+// one pair of objects.
+type UnstaifiedDependency struct {
+	From DependencyFromObject `json:"from"`
+	To   DependencyToObject   `json:"to"`
+}
+
+// DependencyFromObject represents the object that dependency data comes from.
+type DependencyFromObject struct {
+	runtimev1alpha1.TypedReference `json:",inline"`
+	FieldPath                      string `json:"fieldPath,omitempty"`
+}
+
+// DependencyToObject represents the object that dependency data goes to.
+type DependencyToObject struct {
+	runtimev1alpha1.TypedReference `json:",inline"`
+	FieldPaths                     []string `json:"fieldPaths,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -399,6 +464,7 @@ type DataOutput struct {
 }
 
 // DataInput specifies a data input sink to an object.
+// If input is array, it will be appended to the target field paths.
 type DataInput struct {
 	// ValueFrom specifies the value source.
 	ValueFrom DataInputValueFrom `json:"valueFrom,omitempty"`

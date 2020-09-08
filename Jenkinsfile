@@ -97,6 +97,25 @@ pipeline {
                 }
             }
         }
+
+        stage('Publish') {
+            when {
+                expression {
+                    return env.shouldBuild != "false"
+                }
+            }
+            steps {
+                sh 'docker login -u="${DOCKER_USR}" -p="${DOCKER_PSW}"'
+                sh "./build/run make -j\$(nproc) publish BRANCH_NAME=${BRANCH_NAME} AWS_ACCESS_KEY_ID=${AWS_USR} AWS_SECRET_ACCESS_KEY=${AWS_PSW} GIT_API_TOKEN=${GITHUB_UPBOUND_BOT}"
+                script {
+                    if (BRANCH_NAME == 'master') {
+                        lock('promote-job') {
+                            sh "./build/run make -j\$(nproc) promote BRANCH_NAME=master CHANNEL=master AWS_ACCESS_KEY_ID=${AWS_USR} AWS_SECRET_ACCESS_KEY=${AWS_PSW}"
+                        }
+                    }
+                }
+            }
+        }
     }
 
     post {

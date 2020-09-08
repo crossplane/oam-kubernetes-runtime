@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"reflect"
 	"strings"
 	"time"
 
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/davecgh/go-spew/spew"
 	plur "github.com/gertd/go-pluralize"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -16,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -33,10 +37,24 @@ var (
 )
 
 const (
-	//ErrUpdateStatus is the eror while applying status.
+	//TraitPrefixKey is prefix of trait name
+	TraitPrefixKey = "trait"
+)
+
+const (
+	//ErrUpdateStatus is the error while applying status.
 	ErrUpdateStatus = "cannot apply status"
 	//ErrLocateAppConfig is the error while locating parent application.
 	ErrLocateAppConfig = "cannot locate the parent application configuration to emit event to"
+	// ErrLocateWorkload is the error while locate the workload
+	ErrLocateWorkload = "cannot find the workload that the trait is referencing to"
+	// ErrFetchChildResources is the error while fetching workload child resources
+	ErrFetchChildResources = "failed to fetch workload child resources"
+
+	errFmtGetComponentRevision   = "cannot get component revision %q"
+	errFmtControllerRevisionData = "cannot get valid component data from controllerRevision %q"
+	errFmtGetComponent           = "cannot get component %q"
+	errFmtInvalidRevisionType    = "invalid type of revision %s, type should not be %v"
 )
 
 // A ConditionedObject is an Object type with condition field
@@ -52,8 +70,9 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 	var eventObj = &v1alpha2.ApplicationConfiguration{}
 	// locate the appConf name from the owner list
 	for _, o := range oamObject.GetOwnerReferences() {
-		if o.Kind == reflect.TypeOf(v1alpha2.ApplicationConfiguration{}).Name() {
+		if o.Kind == v1alpha2.ApplicationConfigurationKind {
 			acName = o.Name
+			break
 		}
 	}
 	if len(acName) > 0 {
@@ -67,6 +86,44 @@ func LocateParentAppConfig(ctx context.Context, client client.Client, oamObject 
 		return eventObj, nil
 	}
 	return nil, errors.Errorf(ErrLocateAppConfig)
+}
+
+// FetchWorkload fetch the workload that a trait refers to
+func FetchWorkload(ctx context.Context, c client.Client, mLog logr.Logger, oamTrait oam.Trait) (
+	*unstructured.Unstructured, error) {
+	var workload unstructured.Unstructured
+	workloadRef := oamTrait.GetWorkloadReference()
+	if len(workloadRef.Kind) == 0 || len(workloadRef.APIVersion) == 0 || len(workloadRef.Name) == 0 {
+		err := errors.New("no workload reference")
+		mLog.Error(err, ErrLocateWorkload)
+		return nil, err
+	}
+	workload.SetAPIVersion(workloadRef.APIVersion)
+	workload.SetKind(workloadRef.Kind)
+	wn := client.ObjectKey{Name: workloadRef.Name, Namespace: oamTrait.GetNamespace()}
+	if err := c.Get(ctx, wn, &workload); err != nil {
+		mLog.Error(err, "Workload not find", "kind", workloadRef.Kind, "workload name", workloadRef.Name)
+		return nil, err
+	}
+	mLog.Info("Get the workload the trait is pointing to", "workload name", workload.GetName(),
+		"workload APIVersion", workload.GetAPIVersion(), "workload Kind", workload.GetKind(), "workload UID",
+		workload.GetUID())
+	return &workload, nil
+}
+
+// FetchScopeDefinition fetch corresponding scopeDefinition given a scope
+func FetchScopeDefinition(ctx context.Context, r client.Reader,
+	scope *unstructured.Unstructured) (*v1alpha2.ScopeDefinition, error) {
+	// The name of the scopeDefinition CR is the CRD name of the scope
+	spName := GetCRDName(scope)
+	// the scopeDefinition crd is cluster scoped
+	nn := types.NamespacedName{Name: spName}
+	// Fetch the corresponding scopeDefinition CR
+	scopeDefinition := &v1alpha2.ScopeDefinition{}
+	if err := r.Get(ctx, nn, scopeDefinition); err != nil {
+		return nil, err
+	}
+	return scopeDefinition, nil
 }
 
 // FetchTraitDefinition fetch corresponding traitDefinition given a trait
@@ -122,7 +179,8 @@ func fetchChildResources(ctx context.Context, mLog logr.Logger, r client.Reader,
 			workload.GetUID())
 		if err := r.List(ctx, &crs, client.InNamespace(workload.GetNamespace()),
 			client.MatchingLabels(wcr.Selector)); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("failed to list object %s.%s", crs.GetAPIVersion(), crs.GetKind()))
+			mLog.Error(err, "failed to list object", "api version", crs.GetAPIVersion(), "kind", crs.GetKind())
+			return nil, err
 		}
 		// pick the ones that is owned by the workload
 		for _, cr := range crs.Items {
@@ -148,6 +206,22 @@ func PatchCondition(ctx context.Context, r client.StatusClient, workload Conditi
 	return errors.Wrap(
 		r.Status().Patch(ctx, workload, workloadPatch, client.FieldOwner(workload.GetUID())),
 		ErrUpdateStatus)
+}
+
+// A metaObject is a Kubernetes object that has label and annotation
+type labelAnnotationObject interface {
+	GetLabels() map[string]string
+	SetLabels(labels map[string]string)
+	GetAnnotations() map[string]string
+	SetAnnotations(annotations map[string]string)
+}
+
+// PassLabelAndAnnotation passes through labels and annotation objectMeta from the parent to the child object
+func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject) {
+	// pass app-config labels
+	childObj.SetLabels(mergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+	// pass app-config annotation
+	childObj.SetAnnotations(mergeMap(parentObj.GetAnnotations(), childObj.GetAnnotations()))
 }
 
 // GetCRDName return the CRD name of any resources
@@ -196,4 +270,95 @@ func Object2Map(obj interface{}) (map[string]interface{}, error) {
 	}
 	err = json.Unmarshal(bts, &res)
 	return res, err
+}
+
+// GenTraitName generate trait name
+func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait) string {
+	return fmt.Sprintf("%s-%s-%s", componentName, TraitPrefixKey, ComputeHash(ct))
+}
+
+// ComputeHash returns a hash value calculated from pod template and
+// a collisionCount to avoid hash collision. The hash will be safe encoded to
+// avoid bad words.
+func ComputeHash(trait *v1alpha2.ComponentTrait) string {
+	componentTraitHasher := fnv.New32a()
+	DeepHashObject(componentTraitHasher, *trait)
+
+	return rand.SafeEncodeString(fmt.Sprint(componentTraitHasher.Sum32()))
+}
+
+// DeepHashObject writes specified object to hash using the spew library
+// which follows pointers and prints actual values of the nested objects
+// ensuring the hash does not change when a pointer changes.
+func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
+	hasher.Reset()
+	printer := spew.ConfigState{
+		Indent:         " ",
+		SortKeys:       true,
+		DisableMethods: true,
+		SpewKeys:       true,
+	}
+	_, _ = printer.Fprintf(hasher, "%#v", objectToWrite)
+}
+
+// GetComponent will get Component and RevisionName by AppConfigComponent
+func GetComponent(ctx context.Context, client client.Reader, acc v1alpha2.ApplicationConfigurationComponent, namespace string) (*v1alpha2.Component, string, error) {
+	c := &v1alpha2.Component{}
+	var revisionName string
+	if acc.RevisionName != "" {
+		revision := &appsv1.ControllerRevision{}
+		if err := client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: acc.RevisionName}, revision); err != nil {
+			return nil, "", errors.Wrapf(err, errFmtGetComponentRevision, acc.RevisionName)
+		}
+		c, err := UnpackRevisionData(revision)
+		if err != nil {
+			return nil, "", errors.Wrapf(err, errFmtControllerRevisionData, acc.RevisionName)
+		}
+		revisionName = acc.RevisionName
+		return c, revisionName, nil
+	}
+	nn := types.NamespacedName{Namespace: namespace, Name: acc.ComponentName}
+	if err := client.Get(ctx, nn, c); err != nil {
+		return nil, "", errors.Wrapf(err, errFmtGetComponent, acc.ComponentName)
+	}
+	if c.Status.LatestRevision != nil {
+		revisionName = c.Status.LatestRevision.Name
+	}
+	return c, revisionName, nil
+}
+
+// UnpackRevisionData will unpack revision.Data to Component
+func UnpackRevisionData(rev *appsv1.ControllerRevision) (*v1alpha2.Component, error) {
+	var err error
+	if rev.Data.Object != nil {
+		comp, ok := rev.Data.Object.(*v1alpha2.Component)
+		if !ok {
+			return nil, fmt.Errorf(errFmtInvalidRevisionType, rev.Name, reflect.TypeOf(rev.Data.Object))
+		}
+		return comp, nil
+	}
+	var comp v1alpha2.Component
+	err = json.Unmarshal(rev.Data.Raw, &comp)
+	return &comp, err
+}
+
+// AddLabels will merge labels with existing labels
+func AddLabels(o *unstructured.Unstructured, labels map[string]string) {
+	o.SetLabels(mergeMap(o.GetLabels(), labels))
+}
+
+func mergeMap(src, dst map[string]string) map[string]string {
+	if len(src) == 0 {
+		return dst
+	}
+	// make sure dst is initialized
+	if dst == nil {
+		dst = map[string]string{}
+	}
+	for k, v := range src {
+		if _, exist := dst[k]; !exist {
+			dst[k] = v
+		}
+	}
+	return dst
 }

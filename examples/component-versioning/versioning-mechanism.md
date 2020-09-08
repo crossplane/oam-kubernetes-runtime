@@ -2,10 +2,9 @@
 
 ## Prerequisite
 
-1. Make sure [`addon-oam-kubernetes-local`](https://github.com/crossplane/addon-oam-kubernetes-local) was installed.
-2. Before component versioning mechanism released in Crossplane, you can run `go run examples/containerized-workload/main.go`
-   instead of using crossplane. After this feature was released in crossplane, install crossplane will work.
-3. Make sure [`Simple Rollout`](https://github.com/oam-dev/catalog/tree/master/traits/simplerollouttrait) was installed for this demo.
+1. Make sure [`Simple Rollout`](https://github.com/oam-dev/catalog/tree/master/traits/simplerollouttrait) was installed for this demo.
+2. Make sure [`OAM runtime`](../../README.md#Install-OAM-Kubernetes-Runtime) was installed and started.
+
 
 ## Containing Trait with revisionEnabled and ApplicationConfiguration always using the latest component
 
@@ -26,6 +25,10 @@ metadata:
   name: simplerollouttraits.extend.oam.dev
 spec:
   revisionEnabled: true
+  workloadRefPath: spec.workloadRef
+  appliesToWorkloads:
+    - core.oam.dev/v1alpha2.ContainerizedWorkload
+    - deployments.apps
   definitionRef:
     name: simplerollouttraits.extend.oam.dev
 ``` 
@@ -83,7 +86,7 @@ And the trait works on stable at:
 ```shell script
 $ kubectl get simplerollouttraits.extend.oam.dev
 NAME                AGE
-example-component   3m16s
+example-component-trait-bbc946f94   3m16s
 $ kubectl get simplerollouttraits.extend.oam.dev example-component -o yaml
 apiVersion: extend.oam.dev/v1alpha2
 kind: SimpleRolloutTrait
@@ -187,6 +190,12 @@ example-component-brngj9ript3e8125vhf0   3m
 
 In this workflow, every change of component will trigger a new workload instance created and the old one won't
 be deleted. The `revisionEnabled` trait must be responsible for the garbage collection.
+
+## Clean up Policy
+
+You can use flag `-revision-limit` in `oam-kubernetes-runtime` to specify how many old controllerrevisions you want to retain.
+By default, it is 50. Cleanup will be triggered after the component is created or updated, it will skip controllerrevision that is
+still in use, the rest will be garbage-collected.
 
 ## Containing Trait with revisionEnabled and ApplicationConfiguration specify revision manually
 

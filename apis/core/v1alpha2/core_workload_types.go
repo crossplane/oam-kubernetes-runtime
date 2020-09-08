@@ -17,11 +17,12 @@ limitations under the License.
 package v1alpha2
 
 import (
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
 // An OperatingSystem required by a containerised workload.
@@ -109,8 +110,8 @@ type VolumeResource struct {
 	// Name of this volume. Must be unique within its container.
 	Name string `json:"name"`
 
-	// MouthPath at which this volume will be mounted within its container.
-	MouthPath string `json:"mountPath"`
+	// MountPath at which this volume will be mounted within its container.
+	MountPath string `json:"mountPath"`
 
 	// TODO(negz): Use +kubebuilder:default marker to default AccessMode to RW
 	// and SharingPolicy to Exclusive once we're generating v1 CRDs.
@@ -380,6 +381,8 @@ type ContainerizedWorkloadStatus struct {
 	// Resources managed by this containerised workload.
 	Resources []runtimev1alpha1.TypedReference `json:"resources,omitempty"`
 }
+
+var _ oam.Workload = &ContainerizedWorkload{}
 
 // +kubebuilder:object:root=true
 

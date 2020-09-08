@@ -2,67 +2,111 @@ package applicationconfiguration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-
 	"github.com/stretchr/testify/assert"
-
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/apps/v1"
 	v12 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllertest"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 )
 
 func TestComponentHandler(t *testing.T) {
 	q := controllertest.Queue{Interface: workqueue.New()}
-	fakeAppClient := fake.NewSimpleClientset().AppsV1()
 	var curComp = &v1alpha2.Component{}
+	var createdRevisions = []appsv1.ControllerRevision{}
 	var instance = ComponentHandler{
-		client: &test.MockClient{
+		Client: &test.MockClient{
 			MockList: test.NewMockListFn(nil, func(obj runtime.Object) error {
-				lists := v1alpha2.ApplicationConfigurationList{
-					Items: []v1alpha2.ApplicationConfiguration{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "app1",
-							},
-							Spec: v1alpha2.ApplicationConfigurationSpec{
-								Components: []v1alpha2.ApplicationConfigurationComponent{{
-									ComponentName: "comp1",
-								}},
+				switch robj := obj.(type) {
+				case *v1alpha2.ApplicationConfigurationList:
+					lists := v1alpha2.ApplicationConfigurationList{
+						Items: []v1alpha2.ApplicationConfiguration{
+							{
+								ObjectMeta: metav1.ObjectMeta{
+									Name: "app1",
+								},
+								Spec: v1alpha2.ApplicationConfigurationSpec{
+									Components: []v1alpha2.ApplicationConfigurationComponent{{
+										ComponentName: "comp1",
+									}},
+								},
 							},
 						},
-					},
+					}
+					lists.DeepCopyInto(robj)
+					return nil
+				case *appsv1.ControllerRevisionList:
+					lists := appsv1.ControllerRevisionList{
+						Items: createdRevisions,
+					}
+					lists.DeepCopyInto(robj)
 				}
-				lBytes, _ := json.Marshal(lists)
-				json.Unmarshal(lBytes, obj)
 				return nil
 			}),
 			MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
-				cur, ok := obj.(*v1alpha2.Component)
+				switch robj := obj.(type) {
+				case *v1alpha2.Component:
+					robj.DeepCopyInto(curComp)
+				case *appsv1.ControllerRevision:
+					for _, revision := range createdRevisions {
+						if revision.Name == robj.Name {
+							robj.DeepCopyInto(&revision)
+						}
+					}
+				}
+				return nil
+			}),
+			MockCreate: test.NewMockCreateFn(nil, func(obj runtime.Object) error {
+				cur, ok := obj.(*appsv1.ControllerRevision)
 				if ok {
-					cur.DeepCopyInto(curComp)
+					createdRevisions = append(createdRevisions, *cur)
+				}
+				return nil
+			}),
+			MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+				switch robj := obj.(type) {
+				case *appsv1.ControllerRevision:
+					if len(createdRevisions) == 0 {
+						return nil
+					}
+					// test frame can't get the key, and just return the newest revision
+					createdRevisions[len(createdRevisions)-1].DeepCopyInto(robj)
+				case *v1alpha2.Component:
+					robj.DeepCopyInto(curComp)
+				}
+				return nil
+			}),
+			MockDelete: test.NewMockDeleteFn(nil, func(obj runtime.Object) error {
+				if robj, ok := obj.(*appsv1.ControllerRevision); ok {
+					newRevisions := []appsv1.ControllerRevision{}
+					for _, revision := range createdRevisions {
+						if revision.Name == robj.Name {
+							continue
+						}
+
+						newRevisions = append(newRevisions, revision)
+					}
+					createdRevisions = newRevisions
 				}
 				return nil
 			}),
 		},
-		appsClient: fakeAppClient,
-		l:          logging.NewLogrLogger(ctrl.Log.WithName("test")),
+		Logger:        logging.NewLogrLogger(ctrl.Log.WithName("test")),
+		RevisionLimit: 2,
 	}
 	comp := &v1alpha2.Component{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "biz", Name: "comp1"},
@@ -82,7 +126,8 @@ func TestComponentHandler(t *testing.T) {
 	req := item.(reconcile.Request)
 	// AppConfig event triggered, and compare revision created
 	assert.Equal(t, req.Name, "app1")
-	revisions, err := fakeAppClient.ControllerRevisions("biz").List(context.Background(), metav1.ListOptions{})
+	revisions := &appsv1.ControllerRevisionList{}
+	err := instance.Client.List(context.TODO(), revisions)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(revisions.Items))
 	assert.Equal(t, true, strings.HasPrefix(revisions.Items[0].Name, "comp1-"))
@@ -116,7 +161,8 @@ func TestComponentHandler(t *testing.T) {
 	req = item.(reconcile.Request)
 	// AppConfig event triggered, and compare revision created
 	assert.Equal(t, req.Name, "app1")
-	revisions, err = fakeAppClient.ControllerRevisions("biz").List(context.Background(), metav1.ListOptions{})
+	revisions = &appsv1.ControllerRevisionList{}
+	err = instance.Client.List(context.TODO(), revisions)
 	assert.NoError(t, err)
 	// Component changed, we have two revision now.
 	assert.Equal(t, 2, len(revisions.Items))
@@ -149,20 +195,41 @@ func TestComponentHandler(t *testing.T) {
 		t.Fatal("should not trigger event with nothing changed no change")
 	}
 	// ============ Test Update Event End ===================
+
+	// ============ Test Revisions Start ===================
+	// test clean revision
+	comp4 := &v1alpha2.Component{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "biz", Name: "comp1", Labels: map[string]string{"bar": "foo"}},
+		Spec:       v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &v1.Deployment{Spec: v1.DeploymentSpec{Template: v12.PodTemplateSpec{Spec: v12.PodSpec{Containers: []v12.Container{{Image: "nginx:v3"}}}}}}}},
+	}
+	curComp.Status.DeepCopyInto(&comp4.Status)
+	updateEvt = event.UpdateEvent{
+		ObjectOld: comp2,
+		MetaOld:   comp2.GetObjectMeta(),
+		ObjectNew: comp4,
+		MetaNew:   comp4.GetObjectMeta(),
+	}
+	instance.Update(updateEvt, q)
+	revisions = &appsv1.ControllerRevisionList{}
+	err = instance.Client.List(context.TODO(), revisions)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(revisions.Items), "Expected has two revisions")
+	assert.Equal(t, "comp1", revisions.Items[0].Labels[ControllerRevisionComponentLabel],
+		fmt.Sprintf("Expected revision has label %s: comp1", ControllerRevisionComponentLabel))
+	// ============ Test Revisions End ===================
 }
 
 func TestConstructExtract(t *testing.T) {
 	tests := []string{"tam1", "test-comp", "xx", "tt-x-x-c"}
-	for _, componentName := range tests {
-		for i := 0; i < 30; i++ {
-			t.Run(fmt.Sprintf("tests %d for component[%s]", i, componentName), func(t *testing.T) {
-				revisionName := ConstructRevisionName(componentName)
-				got := ExtractComponentName(revisionName)
-				if got != componentName {
-					t.Errorf("want to get %s from %s but got %s", componentName, revisionName, got)
-				}
-			})
-		}
+	revisionNum := []int64{1, 5, 10, 100000}
+	for idx, componentName := range tests {
+		t.Run(fmt.Sprintf("tests %d for component[%s]", idx, componentName), func(t *testing.T) {
+			revisionName := ConstructRevisionName(componentName, revisionNum[idx])
+			got := ExtractComponentName(revisionName)
+			if got != componentName {
+				t.Errorf("want to get %s from %s but got %s", componentName, revisionName, got)
+			}
+		})
 	}
 }
 
@@ -195,40 +262,47 @@ func TestIsMatch(t *testing.T) {
 	assert.Equal(t, false, got)
 }
 
-func TestUnpackRevisionData(t *testing.T) {
-	comp1 := v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}}
-	comp1Raw, _ := json.Marshal(comp1)
-	tests := map[string]struct {
-		rev     *appsv1.ControllerRevision
-		expComp *v1alpha2.Component
-		expErr  error
-		reason  string
-	}{
-		"controllerRevision with Component Obj": {
-			rev:     &appsv1.ControllerRevision{Data: runtime.RawExtension{Object: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}}}},
-			expComp: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}},
-			reason:  "controllerRevision should align with component object",
-		},
-		"controllerRevision with Unknown Obj": {
-			rev:    &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev1"}, Data: runtime.RawExtension{Object: &runtime.Unknown{Raw: comp1Raw}}},
-			reason: "controllerRevision must be decode into component object",
-			expErr: fmt.Errorf("invalid type of revision rev1, type should not be *runtime.Unknown"),
-		},
-		"unmarshal with component data": {
-			rev:     &appsv1.ControllerRevision{ObjectMeta: metav1.ObjectMeta{Name: "rev1"}, Data: runtime.RawExtension{Raw: comp1Raw}},
-			reason:  "controllerRevision should unmarshal data and align with component object",
-			expComp: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp1"}},
+func TestSortedControllerRevision(t *testing.T) {
+	appconfigs := []v1alpha2.ApplicationConfiguration{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "foo-app", Namespace: "test"},
+			Spec: v1alpha2.ApplicationConfigurationSpec{
+				Components: []v1alpha2.ApplicationConfigurationComponent{{ComponentName: "foo", RevisionName: "revision1"}},
+			},
 		},
 	}
-	for name, ti := range tests {
-		t.Run(name, func(t *testing.T) {
-			comp, err := UnpackRevisionData(ti.rev)
-			if ti.expErr != nil {
-				assert.Equal(t, ti.expErr, err, ti.reason)
-			} else {
-				assert.NoError(t, err, ti.reason)
-				assert.Equal(t, ti.expComp, comp, ti.reason)
-			}
-		})
+	emptyAppconfigs := []v1alpha2.ApplicationConfiguration{}
+	revision1 := appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "revision1", Namespace: "foo-namespace"},
+		Revision:   3,
 	}
+	revision2 := appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "revision2", Namespace: "foo-namespace"},
+		Revision:   1,
+	}
+	revision3 := appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{Name: "revision2", Namespace: "foo-namespace"},
+		Revision:   2,
+	}
+	revisions := []appsv1.ControllerRevision{
+		revision1,
+		revision2,
+		revision3,
+	}
+	expectedRevison := []appsv1.ControllerRevision{
+		revision2,
+		revision3,
+		revision1,
+	}
+
+	_, toKill, _ := sortedControllerRevision(appconfigs, revisions, 3)
+	assert.Equal(t, 0, toKill, "Not over limit, needn't to delete")
+
+	sortedRevisions, toKill, _ := sortedControllerRevision(emptyAppconfigs, revisions, 2)
+	assert.Equal(t, expectedRevison, sortedRevisions, "Export controllerRevision sorted ascending accord to revision")
+	assert.Equal(t, 1, toKill, "Over limit")
+
+	_, toKill, liveHashes := sortedControllerRevision(appconfigs, revisions, 2)
+	assert.Equal(t, 0, toKill, "Needn't to delete")
+	assert.Equal(t, 1, len(liveHashes), "LiveHashes worked")
 }

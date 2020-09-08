@@ -38,21 +38,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	oamv1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 // Reconcile error strings.
 const (
-	errLocateWorkload          = "cannot find workload"
-	errFetchChildResources     = "failed to fetch workload child resources"
 	errQueryOpenAPI            = "failed to query openAPI"
 	errPatchTobeScaledResource = "cannot patch the resource for scale"
 	errScaleResource           = "cannot scale the resource"
 )
 
 // Setup adds a controller that reconciles ContainerizedWorkload.
-func Setup(mgr ctrl.Manager, log logging.Logger) error {
+func Setup(mgr ctrl.Manager, args controller.Args, log logging.Logger) error {
 	reconciler := Reconciler{
 		Client:          mgr.GetClient(),
 		DiscoveryClient: *discovery.NewDiscoveryClientForConfigOrDie(mgr.GetConfig()),
@@ -95,30 +93,31 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	eventObj, err := util.LocateParentAppConfig(ctx, r.Client, &manualScalar)
 	if eventObj == nil {
 		// fallback to workload itself
-		mLog.Error(err, "manualScalar", manualScalar.Name)
+		mLog.Error(err, "Failed to find the parent resource", "manualScalar", manualScalar.Name)
 		eventObj = &manualScalar
 	}
 	// Fetch the workload instance this trait is referring to
-	workload, result, err := r.fetchWorkload(ctx, mLog, &manualScalar)
+	workload, err := util.FetchWorkload(ctx, r, mLog, &manualScalar)
 	if err != nil {
-		r.record.Event(eventObj, event.Warning(errLocateWorkload, err))
-		return result, err
+		r.record.Event(eventObj, event.Warning(util.ErrLocateWorkload, err))
+		return util.ReconcileWaitResult, util.PatchCondition(
+			ctx, r, &manualScalar, cpv1alpha1.ReconcileError(errors.Wrap(err, util.ErrLocateWorkload)))
 	}
 
 	// Fetch the child resources list from the corresponding workload
 	resources, err := util.FetchWorkloadChildResources(ctx, mLog, r, workload)
 	if err != nil {
 		mLog.Error(err, "Error while fetching the workload child resources", "workload", workload.UnstructuredContent())
-		r.record.Event(eventObj, event.Warning(errFetchChildResources, err))
+		r.record.Event(eventObj, event.Warning(util.ErrFetchChildResources, err))
 		return util.ReconcileWaitResult, util.PatchCondition(ctx, r, &manualScalar,
-			cpv1alpha1.ReconcileError(fmt.Errorf(errFetchChildResources)))
+			cpv1alpha1.ReconcileError(fmt.Errorf(util.ErrFetchChildResources)))
 	}
 	// include the workload itself if there is no child resources
 	if len(resources) == 0 {
 		resources = append(resources, workload)
 	}
 	// Scale the child resources that we know how to scale
-	result, err = r.scaleResources(ctx, mLog, manualScalar, resources)
+	result, err := r.scaleResources(ctx, mLog, manualScalar, resources)
 	if err != nil {
 		r.record.Event(eventObj, event.Warning(errScaleResource, err))
 		return result, err
@@ -127,31 +126,6 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		fmt.Sprintf("Trait `%s` successfully scaled a resource to %d instances",
 			manualScalar.Name, manualScalar.Spec.ReplicaCount)))
 	return ctrl.Result{}, util.PatchCondition(ctx, r, &manualScalar, cpv1alpha1.ReconcileSuccess())
-}
-
-// TODO (rz): this is actually pretty generic, we can move this out into a common Trait structure with client and log
-func (r *Reconciler) fetchWorkload(ctx context.Context, mLog logr.Logger, oamTrait oam.Trait) (
-	*unstructured.Unstructured, ctrl.Result, error) {
-	var workload unstructured.Unstructured
-	workloadRef := oamTrait.GetWorkloadReference()
-	if len(workloadRef.Kind) == 0 || len(workloadRef.APIVersion) == 0 || len(workloadRef.Name) == 0 {
-		err := errors.New("no workload reference")
-		mLog.Error(err, errLocateWorkload)
-		return nil, util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, oamTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errLocateWorkload)))
-	}
-	workload.SetAPIVersion(workloadRef.APIVersion)
-	workload.SetKind(workloadRef.Kind)
-	wn := client.ObjectKey{Name: workloadRef.Name, Namespace: oamTrait.GetNamespace()}
-	if err := r.Get(ctx, wn, &workload); err != nil {
-		mLog.Error(err, "Workload not find", "kind", workloadRef.Kind, "workload name", workloadRef.Name)
-		return nil, util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, oamTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errLocateWorkload)))
-	}
-	mLog.Info("Get the workload the trait is pointing to", "workload name", workload.GetName(),
-		"workload APIVersion", workload.GetAPIVersion(), "workload Kind", workload.GetKind(), "workload UID",
-		workload.GetUID())
-	return &workload, ctrl.Result{}, nil
 }
 
 // identify child resources and scale them

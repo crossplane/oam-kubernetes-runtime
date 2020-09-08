@@ -28,6 +28,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 var (
@@ -76,6 +77,7 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 			},
 		},
 	}
+
 	if cw.Spec.OperatingSystem != nil {
 		if d.Spec.Template.Spec.NodeSelector == nil {
 			d.Spec.Template.Spec.NodeSelector = map[string]string{}
@@ -113,7 +115,7 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 			for _, v := range container.Resources.Volumes {
 				mount := corev1.VolumeMount{
 					Name:      v.Name,
-					MountPath: v.MouthPath,
+					MountPath: v.MountPath,
 				}
 				if v.AccessMode != nil && *v.AccessMode == v1alpha2.VolumeAccessModeRO {
 					mount.ReadOnly = true
@@ -253,6 +255,11 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, kubernetesContainer)
 	}
+
+	// pass through label and annotation from the workload to the deployment
+	util.PassLabelAndAnnotation(w, d)
+	// pass through label and annotation from the workload to the pod template too
+	util.PassLabelAndAnnotation(w, &d.Spec.Template)
 
 	return []oam.Object{d}, nil
 }

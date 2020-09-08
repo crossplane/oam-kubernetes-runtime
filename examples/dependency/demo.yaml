@@ -8,6 +8,15 @@ spec:
     kind: Foo
     metadata:
       name: source
+    # Uncomment the following and apply again will make dependency satisfied.
+    # status:
+    #   key: test
+    status:
+      key:
+        - name: a
+          value: aa
+        - name: b
+          value: bb
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component
@@ -19,6 +28,10 @@ spec:
     kind: Foo
     metadata:
       name: sink
+    spec:
+      key:
+        - name: exist
+          value: existtt
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: ApplicationConfiguration
@@ -28,11 +41,11 @@ spec:
   components:
     - componentName: source
       dataOutputs:
-      - name: example-key
-        fieldPath: "status.key"
+        - name: example-key
+          fieldPath: "status.key"
     - componentName: sink
       dataInputs:
-      - valueFrom:
-          dataOutputName: example-key
-        toFieldPaths:
-        - "spec.key"
+        - valueFrom:
+            dataOutputName: example-key
+          toFieldPaths:
+            - "spec.key"

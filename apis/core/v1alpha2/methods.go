@@ -20,13 +20,7 @@ package v1alpha2
 
 import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
-
-var _ oam.Scope = &HealthScope{}
-var _ oam.Trait = &ManualScalerTrait{}
-var _ oam.Workload = &ContainerizedWorkload{}
 
 // GetCondition of this ManualScalerTrait.
 func (tr *ManualScalerTrait) GetCondition(ct runtimev1alpha1.ConditionType) runtimev1alpha1.Condition {

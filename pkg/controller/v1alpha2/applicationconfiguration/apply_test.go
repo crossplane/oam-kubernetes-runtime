@@ -57,11 +57,28 @@ func TestApplyWorkloads(t *testing.T) {
 	trait.SetName("trait-example")
 	trait.SetUID(types.UID("trait-uid"))
 
-	scope := &unstructured.Unstructured{}
-	scope.SetAPIVersion("scope.oam.dev")
-	scope.SetKind("scopeKind")
-	scope.SetNamespace(namespace)
-	scope.SetName("scope-example")
+	scope, _ := util.Object2Unstructured(&v1alpha2.HealthScope{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scope-example",
+			Namespace: namespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "scope.oam.dev/v1alpha2",
+			Kind:       "scopeKind",
+		},
+		Spec: v1alpha2.HealthScopeSpec{
+			// set an empty ref to enable wrokloadRefs field
+			WorkloadReferences: []v1alpha1.TypedReference{
+				{
+					APIVersion: "",
+					Kind:       "",
+					Name:       "",
+					UID:        "",
+				},
+			},
+		},
+	})
+
 	// scope with Ref
 	scopeWithRef, _ := util.Object2Unstructured(&v1alpha2.HealthScope{
 		ObjectMeta: metav1.ObjectMeta{
@@ -69,7 +86,7 @@ func TestApplyWorkloads(t *testing.T) {
 			Namespace: namespace,
 		},
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "scope.oam.dev",
+			APIVersion: "scope.oam.dev/v1alpha2",
 			Kind:       "scopeKind",
 		},
 		Spec: v1alpha2.HealthScopeSpec{
@@ -82,6 +99,23 @@ func TestApplyWorkloads(t *testing.T) {
 			},
 		},
 	})
+
+	scopeDefinition := v1alpha2.ScopeDefinition{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ScopeDefinition",
+			APIVersion: "scopeDef.oam.dev",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scope-example.scope.oam.dev",
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.ScopeDefinitionSpec{
+			Reference: v1alpha2.DefinitionReference{
+				Name: "scope-example.scope.oam.dev",
+			},
+			WorkloadRefsPath: "spec.workloadRefs",
+		},
+	}
 
 	type args struct {
 		ctx context.Context
@@ -106,7 +140,7 @@ func TestApplyWorkloads(t *testing.T) {
 			}),
 			rawClient: nil,
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 			want: errors.Wrapf(errBoom, errFmtApplyWorkload, workload.GetName()),
 		},
@@ -120,7 +154,7 @@ func TestApplyWorkloads(t *testing.T) {
 			}),
 			rawClient: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 			want: errors.Wrapf(errBoom, errFmtApplyTrait, trait.GetAPIVersion(), trait.GetKind(), trait.GetName()),
 		},
@@ -131,7 +165,7 @@ func TestApplyWorkloads(t *testing.T) {
 				return nil
 			}),
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 			want: errors.Wrapf(errTrait, errFmtGetTraitDefinition, trait.GetAPIVersion(), trait.GetKind(), trait.GetName()),
 		},
@@ -171,7 +205,7 @@ func TestApplyWorkloads(t *testing.T) {
 				return nil
 			}),
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait.DeepCopy()}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait.DeepCopy()}}}},
 				ws: []v1alpha2.WorkloadStatus{}},
 		},
 		"Success": {
@@ -188,7 +222,7 @@ func TestApplyWorkloads(t *testing.T) {
 			}),
 			rawClient: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 			args: args{
-				w:  []Workload{{Workload: workload, Traits: []unstructured.Unstructured{*trait.DeepCopy()}}},
+				w:  []Workload{{Workload: workload, Traits: []*Trait{{Object: *trait}}}},
 				ws: []v1alpha2.WorkloadStatus{},
 			},
 		},
@@ -197,6 +231,10 @@ func TestApplyWorkloads(t *testing.T) {
 			client: resource.ApplyFn(func(_ context.Context, o runtime.Object, _ ...resource.ApplyOption) error { return nil }),
 			rawClient: &test.MockClient{
 				MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
+					if scopeDef, ok := obj.(*v1alpha2.ScopeDefinition); ok {
+						*scopeDef = scopeDefinition
+						return nil
+					}
 					return nil
 				},
 				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
@@ -206,7 +244,7 @@ func TestApplyWorkloads(t *testing.T) {
 			args: args{
 				w: []Workload{{
 					Workload: workload,
-					Traits:   []unstructured.Unstructured{*trait.DeepCopy()},
+					Traits:   []*Trait{{Object: *trait.DeepCopy()}},
 					Scopes:   []unstructured.Unstructured{*scope.DeepCopy()},
 				}},
 				ws: []v1alpha2.WorkloadStatus{
@@ -234,6 +272,10 @@ func TestApplyWorkloads(t *testing.T) {
 			client: resource.ApplyFn(func(_ context.Context, o runtime.Object, _ ...resource.ApplyOption) error { return nil }),
 			rawClient: &test.MockClient{
 				MockGet: func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
+					if scopeDef, ok := obj.(*v1alpha2.ScopeDefinition); ok {
+						*scopeDef = scopeDefinition
+						return nil
+					}
 					return nil
 				},
 				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
@@ -243,7 +285,7 @@ func TestApplyWorkloads(t *testing.T) {
 			args: args{
 				w: []Workload{{
 					Workload: workload,
-					Traits:   []unstructured.Unstructured{*trait.DeepCopy()},
+					Traits:   []*Trait{{Object: *trait.DeepCopy()}},
 					Scopes:   []unstructured.Unstructured{*scopeWithRef.DeepCopy()},
 				}},
 				ws: []v1alpha2.WorkloadStatus{
@@ -288,7 +330,10 @@ func TestApplyWorkloads(t *testing.T) {
 
 						return nil
 					}
-
+					if scopeDef, ok := obj.(*v1alpha2.ScopeDefinition); ok {
+						*scopeDef = scopeDefinition
+						return nil
+					}
 					return nil
 				},
 				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
@@ -298,7 +343,7 @@ func TestApplyWorkloads(t *testing.T) {
 			args: args{
 				w: []Workload{{
 					Workload: workload,
-					Traits:   []unstructured.Unstructured{*trait.DeepCopy()},
+					Traits:   []*Trait{{Object: *trait.DeepCopy()}},
 					Scopes:   []unstructured.Unstructured{},
 				}},
 				ws: []v1alpha2.WorkloadStatus{
@@ -333,4 +378,153 @@ func TestApplyWorkloads(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFinalizeWorkloadScopes(t *testing.T) {
+	namespace := "ns"
+	errMock := errors.New("mock error")
+	workload := &unstructured.Unstructured{}
+	workload.SetAPIVersion("workload.oam.dev")
+	workload.SetKind("workloadKind")
+	workload.SetNamespace(namespace)
+	workload.SetName("workload-example")
+	workload.SetUID(types.UID("workload-uid"))
+
+	ctx := context.Background()
+
+	scope, _ := util.Object2Unstructured(&v1alpha2.HealthScope{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scope-example",
+			Namespace: namespace,
+		},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "scope.oam.dev/v1alpha2",
+			Kind:       "scopeKind",
+		},
+		Spec: v1alpha2.HealthScopeSpec{
+			WorkloadReferences: []v1alpha1.TypedReference{
+				{
+					APIVersion: workload.GetAPIVersion(),
+					Kind:       workload.GetKind(),
+					Name:       workload.GetName(),
+				},
+			},
+		},
+	})
+	scopeDefinition := v1alpha2.ScopeDefinition{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ScopeDefinition",
+			APIVersion: "scopeDef.oam.dev",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scope-example.scope.oam.dev",
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.ScopeDefinitionSpec{
+			Reference: v1alpha2.DefinitionReference{
+				Name: "scope-example.scope.oam.dev",
+			},
+			WorkloadRefsPath: "spec.workloadRefs",
+		},
+	}
+
+	ac := v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Finalizers: []string{workloadScopeFinalizer},
+		},
+		Status: v1alpha2.ApplicationConfigurationStatus{
+			Workloads: []v1alpha2.WorkloadStatus{
+				{
+					Reference: v1alpha1.TypedReference{
+						APIVersion: workload.GetAPIVersion(),
+						Kind:       workload.GetKind(),
+						Name:       workload.GetName(),
+					},
+					Scopes: []v1alpha2.WorkloadScope{
+						{
+							Reference: v1alpha1.TypedReference{
+								APIVersion: scope.GetAPIVersion(),
+								Kind:       scope.GetKind(),
+								Name:       scope.GetName(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cases := []struct {
+		caseName       string
+		client         resource.Applicator
+		rawClient      client.Client
+		wantErr        error
+		wantFinalizers []string
+	}{
+		{
+			caseName: "Finalization successes",
+			client:   resource.ApplyFn(func(_ context.Context, o runtime.Object, _ ...resource.ApplyOption) error { return nil }),
+			rawClient: &test.MockClient{
+				MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+					if key.Name == scope.GetName() {
+						scope := obj.(*unstructured.Unstructured)
+
+						refs := []interface{}{
+							map[string]interface{}{
+								"apiVersion": workload.GetAPIVersion(),
+								"kind":       workload.GetKind(),
+								"name":       workload.GetName(),
+							},
+						}
+
+						if err := fieldpath.Pave(scope.UnstructuredContent()).SetValue("spec.workloadRefs", refs); err == nil {
+							return err
+						}
+
+						return nil
+					}
+					if scopeDef, ok := obj.(*v1alpha2.ScopeDefinition); ok {
+						*scopeDef = scopeDefinition
+						return nil
+					}
+
+					return nil
+				},
+				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+					return nil
+				},
+			},
+			wantErr:        nil,
+			wantFinalizers: []string{},
+		},
+		{
+			caseName: "Finalization fails for error",
+			client:   resource.ApplyFn(func(_ context.Context, o runtime.Object, _ ...resource.ApplyOption) error { return nil }),
+			rawClient: &test.MockClient{
+				MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+					return errMock
+				},
+				MockUpdate: func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+					return nil
+				},
+			},
+			wantErr:        errors.Wrapf(errMock, errFmtApplyScope, scope.GetAPIVersion(), scope.GetKind(), scope.GetName()),
+			wantFinalizers: []string{workloadScopeFinalizer},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.caseName, func(t *testing.T) {
+			acTest := ac
+			w := workloads{client: tc.client, rawClient: tc.rawClient}
+			err := w.Finalize(ctx, &acTest)
+
+			if diff := cmp.Diff(tc.wantErr, err, test.EquateErrors()); diff != "" {
+				t.Errorf("\n%s\nw.Apply(...): -want error, +got error:\n%s", tc.caseName, diff)
+			}
+			if diff := cmp.Diff(tc.wantFinalizers, acTest.ObjectMeta.Finalizers); diff != "" {
+				t.Errorf("\n%s\nw.Apply(...): -want error, +got error:\n%s", tc.caseName, diff)
+			}
+		})
+	}
+
 }

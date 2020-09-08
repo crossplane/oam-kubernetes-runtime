@@ -1,10 +1,13 @@
 # Prerequisite
 
-Start OAM runtime by:
 
-```shell script
-go run examples/containerized-workload/main.go
+Prepare CRD and Definitions:
+
+```shell
+kubectl apply -f examples/dependency/definition.yaml
 ```
+
+Make sure [`OAM runtime`](../../README.md#install-oam-runtime) was installed and started.
 
 
 # Case 1: Use status as output and pass through to another workload 
@@ -145,6 +148,13 @@ can pass `spec.key` to `sink` component. So we specify a matcher for it.
               fieldPath: "status.state"
 ```
  
+And now `sink` workload is not created because its dataInputs is not ready.
+
+```shell script
+$ kubectl get foo.example.com sink -o yaml
+Error from server (NotFound): foo.example.com "sink" not found
+```
+
 After a while, assuming the controller of this CRD will reconcile and make the `status.state` to be running.
 Let's update it manually. 
 
@@ -163,6 +173,17 @@ status:
 ```
 
 Then the dependency will meet the requirement. You should see that the field "spec.key" of `sink` workload has been filled.
+
+```shell
+$ kubectl get foo.example.com sink -o yaml
+apiVersion: example.com/v1
+kind: Foo
+metadata:
+  name: sink
+  namespace: default
+spec:
+  key: test-value
+```
 
 clean resource for next case:
 

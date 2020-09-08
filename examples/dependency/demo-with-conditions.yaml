@@ -44,13 +44,3 @@ spec:
             dataOutputName: example-key
           toFieldPaths:
             - "spec.key"
-      traits:
-        - trait:
-            apiVersion: serving.knative.dev/v1
-            kind: Route
-            metadata:
-              name: trait-test
-            spec:
-              traffic:
-                - configurationName: webapp
-                  percent: 100

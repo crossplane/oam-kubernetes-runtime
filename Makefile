@@ -1,7 +1,5 @@
 # ====================================================================================
 # Setup Project
-IMG ?= controller:latest
-
 PROJECT_NAME := oam-kubernetes-runtime
 PROJECT_REPO := github.com/crossplane/$(PROJECT_NAME)
 
@@ -13,12 +11,20 @@ PLATFORMS ?= linux_amd64 linux_arm64
 -include build/makelib/common.mk
 
 # ====================================================================================
-# Setup Images
+# Setup Output
 
-# even though this repo doesn't build images (note the no-op img.build target below),
-# some of the init is needed for the cross build container, e.g. setting BUILD_REGISTRY
--include build/makelib/image.mk
-img.build:
+S3_BUCKET ?= crossplane.releases/oam
+-include build/makelib/output.mk
+
+# ====================================================================================
+# Setup Helm
+
+HELM_BASE_URL = https://charts.crossplane.io
+HELM_S3_BUCKET = crossplane.charts
+HELM_CHARTS_DIR=$(ROOT_DIR)/charts
+HELM_CHARTS = oam-kubernetes-runtime
+HELM_CHART_LINT_ARGS_oam-kubernetes-runtime = --set serviceAccount.name=''
+-include build/makelib/helm.mk
 
 # ====================================================================================
 # Setup Go
@@ -34,10 +40,21 @@ GO_TEST_PARALLEL := $(shell echo $$(( $(NPROCS) / 2 )))
 
 GO_INTEGRATION_TESTS_SUBDIRS = test
 
+GO_STATIC_PACKAGES = $(GO_PROJECT)/cmd/oam-kubernetes-runtime
 GO_LDFLAGS += -X $(GO_PROJECT)/pkg/version.Version=$(VERSION)
-GO_SUBDIRS += pkg apis
+GO_SUBDIRS += cmd pkg apis
 GO111MODULE = on
 -include build/makelib/golang.mk
+
+# ====================================================================================
+# Setup Images
+# Due to the way that the shared build logic works, images should
+# all be in folders at the same level (no additional levels of nesting).
+
+DOCKER_REGISTRY = crossplane
+IMAGE_DIR=$(ROOT_DIR)/images
+IMAGES = oam-kubernetes-runtime
+-include build/makelib/image.mk
 
 # ====================================================================================
 # Targets
@@ -83,41 +100,50 @@ go-integration:
 # ====================================================================================
 # Special Targets
 
-define CROSSPLANE_RUNTIME_HELP
-Crossplane Runtime Targets:
+define OAM_KUBERNETES_RUNTIME_HELP
+OAM Kubernetes Runtime Targets:
     cobertura          Generate a coverage report for cobertura applying exclusions on generated files.
     reviewable         Ensure a PR is ready for review.
     submodules         Update the submodules, such as the common build scripts.
-
+    run                Run oam-k8s-runtime as a local process. Useful for development.
+    install-crds       Install crds into clusters for oam-k8s-runtime. Useful for development.
+    uninstall-crds     Uninstall crds from clusters for oam-k8s-runtime. Useful for development.
 endef
-export CROSSPLANE_RUNTIME_HELP
+export OAM_KUBERNETES_RUNTIME_HELP
 
-oam-runtime.help:
-	@echo "$$CROSSPLANE_RUNTIME_HELP"
+oam-kubernetes-runtime.help:
+	@echo "$$OAM_KUBERNETES_RUNTIME_HELP"
 
-help-special: oam-runtime.help
+help-special: oam-kubernetes-runtime.help
 
-.PHONY: oam-runtime.help help-special docker-build docker-push kind-load e2e-setup e2e-test e2e-cleanup
+.PHONY: oam-kubernetes-runtime.help help-special kind-load e2e-setup e2e-test e2e-cleanup run install-crds uninstall-crds
 
-# Build the docker image
-docker-build:
-	docker build . -t $(IMG)
+# Install CRDs into a cluster. This is for convenience.
+install-crds: reviewable
+	kubectl apply -f charts/oam-kubernetes-runtime/crds/
 
-# Push the docker image
-docker-push:
-	docker push ${IMG}
+# Uninstall CRDs from a cluster. This is for convenience.
+uninstall-crds:
+	kubectl delete -f charts/oam-kubernetes-runtime/crds/
+
+# This is for running as a local process for convenience.
+run: go.build
+	@$(INFO) Running OAM Kubernetes Runtime as a local process . . .
+	@# To see other arguments that can be provided, run the command with --help instead
+	$(GO_OUT_DIR)/$(PROJECT_NAME)
 
 # load docker image to the kind cluster
 kind-load:
-	kind load docker-image $(IMG) || { echo >&2 "kind not installed or error loading image: $(IMG)"; exit 1; }
+	docker tag $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH) crossplane/oam-kubernetes-runtime:$(VERSION)
+	kind load docker-image crossplane/oam-kubernetes-runtime:$(VERSION) || { echo >&2 "kind not installed or error loading image: $(IMAGE)"; exit 1; }
 
-e2e-setup: docker-build kind-load
+e2e-setup: build kind-load
 	kubectl create namespace oam-system
-	helm install e2e ./charts/oam-core-runtime/ -n oam-system --set image.repository=$(IMG) --wait \
+	helm install e2e ./charts/oam-kubernetes-runtime -n oam-system --set image.pullPolicy='Never' --wait \
 		|| { echo >&2 "helm install timeout"; \
-		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-core-runtime,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
+		kubectl logs `kubectl get pods -n oam-system -l "app.kubernetes.io/name=oam-kubernetes-runtime,app.kubernetes.io/instance=e2e" -o jsonpath="{.items[0].metadata.name}"` -c e2e; \
 		helm uninstall e2e -n oam-system; exit 1;}
-	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=oam-core-runtime -n oam-system --timeout=300s
+	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=oam-kubernetes-runtime -n oam-system --timeout=300s
 
 e2e-test:
 	ginkgo -v ./test/e2e-test

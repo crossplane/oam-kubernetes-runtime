@@ -18,8 +18,11 @@ package applicationconfiguration
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -31,13 +34,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes/fake"
-	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
+
+var _ ComponentRenderer = &components{}
 
 func TestRenderComponents(t *testing.T) {
 	errBoom := errors.New("boom")
@@ -81,28 +87,13 @@ func TestRenderComponents(t *testing.T) {
 			},
 		},
 	}
-	fakeAppClient := fake.NewSimpleClientset().AppsV1()
-	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
-		Data: runtime.RawExtension{Object: &v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentName,
-				Namespace: namespace,
-			},
-			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
-			Status: v1alpha2.ComponentStatus{},
-		}},
-		Revision: 1,
-	}, metav1.CreateOptions{})
-
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
 
 	type fields struct {
-		client    client.Reader
-		appclient clientappv1.AppsV1Interface
-		params    ParameterResolver
-		workload  ResourceRenderer
-		trait     ResourceRenderer
+		client   client.Reader
+		params   ParameterResolver
+		workload ResourceRenderer
+		trait    ResourceRenderer
 	}
 	type args struct {
 		ctx context.Context
@@ -204,15 +195,27 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(workloadName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetLabels(map[string]string{
+								oam.LabelAppComponent:         componentName,
+								oam.LabelAppName:              acName,
+								oam.LabelAppComponentRevision: "",
+								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+							})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								t.SetLabels(map[string]string{
+									oam.LabelAppComponent:         componentName,
+									oam.LabelAppName:              acName,
+									oam.LabelAppComponentRevision: "",
+									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+								})
+								return &Trait{Object: *t}
 							}(),
 						},
 						Scopes: []unstructured.Unstructured{},
@@ -223,8 +226,26 @@ func TestRenderComponents(t *testing.T) {
 		"Success-With-RevisionName": {
 			reason: "Workload should successfully be rendered with fixed componentRevision",
 			fields: fields{
-				client:    &test.MockClient{MockGet: test.NewMockGetFn(nil)},
-				appclient: fakeAppClient,
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+					robj, ok := obj.(*v1.ControllerRevision)
+					if ok {
+						rev := &v1.ControllerRevision{
+							ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+							Data: runtime.RawExtension{Object: &v1alpha2.Component{
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      componentName,
+									Namespace: namespace,
+								},
+								Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+								Status: v1alpha2.ComponentStatus{},
+							}},
+							Revision: 1,
+						}
+						rev.DeepCopyInto(robj)
+						return nil
+					}
+					return nil
+				})},
 				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
 					return nil, nil
 				}),
@@ -249,15 +270,27 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(componentName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetLabels(map[string]string{
+								oam.LabelAppComponent:         componentName,
+								oam.LabelAppName:              acName,
+								oam.LabelAppComponentRevision: revisionName,
+								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+							})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								t.SetLabels(map[string]string{
+									oam.LabelAppComponent:         componentName,
+									oam.LabelAppName:              acName,
+									oam.LabelAppComponentRevision: revisionName,
+									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+								})
+								return &Trait{Object: *t}
 							}(),
 						},
 						Scopes: []unstructured.Unstructured{},
@@ -303,18 +336,31 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(revisionName2)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetLabels(map[string]string{
+								oam.LabelAppComponent:         componentName,
+								oam.LabelAppName:              acName,
+								oam.LabelAppComponentRevision: revisionName2,
+								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+							})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								t.SetLabels(map[string]string{
+									oam.LabelAppComponent:         componentName,
+									oam.LabelAppName:              acName,
+									oam.LabelAppComponentRevision: revisionName2,
+									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+								})
+								return &Trait{Object: *t}
 							}(),
 						},
-						Scopes: []unstructured.Unstructured{},
+						RevisionEnabled: true,
+						Scopes:          []unstructured.Unstructured{},
 					},
 				},
 			},
@@ -322,8 +368,8 @@ func TestRenderComponents(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, tc.fields.appclient, tc.fields.params, tc.fields.workload, tc.fields.trait}
-			got, err := r.Render(tc.args.ctx, tc.args.ac)
+			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			got, _, err := r.Render(tc.args.ctx, tc.args.ac)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, diff)
 			}
@@ -653,12 +699,12 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
 							return w
 						}(),
-						Traits: []unstructured.Unstructured{
-							func() unstructured.Unstructured {
+						Traits: []*Trait{
+							func() *Trait {
 								t := &unstructured.Unstructured{}
 								t.SetNamespace(namespace)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
-								return *t
+								return &Trait{Object: *t}
 							}(),
 						},
 					},
@@ -668,9 +714,9 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, nil, tc.fields.params, tc.fields.workload, tc.fields.trait}
-			got, _ := r.Render(tc.args.ctx, tc.args.ac)
-			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].GetName() != componentName {
+			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			got, _, _ := r.Render(tc.args.ctx, tc.args.ac)
+			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].Object.GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy()) {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
 					"automatically set.")
 			}
@@ -815,93 +861,220 @@ func TestSetTraitProperties(t *testing.T) {
 	expU.SetOwnerReferences([]metav1.OwnerReference{{Name: "comp1"}})
 }
 
-func TestGetComponent(t *testing.T) {
-	type Fields struct {
-		client    client.Reader
-		appclient clientappv1.AppsV1Interface
-		params    ParameterResolver
-		workload  ResourceRenderer
-		trait     ResourceRenderer
-	}
+var scheme = runtime.NewScheme()
+
+func TestRenderTraitName(t *testing.T) {
+
+	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
+	assert.NoError(t, core.AddToScheme(scheme))
 	namespace := "ns"
-	componentName := "newcomponent"
-	revisionName := "newcomponent-aa1111"
-	revisionName2 := "newcomponent-bb1111"
+	acName := "coolappconfig"
+	acUID := types.UID("definitely-a-uuid")
+	componentName := "component"
 
-	fakeAppClient := fake.NewSimpleClientset().AppsV1()
-	fakeAppClient.ControllerRevisions(namespace).Create(context.Background(), &v1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
-		Data: runtime.RawExtension{Object: &v1alpha2.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      componentName,
-				Namespace: namespace,
-			},
-			Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
-			Status: v1alpha2.ComponentStatus{},
-		}},
-		Revision: 1,
-	}, metav1.CreateOptions{})
-	var fields = Fields{
-		client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
-			objc, ok := obj.(*v1alpha2.Component)
-			if !ok {
-				return nil
-			}
-
-			c := &v1alpha2.Component{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      componentName,
-					Namespace: namespace,
-				},
-				Spec: v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{Object: map[string]interface{}{
-					"spec": map[string]interface{}{
-						"apiVersion": "New",
-					},
-				}}}},
-				Status: v1alpha2.ComponentStatus{
-					LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
-				},
-			}
-			c.DeepCopyInto(objc)
-			return nil
-		})},
-		appclient: fakeAppClient,
-		params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
-			return nil, nil
-		}),
-		workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
-			w := &unstructured.Unstructured{}
-			return w, nil
-		}),
+	mts := v1alpha2.ManualScalerTrait{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.ManualScalerTraitSpec{
+			ReplicaCount: 3,
+		},
 	}
-	r := &components{fields.client, fields.appclient, fields.params, fields.workload, fields.trait}
-	c, revision, err := r.getComponent(context.Background(), v1alpha2.ApplicationConfigurationComponent{RevisionName: revisionName}, namespace)
-	assert.NoError(t, err)
-	assert.Equal(t, revisionName, revision)
-	assert.Equal(t, &v1alpha2.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      componentName,
-			Namespace: namespace,
-		},
-		Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
-		Status: v1alpha2.ComponentStatus{},
-	}, c)
 
-	c, revision, err = r.getComponent(context.Background(), v1alpha2.ApplicationConfigurationComponent{ComponentName: componentName}, namespace)
-	assert.NoError(t, err)
-	assert.Equal(t, revisionName2, revision)
-	assert.Equal(t, &v1alpha2.Component{
+	gvks, _, _ := scheme.ObjectKinds(&mts)
+	mts.APIVersion = gvks[0].GroupVersion().String()
+	mts.Kind = gvks[0].Kind
+	raw, _ := json.Marshal(mts)
+
+	ac := &v1alpha2.ApplicationConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      componentName,
 			Namespace: namespace,
+			Name:      acName,
+			UID:       acUID,
 		},
-		Spec: v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{Object: map[string]interface{}{
-			"spec": map[string]interface{}{
-				"apiVersion": "New",
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.ComponentTrait{
+						{
+							Trait: runtime.RawExtension{
+								Object: &mts,
+								Raw:    raw,
+							},
+						},
+					},
+				},
 			},
-		}}}},
-		Status: v1alpha2.ComponentStatus{
-			LatestRevision: &v1alpha2.Revision{Name: revisionName2, Revision: 2},
 		},
-	}, c)
+		Status: v1alpha2.ApplicationConfigurationStatus{
+			Workloads: []v1alpha2.WorkloadStatus{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.WorkloadTrait{
+						{
+							Reference: v1alpha1.TypedReference{
+								APIVersion: gvks[0].GroupVersion().String(),
+								Kind:       gvks[0].Kind,
+								Name:       "component-trait-11111111",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mapResult, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ac.Spec.Components[0].Traits[0].Trait.Object)
+	assert.NoError(t, err)
+	data := unstructured.Unstructured{Object: mapResult}
+
+	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data)
+	assert.Equal(t, traitName, "component-trait-11111111")
+}
+
+func TestMatchValue(t *testing.T) {
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("v1")
+	obj.SetKind("Workload")
+	obj.SetNamespace("test-ns")
+	obj.SetName("unready-workload")
+	if err := unstructured.SetNestedField(obj.Object, "test", "key"); err != nil {
+		t.Fatal(err)
+	}
+	paved, err := fieldpath.PaveObject(obj)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type args struct {
+		conds []v1alpha2.ConditionRequirement
+		val   string
+		paved *fieldpath.Paved
+	}
+	type want struct {
+		matched bool
+	}
+	cases := map[string]struct {
+		args args
+		want want
+	}{
+		"No conditions with nonempty value should match": {},
+		"No conditions with empty value should not match": {
+			args: args{
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with same value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionEqual,
+					Value:    "test",
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with different value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionEqual,
+					Value:    "test",
+				}},
+				val: "different",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"notEq condition with different value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEqual,
+					Value:    "test",
+				}},
+				val: "different",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"notEq condition with same value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEqual,
+					Value:    "test",
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"notEmpty condition with nonempty value should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEmpty,
+				}},
+				val: "test",
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"notEmpty condition with empty value should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator: v1alpha2.ConditionNotEmpty,
+				}},
+				val: "",
+			},
+			want: want{
+				matched: false,
+			},
+		},
+		"eq condition with same value from FieldPath should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					Value:     "test",
+					FieldPath: "key",
+				}},
+				paved: paved,
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with different value from FieldPath should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					Value:     "different",
+					FieldPath: "key",
+				}},
+				paved: paved,
+			},
+			want: want{
+				matched: false,
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			matched, err := matchValue(tc.args.conds, tc.args.val, tc.args.paved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.want.matched, matched); diff != "" {
+				t.Error(diff)
+			}
+		})
+	}
 }
