@@ -23,6 +23,18 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
+// HealthStatus represents health status strings.
+type HealthStatus string
+
+const (
+	// StatusHealthy represents healthy status.
+	StatusHealthy HealthStatus = "HEALTHY"
+	// StatusUnhealthy represents unhealthy status.
+	StatusUnhealthy = "UNHEALTHY"
+	// StatusUnknown represents unknown status.
+	StatusUnknown = "UNKNOWN"
+)
+
 var _ oam.Scope = &HealthScope{}
 
 // A HealthScopeSpec defines the desired state of a HealthScope.
@@ -41,7 +53,31 @@ type HealthScopeSpec struct {
 type HealthScopeStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
-	Health string `json:"health"`
+	// ScopeHealthCondition represents health condition summary of the scope
+	ScopeHealthCondition ScopeHealthCondition `json:"scopeHealthCondition"`
+
+	// WorkloadHealthConditions represents health condition of workloads in the scope
+	WorkloadHealthConditions []*WorkloadHealthCondition `json:"healthConditions,omitempty"`
+}
+
+// ScopeHealthCondition represents health condition summary of a scope.
+type ScopeHealthCondition struct {
+	HealthStatus       HealthStatus `json:"healthStatus"`
+	Total              int64        `json:"total,omitempty"`
+	HealthyWorkloads   int64        `json:"healthyWorkloads,omitempty"`
+	UnhealthyWorkloads int64        `json:"unhealthyWorkloads,omitempty"`
+	UnknownWorkloads   int64        `json:"unknownWorkloads,omitempty"`
+}
+
+// WorkloadHealthCondition represents informative health condition.
+type WorkloadHealthCondition struct {
+	// ComponentName represents the component name if target is a workload
+	ComponentName  string                         `json:"componentName,omitempty"`
+	TargetWorkload runtimev1alpha1.TypedReference `json:"targetWorkload,omitempty"`
+	HealthStatus   HealthStatus                   `json:"healthStatus"`
+	Diagnosis      string                         `json:"diagnosis,omitempty"`
+	// WorkloadStatus represents status of workloads whose HealthStatus is UNKNOWN.
+	WorkloadStatus string `json:"workloadStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
