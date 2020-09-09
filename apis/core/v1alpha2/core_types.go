@@ -49,6 +49,11 @@ type WorkloadDefinitionSpec struct {
 	// ChildResourceKinds are the list of GVK of the child resources this workload generates
 	ChildResourceKinds []ChildResourceKind `json:"childResourceKinds,omitempty"`
 
+	// RevisionLabel indicates which label for underlying resources(e.g. pods) of this workload
+	// can be used by trait to create resource selectors(e.g. label selector for pods).
+	// +optional
+	RevisionLabel string `json:"revisionLabel,omitempty"`
+
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields

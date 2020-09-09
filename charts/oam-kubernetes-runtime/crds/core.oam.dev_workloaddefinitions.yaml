@@ -85,6 +85,11 @@ spec:
                   builders
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              revisionLabel:
+                description: RevisionLabel indicates which label for underlying resources(e.g.
+                  pods) of this workload can be used by trait to create resource selectors(e.g.
+                  label selector for pods).
+                type: string
             required:
             - definitionRef
             type: object
