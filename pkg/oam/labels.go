@@ -25,4 +25,13 @@ const (
 	LabelAppComponent = "app.oam.dev/component"
 	// LabelAppComponentRevision records the revision name of Component
 	LabelAppComponentRevision = "app.oam.dev/revision"
+	// LabelOAMResourceType whether a CR is workload or trait
+	LabelOAMResourceType = "app.oam.dev/resourceType"
+)
+
+const (
+	// ResourceTypeTrait mark this K8s Custom Resource is an OAM trait
+	ResourceTypeTrait = "TRAIT"
+	// ResourceTypeWorkload mark this K8s Custom Resource is an OAM workload
+	ResourceTypeWorkload = "WORKLOAD"
 )

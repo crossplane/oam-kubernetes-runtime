@@ -97,7 +97,7 @@ func (c *ComponentHandler) getRelatedAppConfig(object metav1.Object) []reconcile
 	return reqs
 }
 
-//IsRevisionDiff check whether there's any different between two component revision
+// IsRevisionDiff check whether there's any different between two component revision
 func (c *ComponentHandler) IsRevisionDiff(mt metav1.Object, curComp *v1alpha2.Component) (bool, int64) {
 	if curComp.Status.LatestRevision == nil {
 		return true, 0
