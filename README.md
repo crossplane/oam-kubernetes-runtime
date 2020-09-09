@@ -112,7 +112,7 @@ Or you can install with webhook enabled by following steps:
   Check its application configuration:
 
   ```console
-  kubectl get appconfigs
+  kubectl get appconfig
   NAME                AGE
   example-appconfig   3m48s
   ```
