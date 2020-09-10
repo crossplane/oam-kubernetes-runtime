@@ -6,7 +6,7 @@
 
 ## Background
 
-Per [issue #193](https://github.com/crossplane/oam-kubernetes-runtime/issues/193), there are several sceneries which currently don't have elegant solutions.
+Per [issue #193](https://github.com/crossplane/oam-kubernetes-runtime/issues/193), there are several scenarios which currently don't have elegant solutions.
 
 1). In ApplicationConfiguration `bookinfo`, OAM users have to specify the pod label in `spec.labels` field of the service trait `my-service`, while OAM Kubernetes
 Runtime exactly knows how to set `selector` by the workload. 
