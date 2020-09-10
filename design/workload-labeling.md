@@ -140,7 +140,7 @@ between pods, workloads and traits.
 
 ## Goals
 
-The goal is to recommend a simple way - Workload Labeling, to easily establish connections between Workloads, Components, AppConfigurations,
+The goal is to recommend a simple way - Workload Labeling, to easily establish connections between Workloads, Components, ApplicationConfigurations,
 and pods.
 
 ## Proposal
