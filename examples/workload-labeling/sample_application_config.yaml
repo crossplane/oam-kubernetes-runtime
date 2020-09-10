@@ -1,0 +1,15 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: label-appconfig
+spec:
+  components:
+    - componentName: label-component
+      traits:
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            metadata:
+              name: example-appconfig-trait
+            spec:
+              replicaCount: 3
