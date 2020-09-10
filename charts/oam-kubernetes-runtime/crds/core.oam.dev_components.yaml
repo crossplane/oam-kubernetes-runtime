@@ -82,7 +82,9 @@ spec:
                 type: array
               workload:
                 description: A Workload that will be created for each ApplicationConfiguration
-                  that includes this Component. Workloads must be defined by a WorkloadDefinition.
+                  that includes this Component. Workload is an instance of a workloadDefinition.
+                  We either use the GVK info or a special "type" field in the workload
+                  to associate the content of the workload with its workloadDefinition
                 type: object
                 x-kubernetes-embedded-resource: true
                 x-kubernetes-preserve-unknown-fields: true

@@ -139,5 +139,5 @@ func (h *ValidatingHandler) InjectDecoder(d *admission.Decoder) error {
 // Register will regsiter application configuration validation to webhook
 func Register(mgr manager.Manager) {
 	server := mgr.GetWebhookServer()
-	server.Register("/validating-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{}})
+	server.Register("/validating-core-oam-dev-v1alpha2-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{}})
 }

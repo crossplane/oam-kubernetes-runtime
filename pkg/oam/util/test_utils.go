@@ -1,12 +1,20 @@
 package util
 
 import (
+	"encoding/json"
+
 	"github.com/onsi/gomega/format"
 	"github.com/onsi/gomega/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-// AlreadyExistMatcher matches the error to be already exist
+// JSONMarshal returns the JSON encoding
+func JSONMarshal(o interface{}) []byte {
+	j, _ := json.Marshal(o)
+	return j
+}
+
+//AlreadyExistMatcher matches the error to be already exist
 type AlreadyExistMatcher struct {
 }
 
