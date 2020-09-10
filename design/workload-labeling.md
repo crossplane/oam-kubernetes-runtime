@@ -145,7 +145,7 @@ and pods.
 
 ## Proposal
 
-Step 1: Setting the label `definition.oam.dev/unique-pod` as the unique identifier of pods
+Step 1: Setting `spec.revisionLabel` as the unique identifier of pods
 
 We found that if our final target workload resource is pod, we can always assume the pod has unique labels:
 
@@ -168,18 +168,14 @@ metadata:
     controller-revision-hash: b8d6c88f6
 ```
 
-Declare `definition.oam.dev/unique-pod` in WorkloadDefinition as OAM specified labels, which will always exist in pods.
-Then trait automatically fills correlation fields by detecting the unique pod label, for example, generating service, split traffic, etc.
+By Declaring `spec.revisionLabel` in WorkloadDefinition as OAM specified specification, of which the value will always exist
+in pods, trait automatically fills correlation fields by detecting `revisionLabel`, for example, generating service, split traffic, etc.
 
 ```yaml
 apiVersion: core.oam.dev/v1alpha2
 kind: WorkloadDefinition
-metadata:
-  name: xxx
-  labels:
-    definition.oam.dev/unique-pod: pod-template-hash # optional but recommended, values in [pod-template-hash, controller-revision-hash]
 spec:
-  ...
+  revisionLabel: pod-template-hash     # optional but recommended, values in [pod-template-hash, controller-revision-hash]
 ```
 
 Step 2: Utilizing generated workload labels to establish clear relationship between workloads and its component
@@ -197,7 +193,8 @@ metadata:
     app.oam.dev/component: label-component
     app.oam.dev/name: label-appconfig
     app.oam.dev/revision: label-component-v1
-    definition.oam.dev/unique-pod: pod-template-hash
+spec:
+  revisionLabel: pod-template-hash
 ```
 
 Label `app.oam.dev/component` marks the Component, `app.oam.dev/name` marks the ApplicationConfiguration, and `app.oam.dev/revision`
@@ -214,22 +211,17 @@ spec:
     name: label-nginx
 ```
 
-Moreover, with recommended label `definition.oam.dev/unique-pod` in Component manifest set, we can see it is
-generated as one label of the Deployment workload, which can help identify the pods.
+Moreover, with recommended `spec.revisionLabel` set in Component manifest, we can see it is generated in `spec` field of
+the Deployment workload, which can help identify the pods.
 
 ## Best practice
 
-- For OAM users
+We recommend platform builders to set `spec.revisionLabel` in WorkloadDefinition, application developers to set
+`spec.revisionLabel` in Component. Using Ingress/Service, or HPA trait is not recommended at all. Though based on the mechanism
+of this proposal, we can automatically set the required, we encourage users to use official Route and Scale trait.
 
-We recommend you to set label `definition.oam.dev/unique-pod` in WorkloadDefinition and Component. 
-
-We do NOT recommend you to use Ingress/Service, HPA trait at all. Though based on the mechanism of this proposal,
-we can automatically set the required, we encourage users to use official Route and Scale trait.
-
-- For Trait builder
-
-We recommend you to utilize those Workload labels to help identify the Components, ApplicationConfiguration and Pods, to
-help implement operation logic.
+We also recommend platform builders to utilize those Workload labels and `spec.revisionLabel` to help identify the Components
+ApplicationConfiguration and Pods, to help implement operation logic.
 
 ## Impact to existing system
 
