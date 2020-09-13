@@ -1,0 +1,30 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: HealthScope
+metadata:
+  name: example-health-scope
+spec:
+  workloadRefs: []
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - componentName: web-service-component
+      parameterValues:
+        - name: image
+          value: wordpress:php7.2
+      traits:
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            metadata:
+              name: example-appconfig-trait
+            spec:
+              replicaCount: 3
+      scopes:
+        - scopeRef:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: HealthScope
+            name: example-health-scope

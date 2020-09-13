@@ -28,23 +28,23 @@ import (
 )
 
 var (
-	//KindDeployment is the k8s Deployment kind.
+	// KindDeployment is the k8s Deployment kind.
 	KindDeployment = reflect.TypeOf(appsv1.Deployment{}).Name()
-	//KindService is the k8s Service kind.
+	// KindService is the k8s Service kind.
 	KindService = reflect.TypeOf(corev1.Service{}).Name()
 	// ReconcileWaitResult is the time to wait between reconciliation.
 	ReconcileWaitResult = reconcile.Result{RequeueAfter: 30 * time.Second}
 )
 
 const (
-	//TraitPrefixKey is prefix of trait name
+	// TraitPrefixKey is prefix of trait name
 	TraitPrefixKey = "trait"
 )
 
 const (
-	//ErrUpdateStatus is the error while applying status.
+	// ErrUpdateStatus is the error while applying status.
 	ErrUpdateStatus = "cannot apply status"
-	//ErrLocateAppConfig is the error while locating parent application.
+	// ErrLocateAppConfig is the error while locating parent application.
 	ErrLocateAppConfig = "cannot locate the parent application configuration to emit event to"
 	// ErrLocateWorkload is the error while locate the workload
 	ErrLocateWorkload = "cannot find the workload that the trait is referencing to"
@@ -219,9 +219,9 @@ type labelAnnotationObject interface {
 // PassLabelAndAnnotation passes through labels and annotation objectMeta from the parent to the child object
 func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject) {
 	// pass app-config labels
-	childObj.SetLabels(mergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+	childObj.SetLabels(MergeMap(parentObj.GetLabels(), childObj.GetLabels()))
 	// pass app-config annotation
-	childObj.SetAnnotations(mergeMap(parentObj.GetAnnotations(), childObj.GetAnnotations()))
+	childObj.SetAnnotations(MergeMap(parentObj.GetAnnotations(), childObj.GetAnnotations()))
 }
 
 // GetCRDName return the CRD name of any resources
@@ -344,10 +344,11 @@ func UnpackRevisionData(rev *appsv1.ControllerRevision) (*v1alpha2.Component, er
 
 // AddLabels will merge labels with existing labels
 func AddLabels(o *unstructured.Unstructured, labels map[string]string) {
-	o.SetLabels(mergeMap(o.GetLabels(), labels))
+	o.SetLabels(MergeMap(o.GetLabels(), labels))
 }
 
-func mergeMap(src, dst map[string]string) map[string]string {
+//MergeMap merges two could be nil maps
+func MergeMap(src, dst map[string]string) map[string]string {
 	if len(src) == 0 {
 		return dst
 	}

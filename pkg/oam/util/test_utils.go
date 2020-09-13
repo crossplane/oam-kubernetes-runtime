@@ -1,16 +1,24 @@
 package util
 
 import (
+	"encoding/json"
+
 	"github.com/onsi/gomega/format"
 	"github.com/onsi/gomega/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
+// JSONMarshal returns the JSON encoding
+func JSONMarshal(o interface{}) []byte {
+	j, _ := json.Marshal(o)
+	return j
+}
+
 //AlreadyExistMatcher matches the error to be already exist
 type AlreadyExistMatcher struct {
 }
 
-//Match matches error.
+// Match matches error.
 func (matcher AlreadyExistMatcher) Match(actual interface{}) (success bool, err error) {
 	if actual == nil {
 		return false, nil
@@ -19,21 +27,21 @@ func (matcher AlreadyExistMatcher) Match(actual interface{}) (success bool, err 
 	return apierrors.IsAlreadyExists(actualError), nil
 }
 
-//FailureMessage builds an error message.
+// FailureMessage builds an error message.
 func (matcher AlreadyExistMatcher) FailureMessage(actual interface{}) (message string) {
 	return format.Message(actual, "to be already exist")
 }
 
-//NegatedFailureMessage builds an error message.
+// NegatedFailureMessage builds an error message.
 func (matcher AlreadyExistMatcher) NegatedFailureMessage(actual interface{}) (message string) {
 	return format.Message(actual, "not to be already exist")
 }
 
-//NotFoundMatcher matches the error to be not found.
+// NotFoundMatcher matches the error to be not found.
 type NotFoundMatcher struct {
 }
 
-//Match matches the api error.
+// Match matches the api error.
 func (matcher NotFoundMatcher) Match(actual interface{}) (success bool, err error) {
 	if actual == nil {
 		return false, nil
@@ -42,29 +50,29 @@ func (matcher NotFoundMatcher) Match(actual interface{}) (success bool, err erro
 	return apierrors.IsNotFound(actualError), nil
 }
 
-//FailureMessage builds an error message.
+// FailureMessage builds an error message.
 func (matcher NotFoundMatcher) FailureMessage(actual interface{}) (message string) {
 	return format.Message(actual, "to be not found")
 }
 
-//NegatedFailureMessage builds an error message.
+// NegatedFailureMessage builds an error message.
 func (matcher NotFoundMatcher) NegatedFailureMessage(actual interface{}) (message string) {
 	return format.Message(actual, "not to be not found")
 }
 
-//BeEquivalentToError matches the error to take care of nil.
+// BeEquivalentToError matches the error to take care of nil.
 func BeEquivalentToError(expected error) types.GomegaMatcher {
 	return &ErrorMatcher{
 		ExpectedError: expected,
 	}
 }
 
-//ErrorMatcher matches errors.
+// ErrorMatcher matches errors.
 type ErrorMatcher struct {
 	ExpectedError error
 }
 
-//Match matches an error.
+// Match matches an error.
 func (matcher ErrorMatcher) Match(actual interface{}) (success bool, err error) {
 	if actual == nil {
 		return matcher.ExpectedError == nil, nil
@@ -73,7 +81,7 @@ func (matcher ErrorMatcher) Match(actual interface{}) (success bool, err error) 
 	return actualError.Error() == matcher.ExpectedError.Error(), nil
 }
 
-//FailureMessage builds an error message.
+// FailureMessage builds an error message.
 func (matcher ErrorMatcher) FailureMessage(actual interface{}) (message string) {
 	actualError, actualOK := actual.(error)
 	expectedError, expectedOK := matcher.ExpectedError.(error)
@@ -93,7 +101,7 @@ func (matcher ErrorMatcher) FailureMessage(actual interface{}) (message string) 
 	return format.Message(actual, "to equal", expectedError)
 }
 
-//NegatedFailureMessage builds an error message.
+// NegatedFailureMessage builds an error message.
 func (matcher ErrorMatcher) NegatedFailureMessage(actual interface{}) (message string) {
 	actualError, actualOK := actual.(error)
 	expectedError, expectedOK := matcher.ExpectedError.(error)

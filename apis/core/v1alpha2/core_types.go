@@ -49,6 +49,11 @@ type WorkloadDefinitionSpec struct {
 	// ChildResourceKinds are the list of GVK of the child resources this workload generates
 	ChildResourceKinds []ChildResourceKind `json:"childResourceKinds,omitempty"`
 
+	// RevisionLabel indicates which label for underlying resources(e.g. pods) of this workload
+	// can be used by trait to create resource selectors(e.g. label selector for pods).
+	// +optional
+	RevisionLabel string `json:"revisionLabel,omitempty"`
+
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -200,8 +205,9 @@ type ComponentParameter struct {
 // A ComponentSpec defines the desired state of a Component.
 type ComponentSpec struct {
 	// A Workload that will be created for each ApplicationConfiguration that
-	// includes this Component. Workloads must be defined by a
-	// WorkloadDefinition.
+	// includes this Component. Workload is an instance of a workloadDefinition.
+	// We either use the GVK info or a special "type" field in the workload to associate
+	// the content of the workload with its workloadDefinition
 	// +kubebuilder:validation:EmbeddedResource
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Workload runtime.RawExtension `json:"workload"`

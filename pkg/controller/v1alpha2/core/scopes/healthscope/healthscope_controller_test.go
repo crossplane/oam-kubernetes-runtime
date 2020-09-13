@@ -45,12 +45,13 @@ var _ = Describe("HealthScope Controller Reconcile Test", func() {
 		Client: &test.MockClient{},
 	}
 	MockHealthyChecker := WorkloadHealthCheckFn(
-		func(context.Context, client.Client, v1alpha1.TypedReference, string) *HealthCondition {
-			return &HealthCondition{IsHealthy: true}
+		func(context.Context, client.Client, v1alpha1.TypedReference, string) *WorkloadHealthCondition {
+
+			return &WorkloadHealthCondition{HealthStatus: StatusHealthy}
 		})
 	MockUnhealthyChecker := WorkloadHealthCheckFn(
-		func(context.Context, client.Client, v1alpha1.TypedReference, string) *HealthCondition {
-			return &HealthCondition{IsHealthy: false}
+		func(context.Context, client.Client, v1alpha1.TypedReference, string) *WorkloadHealthCondition {
+			return &WorkloadHealthCondition{HealthStatus: StatusUnhealthy}
 		})
 	reconciler := NewReconciler(mockMgr,
 		WithLogger(logging.NewNopLogger().WithValues("HealthScopeReconciler")),
@@ -154,25 +155,20 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 	cwRef.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
 	deployRef.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindDeployment))
 	svcRef.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindService))
-	hGeneralRef := v1alpha1.TypedReference{
-		APIVersion: "unknown",
-		Kind:       "unknown",
-		Name:       "healthyGeneral",
-	}
 
 	cw := corev1alpha2.ContainerizedWorkload{}
 	cw.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
 	cw.Status.Resources = []v1alpha1.TypedReference{deployRef, svcRef}
 
 	hDeploy := appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &varInt1,
+		},
 		Status: appsv1.DeploymentStatus{
 			ReadyReplicas: 1, // healthy
 		},
 	}
 	hDeploy.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindDeployment))
-	hGeneralWL := &unstructured.Unstructured{Object: make(map[string]interface{})}
-	fieldpath.Pave(hGeneralWL.Object).SetValue("status.readyReplicas", 1)         // healthy
-	fieldpath.Pave(hGeneralWL.Object).SetValue("metadata.name", "healthyGeneral") // healthy
 
 	uhGeneralRef := v1alpha1.TypedReference{
 		APIVersion: "unknown",
@@ -199,9 +195,10 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 	// use ContainerizedWorkload and Deployment checker
 	It("Test healthy scope", func() {
 		tests := []struct {
-			caseName       string
-			hsWorkloadRefs []v1alpha1.TypedReference
-			mockGetFn      test.MockGetFn
+			caseName           string
+			hsWorkloadRefs     []v1alpha1.TypedReference
+			mockGetFn          test.MockGetFn
+			wantScopeCondition ScopeHealthCondition
 		}{
 			{
 				caseName:       "2 supportted workloads(cw,deploy)",
@@ -215,6 +212,13 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					}
 					return nil
 				},
+				wantScopeCondition: ScopeHealthCondition{
+					HealthStatus:       StatusHealthy,
+					Total:              int64(2),
+					HealthyWorkloads:   int64(2),
+					UnhealthyWorkloads: 0,
+					UnknownWorkloads:   0,
+				},
 			},
 		}
 		for _, tc := range tests {
@@ -224,18 +228,19 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			}
 			reconciler.client = mockClient
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
-			result := reconciler.GetScopeHealthStatus(ctx, &hs)
+			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.IsHealthy).Should(Equal(true))
+			Expect(result).Should(Equal(tc.wantScopeCondition))
 		}
 	})
 
 	// use ContainerizedWorkload and Deployment checker
 	It("Test unhealthy scope", func() {
 		tests := []struct {
-			caseName       string
-			hsWorkloadRefs []v1alpha1.TypedReference
-			mockGetFn      test.MockGetFn
+			caseName           string
+			hsWorkloadRefs     []v1alpha1.TypedReference
+			mockGetFn          test.MockGetFn
+			wantScopeCondition ScopeHealthCondition
 		}{
 			{
 				caseName:       "2 supportted workloads but one is unhealthy",
@@ -252,20 +257,12 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					}
 					return nil
 				},
-			},
-			{
-				caseName:       "2 general workloads but one is unhealthy",
-				hsWorkloadRefs: []v1alpha1.TypedReference{hGeneralRef, uhGeneralRef},
-				mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-					if key.Name == "healthyGeneral" {
-						o, _ := obj.(*unstructured.Unstructured)
-						*o = *hGeneralWL
-					}
-					if key.Name == "unhealthyGeneral" {
-						o, _ := obj.(*unstructured.Unstructured)
-						*o = *uhGeneralWL
-					}
-					return nil
+				wantScopeCondition: ScopeHealthCondition{
+					HealthStatus:       StatusUnhealthy,
+					Total:              int64(2),
+					HealthyWorkloads:   int64(1),
+					UnhealthyWorkloads: int64(1),
+					UnknownWorkloads:   0,
 				},
 			},
 			{
@@ -282,6 +279,13 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 					}
 					return nil
 				},
+				wantScopeCondition: ScopeHealthCondition{
+					HealthStatus:       StatusUnhealthy,
+					Total:              int64(2),
+					HealthyWorkloads:   int64(1),
+					UnhealthyWorkloads: 0,
+					UnknownWorkloads:   int64(1),
+				},
 			},
 		}
 
@@ -292,9 +296,9 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			}
 			reconciler.client = mockClient
 			hs.Spec.WorkloadReferences = tc.hsWorkloadRefs
-			result := reconciler.GetScopeHealthStatus(ctx, &hs)
+			result, _ := reconciler.GetScopeHealthStatus(ctx, &hs)
 			Expect(result).ShouldNot(BeNil())
-			Expect(result.IsHealthy).Should(Equal(false))
+			Expect(result).Should(Equal(tc.wantScopeCondition))
 		}
 	})
 })
