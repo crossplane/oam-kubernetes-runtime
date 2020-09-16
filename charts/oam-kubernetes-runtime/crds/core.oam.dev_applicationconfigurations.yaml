@@ -369,6 +369,10 @@ spec:
                       type: object
                     type: array
                 type: object
+              observedGeneration:
+                description: The generation observed by the appConfig controller.
+                format: int64
+                type: integer
               status:
                 description: Status is a place holder for a customized controller
                   to fill if it needs a single place to summarize the status of the

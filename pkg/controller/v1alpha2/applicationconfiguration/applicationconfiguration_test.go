@@ -22,6 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
@@ -29,6 +33,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -1393,4 +1398,54 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 	if diff := cmp.Diff(s.Conditions, outs[0].Conditions); diff != "" {
 		t.Errorf("didn't add conditions to source correctly: %s", diff)
 	}
+}
+
+func TestUpdateStatus(t *testing.T) {
+
+	mockGetAppConfigFn := func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
+		if o, ok := obj.(*v1alpha2.ApplicationConfiguration); ok {
+			*o = v1alpha2.ApplicationConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "example-appconfig",
+					Generation: 1,
+				},
+				Spec: v1alpha2.ApplicationConfigurationSpec{
+					Components: []v1alpha2.ApplicationConfigurationComponent{
+						{
+							ComponentName: "example-component",
+							ParameterValues: []v1alpha2.ComponentParameterValue{
+								{
+									Name: "image",
+									Value: intstr.IntOrString{
+										StrVal: "wordpress:php7.3",
+									},
+								},
+							},
+						},
+					},
+				},
+				Status: v1alpha2.ApplicationConfigurationStatus{
+					ObservedGeneration: 0,
+				},
+			}
+		}
+		return nil
+	}
+
+	m := &mock.Manager{
+		Client: &test.MockClient{
+			MockGet: mockGetAppConfigFn,
+		},
+	}
+
+	r := NewReconciler(m)
+
+	ac := &v1alpha2.ApplicationConfiguration{}
+	err := r.client.Get(context.Background(), types.NamespacedName{Name: "example-appconfig"}, ac)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, ac.Status.ObservedGeneration, int64(0))
+
+	updateObservedGeneration(ac)
+	assert.Equal(t, ac.Status.ObservedGeneration, int64(1))
+
 }

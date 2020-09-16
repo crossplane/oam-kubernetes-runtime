@@ -409,6 +409,10 @@ type ApplicationConfigurationStatus struct {
 
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`
+
+	// The generation observed by the appConfig controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration"`
 }
 
 // DependencyStatus represents the observed state of the dependency of

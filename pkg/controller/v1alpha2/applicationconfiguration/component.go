@@ -166,6 +166,7 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 		Revision: nextRevision,
 		Data:     runtime.RawExtension{Object: curComp},
 	}
+
 	err := c.Client.Create(context.TODO(), &revision)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
@@ -175,6 +176,7 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	if curComp.Status.ObservedGeneration != curComp.Generation {
 		curComp.Status.ObservedGeneration = curComp.Generation
 	}
+
 	err = c.Client.Status().Update(context.Background(), curComp)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("update component status latestRevision %s err %v", revisionName, err), "componentName", mt.GetName())

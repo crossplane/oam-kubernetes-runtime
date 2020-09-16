@@ -239,6 +239,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 			}
 			r.record.Event(ac, event.Normal(reasonExecutePosthook, "Successfully executed a posthook", "posthook name", name))
 		}
+		updateObservedGeneration(ac)
 		returnErr = errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 	}()
 
@@ -348,6 +349,12 @@ func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac *v1alpha
 	ac.Status.Workloads = append(ac.Status.Workloads, revisionStatus...)
 
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
+}
+
+func updateObservedGeneration(ac *v1alpha2.ApplicationConfiguration) {
+	if ac.Status.ObservedGeneration != ac.Generation {
+		ac.Status.ObservedGeneration = ac.Generation
+	}
 }
 
 // if any finalizers newly registered, return true
