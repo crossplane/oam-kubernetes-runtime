@@ -83,7 +83,7 @@ Or you can install with webhook enabled by following steps:
     kubectl -n oam-system create secret generic webhook-server-cert --from-file=tls.key=./oam-kubernetes-runtime-webhook.key --from-file=tls.crt=./oam-kubernetes-runtime-webhook.pem
     ```
 
-  - Step 3: Get CA Bundle info and install with it's value
+  - Step 3: Get CA Bundle info and install with its value
 
     ```shell script
     caValue=`kubectl config view --raw --minify --flatten -o jsonpath='{.clusters[].cluster.certificate-authority-data}'`

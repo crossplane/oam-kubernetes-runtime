@@ -125,7 +125,9 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.Component) error {
 		// copy namespace/label/annotation to the workload and add workloadType label
 		workload.SetNamespace(obj.GetNamespace())
 		workload.SetLabels(util.MergeMap(obj.GetLabels(), map[string]string{WorkloadTypeLabel: workloadType}))
-		workload.SetAnnotations(obj.GetAnnotations())
+		// Add another annotation DefinitionAnnotation which can mark the name of WorkloadDefinition
+		workload.SetAnnotations(util.MergeMap(obj.GetAnnotations(), map[string]string{util.DefinitionAnnotation: workloadType}))
+		mutatelog.Info("Set annotation definition.oam.dev/name for workload", "annotation value", workloadType)
 		// copy back the object
 		rawBye, err := json.Marshal(workload.Object)
 		if err != nil {
