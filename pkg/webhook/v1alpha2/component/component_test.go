@@ -3,6 +3,7 @@ package component_test
 import (
 	"context"
 	"fmt"
+
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 
 	. "github.com/onsi/ginkgo"
