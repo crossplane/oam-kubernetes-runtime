@@ -32,3 +32,9 @@ tmp/
 
 # Vscode files
 .vscode
+
+# Webhook certificates
+csr.conf
+oam-kubernetes-runtime-webhook.csr
+oam-kubernetes-runtime-webhook.key
+oam-kubernetes-runtime-webhook.pem

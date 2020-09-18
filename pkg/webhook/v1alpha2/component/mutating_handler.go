@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -126,7 +128,7 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.Component) error {
 		workload.SetNamespace(obj.GetNamespace())
 		workload.SetLabels(util.MergeMap(obj.GetLabels(), map[string]string{WorkloadTypeLabel: workloadType}))
 		// Add another annotation DefinitionAnnotation which can mark the name of WorkloadDefinition
-		workload.SetAnnotations(util.MergeMap(obj.GetAnnotations(), map[string]string{util.DefinitionAnnotation: workloadType}))
+		workload.SetAnnotations(util.MergeMap(obj.GetAnnotations(), map[string]string{oam.DefinitionAnnotation: workloadType}))
 		mutatelog.Info("Set annotation definition.oam.dev/name for workload", "annotation value", workloadType)
 		// copy back the object
 		rawBye, err := json.Marshal(workload.Object)

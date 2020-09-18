@@ -3,6 +3,7 @@ package component_test
 import (
 	"context"
 	"fmt"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -121,6 +122,7 @@ var _ = Describe("Component Admission controller Test", func() {
 			mutatedWorkload := baseWorkload.DeepCopy()
 			mutatedWorkload.SetNamespace(component.GetNamespace())
 			mutatedWorkload.SetLabels(util.MergeMap(label, map[string]string{WorkloadTypeLabel: workloadTypeName}))
+			mutatedWorkload.SetAnnotations(map[string]string{oam.DefinitionAnnotation: ""})
 			tests := map[string]struct {
 				client   client.Client
 				workload interface{}
@@ -152,7 +154,7 @@ var _ = Describe("Component Admission controller Test", func() {
 					workload: workloadWithType.DeepCopyObject(),
 					errMsg:   "does not exist",
 				},
-				"update gvk and label case": {
+				"update gvk, label and annotation case": {
 					client: &test.MockClient{
 						MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 							switch o := obj.(type) {
