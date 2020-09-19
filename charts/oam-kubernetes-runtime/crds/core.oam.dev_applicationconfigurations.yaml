@@ -385,7 +385,7 @@ spec:
                     componentRevisionName:
                       description: ComponentRevisionName of current component
                       type: string
-                    currentWorkingRevision:
+                    historyWorkingRevision:
                       description: HistoryWorkingRevision is a flag showing if it's
                         history revision but still working
                       type: boolean
@@ -486,8 +486,6 @@ spec:
                       type: object
                   type: object
                 type: array
-            required:
-            - dependency
             type: object
         type: object
     served: true

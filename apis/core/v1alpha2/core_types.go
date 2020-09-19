@@ -371,7 +371,7 @@ type WorkloadStatus struct {
 	Status string `json:"status,omitempty"`
 
 	// HistoryWorkingRevision is a flag showing if it's history revision but still working
-	HistoryWorkingRevision bool `json:"currentWorkingRevision,omitempty"`
+	HistoryWorkingRevision bool `json:"historyWorkingRevision,omitempty"`
 
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
@@ -401,7 +401,7 @@ type ApplicationConfigurationStatus struct {
 	// if it needs a single place to summarize the status of the entire application
 	Status ApplicationStatus `json:"status,omitempty"`
 
-	Dependency DependencyStatus `json:"dependency"`
+	Dependency DependencyStatus `json:"dependency,omitempty"`
 
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`

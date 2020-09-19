@@ -1394,3 +1394,192 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 		t.Errorf("didn't add conditions to source correctly: %s", diff)
 	}
 }
+
+func TestPatchExtraField(t *testing.T) {
+	tests := map[string]struct {
+		acStatus      *v1alpha2.ApplicationConfigurationStatus
+		acPatchStatus v1alpha2.ApplicationConfigurationStatus
+		wantedStatus  *v1alpha2.ApplicationConfigurationStatus
+	}{
+		"patch extra": {
+			acStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						HistoryWorkingRevision: false,
+						ComponentName:          "test",
+						ComponentRevisionName:  "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			acPatchStatus: v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                 "we need to add this",
+						HistoryWorkingRevision: false,
+						ComponentName:          "test",
+						ComponentRevisionName:  "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"patch trait mismatch": {
+			acStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						HistoryWorkingRevision: false,
+						ComponentName:          "test",
+						ComponentRevisionName:  "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			acPatchStatus: v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait2",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                 "we need to add this",
+						HistoryWorkingRevision: false,
+						ComponentName:          "test",
+						ComponentRevisionName:  "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"patch workload revision mismatch": {
+			acStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						HistoryWorkingRevision: false,
+						ComponentName:          "test",
+						ComponentRevisionName:  "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			acPatchStatus: v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentRevisionName: "test-v2",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						HistoryWorkingRevision: false,
+						ComponentName:          "test",
+						ComponentRevisionName:  "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for testName, tt := range tests {
+		t.Run(testName, func(t *testing.T) {
+			patchExtraStatusField(tt.acStatus, tt.acPatchStatus)
+			if diff := cmp.Diff(tt.acStatus, tt.wantedStatus); diff != "" {
+				t.Errorf("didn't patch to the statsu correctly: %s", diff)
+			}
+
+		})
+	}
+}
