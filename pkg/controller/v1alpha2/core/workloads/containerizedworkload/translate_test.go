@@ -388,7 +388,7 @@ func TestServiceInjector(t *testing.T) {
 		err    error
 	}
 
-	invalideDeployment := &appsv1.StatefulSet{
+	invalidDeployment := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1alpha1",
 		}}
@@ -410,12 +410,12 @@ func TestServiceInjector(t *testing.T) {
 			args: args{
 				w: &mock.Workload{},
 				o: []oam.Object{
-					invalideDeployment,
+					invalidDeployment,
 				},
 			},
 			want: want{
 				result: []oam.Object{
-					invalideDeployment,
+					invalidDeployment,
 				},
 				err: nil,
 			},

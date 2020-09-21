@@ -228,9 +228,11 @@ func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject
 // the format of the definition of a resource is <kind plurals>.<group>
 // Now the definition name of a resource could also be defined as `definition.oam.dev/name` in `metadata.annotations`
 func GetDefinitionName(u *unstructured.Unstructured) string {
-	if annotations := u.GetAnnotations(); annotations != nil {
-		if crdName, ok := annotations[oam.DefinitionAnnotation]; ok {
-			return crdName
+	if labels := u.GetLabels(); labels != nil {
+		if resourceType, ok := labels[oam.LabelOAMResourceType]; ok && resourceType == "WORKLOAD" {
+			if definitionName, ok := labels[oam.WorkloadTypeLabel]; ok {
+				return definitionName
+			}
 		}
 	}
 	group, _ := APIVersion2GroupVersion(u.GetAPIVersion())

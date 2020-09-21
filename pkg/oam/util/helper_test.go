@@ -715,19 +715,6 @@ var _ = Describe("Test unstructured related helper utils", func() {
 				}},
 				exp: "simplerollouttraits.extend.oam.dev",
 			},
-			"extended resource with annotation": {
-				u: &unstructured.Unstructured{Object: map[string]interface{}{
-					"apiVersion": "extend.oam.dev/v1alpha2",
-					"kind":       "ContainerizedWorkload",
-					"metadata": map[string]interface{}{
-						"annotations": map[string]interface{}{
-							"definition.oam.dev/name": "web-service",
-						},
-					},
-				},
-				},
-				exp: "web-service",
-			},
 		}
 		for name, ti := range tests {
 			got := util.GetDefinitionName(ti.u)

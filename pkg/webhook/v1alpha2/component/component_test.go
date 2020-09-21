@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -22,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 	. "github.com/crossplane/oam-kubernetes-runtime/pkg/webhook/v1alpha2/component"
 )
@@ -122,8 +121,7 @@ var _ = Describe("Component Admission controller Test", func() {
 			// set up the result
 			mutatedWorkload := baseWorkload.DeepCopy()
 			mutatedWorkload.SetNamespace(component.GetNamespace())
-			mutatedWorkload.SetLabels(util.MergeMap(label, map[string]string{WorkloadTypeLabel: workloadTypeName}))
-			mutatedWorkload.SetAnnotations(map[string]string{oam.DefinitionAnnotation: ""})
+			mutatedWorkload.SetLabels(util.MergeMap(label, map[string]string{oam.WorkloadTypeLabel: workloadTypeName}))
 			tests := map[string]struct {
 				client   client.Client
 				workload interface{}
@@ -155,7 +153,7 @@ var _ = Describe("Component Admission controller Test", func() {
 					workload: workloadWithType.DeepCopyObject(),
 					errMsg:   "does not exist",
 				},
-				"update gvk, label and annotation case": {
+				"update gvk and label case": {
 					client: &test.MockClient{
 						MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 							switch o := obj.(type) {
