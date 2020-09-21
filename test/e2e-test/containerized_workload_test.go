@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -21,17 +22,31 @@ import (
 )
 
 var _ = Describe("ContainerizedWorkload", func() {
-	ctx := context.Background()
-	namespace := "containerized-workload-test"
-	trueVar := true
-	falseVar := false
-	ns := corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
-		},
-	}
+	ctx := context.TODO()
+	var namespace, fakeLabelKey, componentName, workloadInstanceName, imageName string
+	var replica int32
+	var ns corev1.Namespace
+	var wd v1alpha2.WorkloadDefinition
+	var label map[string]string
+	var wl v1alpha2.ContainerizedWorkload
+	var comp v1alpha2.Component
+	var appConfig v1alpha2.ApplicationConfiguration
+	var mts v1alpha2.ManualScalerTrait
+
 	BeforeEach(func() {
+		// init the strings
+		namespace = "containerized-workload-test"
+		fakeLabelKey = "workload"
+		componentName = "example-component"
+		workloadInstanceName = "example-appconfig-workload"
+		imageName = "wordpress:php7.2"
+
 		logf.Log.Info("Start to run a test, clean up previous resources")
+		ns = corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
+		}
 		// delete the namespace with all its resources
 		Expect(k8sClient.Delete(ctx, &ns, client.PropagationPolicy(metav1.DeletePropagationForeground))).
 			Should(SatisfyAny(BeNil(), &util.NotFoundMatcher{}))
@@ -52,19 +67,9 @@ var _ = Describe("ContainerizedWorkload", func() {
 				return k8sClient.Create(ctx, &ns)
 			},
 			time.Second*3, time.Millisecond*300).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
-
-	})
-	AfterEach(func() {
-		logf.Log.Info("Clean up resources")
-		// delete the namespace with all its resources
-		Expect(k8sClient.Delete(ctx, &ns, client.PropagationPolicy(metav1.DeletePropagationForeground))).Should(BeNil())
-	})
-
-	It("apply an application config", func() {
-		fakeLabelKey := "workload"
-		label := map[string]string{fakeLabelKey: "containerized-workload"}
 		// create a workload definition
-		wd := v1alpha2.WorkloadDefinition{
+		label = map[string]string{fakeLabelKey: "containerized-workload"}
+		wd = v1alpha2.WorkloadDefinition{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   "containerizedworkloads.core.oam.dev",
 				Labels: label,
@@ -85,11 +90,8 @@ var _ = Describe("ContainerizedWorkload", func() {
 				},
 			},
 		}
-		logf.Log.Info("Creating workload definition")
-		// For some reason, WorkloadDefinition is created as a Cluster scope object
-		Expect(k8sClient.Create(ctx, &wd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
 		// create a workload CR
-		wl := v1alpha2.ContainerizedWorkload{
+		wl = v1alpha2.ContainerizedWorkload{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Labels:    label,
@@ -114,8 +116,7 @@ var _ = Describe("ContainerizedWorkload", func() {
 		wl.APIVersion = gvks[0].GroupVersion().String()
 		wl.Kind = gvks[0].Kind
 		// Create a component definition
-		componentName := "example-component"
-		comp := v1alpha2.Component{
+		comp = v1alpha2.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      componentName,
 				Namespace: namespace,
@@ -128,22 +129,20 @@ var _ = Describe("ContainerizedWorkload", func() {
 				Parameters: []v1alpha2.ComponentParameter{
 					{
 						Name:       "instance-name",
-						Required:   &trueVar,
+						Required:   utilpointer.BoolPtr(true),
 						FieldPaths: []string{"metadata.name"},
 					},
 					{
 						Name:       "image",
-						Required:   &falseVar,
+						Required:   utilpointer.BoolPtr(false),
 						FieldPaths: []string{"spec.containers[0].image"},
 					},
 				},
 			},
 		}
-		logf.Log.Info("Creating component", "Name", comp.Name, "Namespace", comp.Namespace)
-		Expect(k8sClient.Create(ctx, &comp)).Should(BeNil())
 		// Create a manualscaler trait CR
-		var replica int32 = 3
-		mts := v1alpha2.ManualScalerTrait{
+		replica = 3
+		mts = v1alpha2.ManualScalerTrait{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name:      "sample-manualscaler-trait",
@@ -160,7 +159,7 @@ var _ = Describe("ContainerizedWorkload", func() {
 		// Create application configuration
 		workloadInstanceName := "example-appconfig-workload"
 		imageName := "wordpress:php7.2"
-		appConfig := v1alpha2.ApplicationConfiguration{
+		appConfig = v1alpha2.ApplicationConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "example-appconfig",
 				Namespace: namespace,
@@ -191,6 +190,19 @@ var _ = Describe("ContainerizedWorkload", func() {
 				},
 			},
 		}
+	})
+	AfterEach(func() {
+		logf.Log.Info("Clean up resources")
+		// delete the namespace with all its resources
+		Expect(k8sClient.Delete(ctx, &ns, client.PropagationPolicy(metav1.DeletePropagationForeground))).Should(BeNil())
+	})
+
+	It("apply an application config", func() {
+		logf.Log.Info("Creating workload definition")
+		// For some reason, WorkloadDefinition is created as a Cluster scope object
+		Expect(k8sClient.Create(ctx, &wd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
+		logf.Log.Info("Creating component", "Name", comp.Name, "Namespace", comp.Namespace)
+		Expect(k8sClient.Create(ctx, &comp)).Should(BeNil())
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
 		// Verification
@@ -256,5 +268,67 @@ var _ = Describe("ContainerizedWorkload", func() {
 			},
 			time.Second*60, time.Second*5).Should(BeEquivalentTo(replica))
 		Expect(*deploy.Spec.Replicas).Should(BeEquivalentTo(replica))
+
+	})
+
+	It("checking appConfig status changed outside of the controller loop is preserved", func() {
+		logf.Log.Info("Creating workload definition")
+		// For some reason, WorkloadDefinition is created as a Cluster scope object
+		Expect(k8sClient.Create(ctx, &wd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
+		logf.Log.Info("Creating component", "Name", comp.Name, "Namespace", comp.Namespace)
+		Expect(k8sClient.Create(ctx, &comp)).Should(BeNil())
+		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
+		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
+		By("Verify deployment scaled according to the manualScaler trait")
+		objectKey := client.ObjectKey{
+			Name:      workloadInstanceName,
+			Namespace: namespace,
+		}
+		deploy := &appsv1.Deployment{}
+		Eventually(
+			func() int32 {
+				k8sClient.Get(ctx, objectKey, deploy)
+				return deploy.Status.Replicas
+			},
+			time.Second*60, time.Second*5).Should(BeEquivalentTo(replica))
+		Expect(*deploy.Spec.Replicas).Should(BeEquivalentTo(replica))
+		// Verify that the status is set
+		By("Add applicationConfiguration status")
+		var appConfigWithStatus v1alpha2.ApplicationConfiguration
+		appKey := client.ObjectKey{
+			Name:      appConfig.Name,
+			Namespace: namespace,
+		}
+		Expect(k8sClient.Get(ctx, appKey, &appConfigWithStatus)).ShouldNot(HaveOccurred())
+		logf.Log.Info("get appConfig status", "workload status", appConfigWithStatus.Status.Workloads[0])
+		appConfigWithStatus.Status.Workloads[0].Status = "ready"
+		appConfigWithStatus.Status.Workloads[0].Traits[0].Status = "running"
+		Expect(k8sClient.Status().Update(ctx, &appConfigWithStatus)).ShouldNot(HaveOccurred())
+		By("Checking appConfig status is updated")
+		appConfigWithStatus = v1alpha2.ApplicationConfiguration{}
+		Expect(k8sClient.Get(ctx, appKey, &appConfigWithStatus)).ShouldNot(HaveOccurred())
+		Expect(appConfigWithStatus.Status.Workloads[0].Status).Should(Equal("ready"))
+		Expect(appConfigWithStatus.Status.Workloads[0].Traits[0].Status).Should(BeEquivalentTo("running"))
+		By("Checking appConfig status is updated again")
+		appConfigWithStatus = v1alpha2.ApplicationConfiguration{}
+		Expect(k8sClient.Get(ctx, appKey, &appConfigWithStatus)).ShouldNot(HaveOccurred())
+		Expect(appConfigWithStatus.Status.Workloads[0].Status).Should(Equal("ready"))
+		Expect(appConfigWithStatus.Status.Workloads[0].Traits[0].Status).Should(BeEquivalentTo("running"))
+		By("change the appConfig, scale down the replicate")
+		mts.Spec.ReplicaCount = 1
+		appConfigWithStatus.Spec.Components[0].Traits[0].Trait.Raw = util.JSONMarshal(mts)
+		Expect(k8sClient.Update(ctx, &appConfigWithStatus)).ShouldNot(HaveOccurred())
+		By("Verify deployment scaled according to the manualScaler trait")
+		Eventually(
+			func() int32 {
+				k8sClient.Get(ctx, objectKey, deploy)
+				return deploy.Status.Replicas
+			},
+			time.Second*120, time.Second*5).Should(BeEquivalentTo(1))
+		By("Checking appConfig status is preserved through reconcile")
+		appConfigWithStatus = v1alpha2.ApplicationConfiguration{}
+		Expect(k8sClient.Get(ctx, appKey, &appConfigWithStatus)).ShouldNot(HaveOccurred())
+		Expect(appConfigWithStatus.Status.Workloads[0].Status).Should(Equal("ready"))
+		Expect(appConfigWithStatus.Status.Workloads[0].Traits[0].Status).Should(BeEquivalentTo("running"))
 	})
 })

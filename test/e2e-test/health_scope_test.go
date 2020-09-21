@@ -64,7 +64,7 @@ var _ = Describe("HealthScope", func() {
 		Expect(k8sClient.Delete(ctx, &ns, client.PropagationPolicy(metav1.DeletePropagationForeground))).Should(BeNil())
 	})
 
-	It("apply an application config", func() {
+	It("Test an application config with health scope", func() {
 		healthScopeName := "example-health-scope"
 		// create health scope definition
 		sd := v1alpha2.ScopeDefinition{

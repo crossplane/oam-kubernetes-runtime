@@ -208,6 +208,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	if err := r.client.Get(ctx, req.NamespacedName, ac); err != nil {
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetAppConfig)
 	}
+	acPatch := ac.DeepCopy()
 
 	if ac.ObjectMeta.DeletionTimestamp.IsZero() {
 		if registerFinalizers(ac) {
@@ -296,10 +297,8 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		record.Event(ac, event.Normal(reasonGGComponent, "Successfully garbage collected component"))
 	}
 
-	// patch the final status
-	acPatch := client.MergeFrom(ac.DeepCopyObject())
-
-	r.updateStatus(ctx, ac, workloads)
+	// patch the final status on the client side, k8s sever can't merge them
+	r.updateStatus(ctx, ac, acPatch, workloads)
 
 	ac.Status.Dependency = v1alpha2.DependencyStatus{}
 	waitTime := longWait
@@ -308,11 +307,11 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		ac.Status.Dependency = *depStatus
 	}
 
-	return reconcile.Result{RequeueAfter: waitTime},
-		errors.Wrap(r.client.Status().Patch(ctx, ac, acPatch, client.FieldOwner(ac.GetUID())), errUpdateAppConfigStatus)
+	// the posthook function will do the final status update
+	return reconcile.Result{RequeueAfter: waitTime}, nil
 }
 
-func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, workloads []Workload) {
+func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac, acPatch *v1alpha2.ApplicationConfiguration, workloads []Workload) {
 	ac.Status.Workloads = make([]v1alpha2.WorkloadStatus, len(workloads))
 	revisionStatus := make([]v1alpha2.WorkloadStatus, 0)
 	for i, w := range workloads {
@@ -346,8 +345,34 @@ func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac *v1alpha
 		}
 	}
 	ac.Status.Workloads = append(ac.Status.Workloads, revisionStatus...)
-
+	// patch the extra fields in the status that is wiped by the Status() function
+	patchExtraStatusField(&ac.Status, acPatch.Status)
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
+}
+
+func patchExtraStatusField(acStatus *v1alpha2.ApplicationConfigurationStatus, acPatchStatus v1alpha2.ApplicationConfigurationStatus) {
+	// patch the extra status back
+	for i := range acStatus.Workloads {
+		for _, w := range acPatchStatus.Workloads {
+			// find the workload in the old status
+			if acStatus.Workloads[i].ComponentRevisionName == w.ComponentRevisionName {
+				if len(w.Status) > 0 {
+					acStatus.Workloads[i].Status = w.Status
+				}
+				//find the trait
+				for j := range acStatus.Workloads[i].Traits {
+					for _, t := range w.Traits {
+						tr := acStatus.Workloads[i].Traits[j].Reference
+						if t.Reference.APIVersion == tr.APIVersion && t.Reference.Kind == tr.Kind && t.Reference.Name == tr.Name {
+							if len(t.Status) > 0 {
+								acStatus.Workloads[i].Traits[j].Status = t.Status
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // if any finalizers newly registered, return true
