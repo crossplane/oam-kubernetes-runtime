@@ -730,7 +730,7 @@ var _ = Describe("Test unstructured related helper utils", func() {
 			},
 		}
 		for name, ti := range tests {
-			got := util.GetCRDName(ti.u)
+			got := util.GetDefinitionName(ti.u)
 			By(fmt.Sprint("Running test: ", name))
 			Expect(ti.exp).Should(Equal(got))
 		}

@@ -388,6 +388,11 @@ func TestServiceInjector(t *testing.T) {
 		err    error
 	}
 
+	invalideDeployment := &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1alpha1",
+		}}
+
 	cases := map[string]struct {
 		reason string
 		args   args
@@ -399,6 +404,21 @@ func TestServiceInjector(t *testing.T) {
 				w: &mock.Workload{},
 			},
 			want: want{},
+		},
+		"InvalidObject": {
+			reason: "invalid object should immediately return nil.",
+			args: args{
+				w: &mock.Workload{},
+				o: []oam.Object{
+					invalideDeployment,
+				},
+			},
+			want: want{
+				result: []oam.Object{
+					invalideDeployment,
+				},
+				err: nil,
+			},
 		},
 		"SuccessfulInjectService_1D_1C_1P": {
 			reason: "A Deployment with a port(s) should have a Service injected for first defined port.",

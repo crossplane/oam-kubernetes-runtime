@@ -724,7 +724,7 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	}
 }
 
-func TestGetCRDName(t *testing.T) {
+func TestGetDefinitionName(t *testing.T) {
 	tests := map[string]struct {
 		u      *unstructured.Unstructured
 		exp    string
@@ -749,7 +749,7 @@ func TestGetCRDName(t *testing.T) {
 	}
 	for name, ti := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := util.GetCRDName(ti.u)
+			got := util.GetDefinitionName(ti.u)
 			if got != ti.exp {
 				t.Errorf("%s getCRDName want %s got %s ", ti.reason, ti.exp, got)
 			}
