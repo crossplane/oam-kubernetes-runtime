@@ -31,7 +31,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddr, logFilePath string
+	var metricsAddr, logFilePath, leaderElectionNamespace string
 	var enableLeaderElection, logCompress bool
 	var logRetainDate int
 	var certDir string
@@ -45,6 +45,8 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaderElectionNamespace, "enable-leader-election", "default",
+		"Determines the namespace in which the leader election configmap will be created.")
 	flag.StringVar(&logFilePath, "log-file-path", "", "The address the metric endpoint binds to.")
 	flag.IntVar(&logRetainDate, "log-retain-date", 7, "The number of days of logs history to retain.")
 	flag.BoolVar(&logCompress, "log-compress", true, "Enable compression on the rotated logs.")
@@ -71,12 +73,13 @@ func main() {
 
 	oamLog := ctrl.Log.WithName("oam-kubernetes-runtime")
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "oam-kubernetes-runtime",
-		Port:               webhookPort,
-		CertDir:            certDir,
+		Scheme:                  scheme,
+		MetricsBindAddress:      metricsAddr,
+		LeaderElection:          enableLeaderElection,
+		LeaderElectionID:        "oam-kubernetes-runtime",
+		LeaderElectionNamespace: leaderElectionNamespace,
+		Port:                    webhookPort,
+		CertDir:                 certDir,
 	})
 	if err != nil {
 		oamLog.Error(err, "unable to create a controller manager")
