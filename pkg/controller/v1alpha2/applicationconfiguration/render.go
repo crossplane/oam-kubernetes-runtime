@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -136,6 +137,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		oam.LabelAppComponent:         acc.ComponentName,
 		oam.LabelAppComponentRevision: componentRevisionName,
 		oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+		oam.LabelAppGeneration:        strconv.FormatInt(ac.Generation, 10),
 	}
 	util.AddLabels(w, compInfoLabels)
 
@@ -494,12 +496,23 @@ func (r *components) getDataInput(ctx context.Context, s *dagSource, ac *unstruc
 	u.SetGroupVersionKind(obj.GroupVersionKind())
 	err := r.client.Get(ctx, key, u)
 	if err != nil {
-		reason := fmt.Sprintf("failed to get object (%s)", key.String())
+		reason := fmt.Sprintf("failed to get object (%s): %v", key.String(), err)
 		return nil, false, reason, errors.Wrap(resource.IgnoreNotFound(err), reason)
 	}
-	paved := fieldpath.Pave(u.UnstructuredContent())
-	pavedAC := fieldpath.Pave(ac.UnstructuredContent())
 
+	pavedAC := fieldpath.Pave(ac.UnstructuredContent())
+	var acGeneration int
+	if err := pavedAC.GetValueInto("metadata.generation", &acGeneration); err != nil {
+		return nil, false, err.Error(), err
+	}
+
+	// The source object's app generation should match current AC. Otherwise it is from an old AC and we should wait until
+	// it is updated then reconcile again.
+	if g1, g2 := u.GetLabels()[oam.LabelAppGeneration], strconv.Itoa(acGeneration); g1 != g2 {
+		return nil, false, fmt.Sprintf("generation not match: %s, %s", g1, g2), nil
+	}
+
+	paved := fieldpath.Pave(u.UnstructuredContent())
 	rawval, err := paved.GetValue(obj.FieldPath)
 	if err != nil {
 		if fieldpath.IsNotFound(err) {
