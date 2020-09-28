@@ -313,7 +313,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac, acPatch *v1alpha2.ApplicationConfiguration, workloads []Workload) {
 	ac.Status.Workloads = make([]v1alpha2.WorkloadStatus, len(workloads))
-	revisionStatus := make([]v1alpha2.WorkloadStatus, 0)
+	historyWorkloads := make([]v1alpha2.HistoryWorkload, 0)
 	for i, w := range workloads {
 		ac.Status.Workloads[i] = workloads[i].Status()
 		if !w.RevisionEnabled {
@@ -331,10 +331,8 @@ func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac, acPatch
 			}
 			// These workload exists means the component is under progress of rollout
 			// Trait will not work for these remaining workload
-			revisionStatus = append(revisionStatus, v1alpha2.WorkloadStatus{
-				ComponentName:          w.ComponentName,
-				ComponentRevisionName:  v.GetName(),
-				HistoryWorkingRevision: true,
+			historyWorkloads = append(historyWorkloads, v1alpha2.HistoryWorkload{
+				Revision: v.GetName(),
 				Reference: v1alpha1.TypedReference{
 					APIVersion: v.GetAPIVersion(),
 					Kind:       v.GetKind(),
@@ -344,7 +342,7 @@ func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac, acPatch
 			})
 		}
 	}
-	ac.Status.Workloads = append(ac.Status.Workloads, revisionStatus...)
+	ac.Status.HistoryWorkloads = historyWorkloads
 	// patch the extra fields in the status that is wiped by the Status() function
 	patchExtraStatusField(&ac.Status, acPatch.Status)
 	ac.SetConditions(v1alpha1.ReconcileSuccess())

@@ -370,9 +370,6 @@ type WorkloadStatus struct {
 	// if it needs a single place to summarize the entire status of the workload
 	Status string `json:"status,omitempty"`
 
-	// HistoryWorkingRevision is a flag showing if it's history revision but still working
-	HistoryWorkingRevision bool `json:"historyWorkingRevision,omitempty"`
-
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
 
@@ -387,6 +384,15 @@ type WorkloadStatus struct {
 
 	// Scopes associated with this workload.
 	Scopes []WorkloadScope `json:"scopes,omitempty"`
+}
+
+// HistoryWorkload contain the old component revision that are still running
+type HistoryWorkload struct {
+	//component revision of this workload
+	Revision string `json:"revision,omitempty"`
+
+	// Reference to running workload.
+	Reference runtimev1alpha1.TypedReference `json:"workloadRef,omitempty"`
 }
 
 // A ApplicationStatus represents the state of the entire application.
@@ -405,6 +411,9 @@ type ApplicationConfigurationStatus struct {
 
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`
+
+	// HistoryWorkloads will record history but still working revision workloads.
+	HistoryWorkloads []HistoryWorkload `json:"historyWorkloads"`
 }
 
 // DependencyStatus represents the observed state of the dependency of
