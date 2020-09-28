@@ -130,7 +130,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 	})
 
 	// common function for verification
-	verify := func(appConfigName string) {
+	verify := func(appConfigName, reason string) {
 		// Verification before satisfying dependency
 		By("Checking that resource which accepts data isn't created yet")
 		inFooKey := client.ObjectKey{
@@ -143,7 +143,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, inFooKey, inFoo)
 			},
-			time.Second*60, time.Second*5).Should(&util.NotFoundMatcher{})
+			time.Second*60, time.Second*2).Should(&util.NotFoundMatcher{})
 		By("Checking that resource which provides data is created")
 		outFooKey := client.ObjectKey{
 			Name:      outName,
@@ -155,7 +155,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, outFooKey, outFoo)
 			},
-			time.Second*60, time.Second*5).Should(BeNil())
+			time.Second*60, time.Second*2).Should(BeNil())
 		By("Verify the appconfig's dependency is unsatisfied")
 		appconfigKey := client.ObjectKey{
 			Name:      appConfigName,
@@ -165,6 +165,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		depStatus := v1alpha2.DependencyStatus{
 			Unsatisfied: []v1alpha2.UnstaifiedDependency{
 				{
+					Reason: reason,
 					From: v1alpha2.DependencyFromObject{
 						TypedReference: v1alpha1.TypedReference{
 							APIVersion: tempFoo.GetAPIVersion(),
@@ -192,7 +193,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				k8sClient.Get(ctx, appconfigKey, appconfig)
 				return appconfig.Status.Dependency
 			},
-			time.Second*60, time.Second*5).Should(Equal(depStatus))
+			time.Second*60, time.Second*2).Should(Equal(depStatus))
 		// fill value to fieldPath
 		err := unstructured.SetNestedField(outFoo.Object, "test", "status", "key")
 		Expect(err).Should(BeNil())
@@ -204,7 +205,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, inFooKey, inFoo)
 			},
-			time.Second*80, time.Second*5).Should(BeNil())
+			time.Second*80, time.Second*2).Should(BeNil())
 		By("Verify the appconfig's dependency is satisfied")
 		appconfig = &v1alpha2.ApplicationConfiguration{}
 		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
@@ -213,7 +214,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				k8sClient.Get(ctx, appconfigKey, appconfig)
 				return appconfig.Status.Dependency.Unsatisfied
 			},
-			time.Second*80, time.Second*5).Should(BeNil())
+			time.Second*80, time.Second*2).Should(BeNil())
 	}
 
 	It("trait depends on another trait", func() {
@@ -281,7 +282,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName)
+		verify(appConfigName, "status.key not found in object")
 	})
 
 	It("component depends on another component", func() {
@@ -321,7 +322,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName)
+		verify(appConfigName, "status.key not found in object")
 	})
 
 	It("component depends on trait", func() {
@@ -365,7 +366,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName)
+		verify(appConfigName, "status.key not found in object")
 	})
 
 	It("trait depends on component", func() {
@@ -409,6 +410,178 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-		verify(appConfigName)
+		verify(appConfigName, "status.key not found in object")
+	})
+
+	It("component depends on trait with updated condition", func() {
+		label := map[string]string{"trait": "component", "app-hash": "hash-v1"}
+		// Create application configuration
+		appConfigName := "appconfig-trait-comp"
+		appConfig := v1alpha2.ApplicationConfiguration{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      appConfigName,
+				Namespace: namespace,
+				Labels:    label,
+			},
+			Spec: v1alpha2.ApplicationConfigurationSpec{
+				Components: []v1alpha2.ApplicationConfigurationComponent{
+					{
+						ComponentName: componentInName,
+						DataInputs: []v1alpha2.DataInput{
+							{
+								ValueFrom: v1alpha2.DataInputValueFrom{
+									DataOutputName: "trait-comp",
+								},
+								ToFieldPaths: []string{"spec.key"},
+							},
+						},
+						Traits: []v1alpha2.ComponentTrait{
+							{
+								Trait: runtime.RawExtension{
+									Object: out,
+								},
+								DataOutputs: []v1alpha2.DataOutput{
+									{
+										Name:      "trait-comp",
+										FieldPath: "status.key",
+										Conditions: []v1alpha2.ConditionRequirement{
+											{
+												Operator:  v1alpha2.ConditionEqual,
+												ValueFrom: v1alpha2.ValueFrom{FieldPath: "metadata.labels.app-hash"},
+												FieldPath: "status.app-hash",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
+		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
+		By("Checking that resource which accepts data isn't created yet")
+		inFooKey := client.ObjectKey{
+			Name:      inName,
+			Namespace: namespace,
+		}
+		inFoo := tempFoo.DeepCopy()
+		logf.Log.Info("Checking on resource that inputs data", "Key", inFooKey)
+		Eventually(
+			func() error {
+				return k8sClient.Get(ctx, inFooKey, inFoo)
+			},
+			time.Second*60, time.Second*2).Should(&util.NotFoundMatcher{})
+
+		By("Checking that resource which provides data is created")
+		// Originally the trait has value in `status.key`, but the hash label is old
+		outFooKey := client.ObjectKey{
+			Name:      outName,
+			Namespace: namespace,
+		}
+		outFoo := tempFoo.DeepCopy()
+		Eventually(
+			func() error {
+				return k8sClient.Get(ctx, outFooKey, outFoo)
+			},
+			time.Second*60, time.Second*2).Should(BeNil())
+		err := unstructured.SetNestedField(outFoo.Object, "test", "status", "key")
+		Expect(err).Should(BeNil())
+		err = unstructured.SetNestedField(outFoo.Object, "hash-v1", "status", "app-hash")
+		Expect(err).Should(BeNil())
+		Expect(k8sClient.Update(ctx, outFoo)).Should(Succeed())
+
+		appconfigKey := client.ObjectKey{
+			Name:      appConfigName,
+			Namespace: namespace,
+		}
+		newAppConfig := &v1alpha2.ApplicationConfiguration{}
+
+		// Verification after satisfying dependency
+		By("Verify the appconfig's dependency is satisfied")
+		newAppConfig = &v1alpha2.ApplicationConfiguration{}
+		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
+		Eventually(
+			func() []v1alpha2.UnstaifiedDependency {
+				var tempApp = &v1alpha2.ApplicationConfiguration{}
+				k8sClient.Get(ctx, appconfigKey, tempApp)
+				tempApp.DeepCopyInto(newAppConfig)
+				return tempApp.Status.Dependency.Unsatisfied
+			},
+			time.Second*80, time.Second*2).Should(BeNil())
+		By("Checking that resource which accepts data is created now")
+		logf.Log.Info("Checking on resource that inputs data", "Key", inFooKey)
+		Eventually(
+			func() error {
+				return k8sClient.Get(ctx, inFooKey, inFoo)
+			},
+			time.Second*80, time.Second*2).Should(BeNil())
+
+		newAppConfig.Labels["app-hash"] = "hash-v2"
+		Expect(k8sClient.Update(ctx, newAppConfig)).Should(BeNil())
+
+		By("Verify the appconfig's dependency should be unsatisfied, because requirementCondition valueFrom not match")
+
+		depStatus := v1alpha2.DependencyStatus{
+			Unsatisfied: []v1alpha2.UnstaifiedDependency{
+				{
+					Reason: "got(hash-v1) expected to be hash-v2",
+					From: v1alpha2.DependencyFromObject{
+						TypedReference: v1alpha1.TypedReference{
+							APIVersion: tempFoo.GetAPIVersion(),
+							Name:       outName,
+							Kind:       tempFoo.GetKind(),
+						},
+						FieldPath: "status.key",
+					},
+					To: v1alpha2.DependencyToObject{
+						TypedReference: v1alpha1.TypedReference{
+							APIVersion: tempFoo.GetAPIVersion(),
+							Name:       inName,
+							Kind:       tempFoo.GetKind(),
+						},
+						FieldPaths: []string{
+							"spec.key",
+						},
+					},
+				},
+			},
+		}
+		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
+		Eventually(
+			func() v1alpha2.DependencyStatus {
+				k8sClient.Get(ctx, appconfigKey, newAppConfig)
+				return newAppConfig.Status.Dependency
+			},
+			time.Second*60, time.Second*2).Should(Equal(depStatus))
+
+		// Update trait object
+		k8sClient.Get(ctx, outFooKey, outFoo) // Get the latest before update
+		err = unstructured.SetNestedField(outFoo.Object, "test-new", "status", "key")
+		Expect(err).Should(BeNil())
+		err = unstructured.SetNestedField(outFoo.Object, "hash-v2", "status", "app-hash")
+		Expect(err).Should(BeNil())
+		Expect(k8sClient.Update(ctx, outFoo)).Should(Succeed())
+
+		// Verification after satisfying dependency
+		By("Checking that resource which accepts data is updated now")
+		logf.Log.Info("Checking on resource that inputs data", "Key", inFooKey)
+		Eventually(
+			func() string {
+				k8sClient.Get(ctx, inFooKey, inFoo)
+				outdata, _, _ := unstructured.NestedString(inFoo.Object, "spec", "key")
+				return outdata
+			},
+			time.Second*80, time.Second*2).Should(Equal("test-new"))
+		By("Verify the appconfig's dependency is satisfied")
+		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
+		Eventually(
+			func() []v1alpha2.UnstaifiedDependency {
+				tempAppConfig := &v1alpha2.ApplicationConfiguration{}
+				k8sClient.Get(ctx, appconfigKey, tempAppConfig)
+				return tempAppConfig.Status.Dependency.Unsatisfied
+			},
+			time.Second*80, time.Second*2).Should(BeNil())
 	})
 })

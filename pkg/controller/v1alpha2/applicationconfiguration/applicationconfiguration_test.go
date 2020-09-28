@@ -924,6 +924,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyWorkload.GetAPIVersion(),
@@ -1006,6 +1007,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyTrait.GetAPIVersion(),
@@ -1091,6 +1093,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyWorkload.GetAPIVersion(),
@@ -1178,6 +1181,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyTrait.GetAPIVersion(),

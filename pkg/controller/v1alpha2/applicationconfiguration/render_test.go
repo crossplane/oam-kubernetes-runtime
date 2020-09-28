@@ -947,20 +947,46 @@ func TestMatchValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ac := &unstructured.Unstructured{}
+	ac.SetAPIVersion("core.oam.dev/v1alpha2")
+	ac.SetKind("ApplicationConfiguration")
+	ac.SetNamespace("test-ns")
+	ac.SetName("test-app")
+	if err := unstructured.SetNestedField(ac.Object, "test", "metadata", "labels", "app-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := unstructured.SetNestedField(ac.Object, "different", "metadata", "annotations", "app-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := unstructured.SetNestedField(ac.Object, int64(123), "metadata", "annotations", "app-int"); err != nil {
+		t.Fatal(err)
+	}
+	pavedAC, err := fieldpath.PaveObject(ac)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	type args struct {
 		conds []v1alpha2.ConditionRequirement
 		val   string
 		paved *fieldpath.Paved
+		ac    *fieldpath.Paved
 	}
 	type want struct {
 		matched bool
+		reason  string
 	}
 	cases := map[string]struct {
 		args args
 		want want
 	}{
-		"No conditions with nonempty value should match": {},
 		"No conditions with empty value should not match": {
+			want: want{
+				matched: false,
+				reason:  "value should not be empty",
+			},
+		},
+		"No conditions with nonempty value should match": {
 			args: args{
 				val: "test",
 			},
@@ -990,6 +1016,7 @@ func TestMatchValue(t *testing.T) {
 			},
 			want: want{
 				matched: false,
+				reason:  "got(different) expected to be test",
 			},
 		},
 		"notEq condition with different value should match": {
@@ -1014,6 +1041,7 @@ func TestMatchValue(t *testing.T) {
 			},
 			want: want{
 				matched: false,
+				reason:  "got(test) expected not to be test",
 			},
 		},
 		"notEmpty condition with nonempty value should match": {
@@ -1036,6 +1064,7 @@ func TestMatchValue(t *testing.T) {
 			},
 			want: want{
 				matched: false,
+				reason:  "value should not be empty",
 			},
 		},
 		"eq condition with same value from FieldPath should match": {
@@ -1062,19 +1091,62 @@ func TestMatchValue(t *testing.T) {
 			},
 			want: want{
 				matched: false,
+				reason:  "got(test) expected to be different",
+			},
+		},
+		"eq condition with same value from FieldPath and valueFrom AppConfig should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					ValueFrom: v1alpha2.ValueFrom{FieldPath: "metadata.labels.app-hash"},
+					FieldPath: "key",
+				}},
+				paved: paved,
+				ac:    pavedAC,
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with different value from FieldPath and valueFrom AppConfig should not match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					ValueFrom: v1alpha2.ValueFrom{FieldPath: "metadata.annotations.app-hash"},
+					FieldPath: "key",
+				}},
+				paved: paved,
+				ac:    pavedAC,
+			},
+			want: want{
+				matched: false,
+				reason:  "got(test) expected to be different",
+			},
+		},
+		"only string type is supported": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					ValueFrom: v1alpha2.ValueFrom{FieldPath: "metadata.annotations.app-int"},
+					FieldPath: "key",
+				}},
+				paved: paved,
+				ac:    pavedAC,
+			},
+			want: want{
+				matched: false,
+				reason:  "get valueFrom.fieldPath fail: metadata.annotations.app-int: not a string",
 			},
 		},
 	}
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			matched, err := matchValue(tc.args.conds, tc.args.val, tc.args.paved, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+			matched, reason := matchValue(tc.args.conds, tc.args.val, tc.args.paved, tc.args.ac)
 			if diff := cmp.Diff(tc.want.matched, matched); diff != "" {
 				t.Error(diff)
 			}
+			assert.Equal(t, tc.want.reason, reason)
 		})
 	}
 }

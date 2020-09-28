@@ -416,8 +416,9 @@ type DependencyStatus struct {
 // UnstaifiedDependency describes unsatisfied dependency flow between
 // one pair of objects.
 type UnstaifiedDependency struct {
-	From DependencyFromObject `json:"from"`
-	To   DependencyToObject   `json:"to"`
+	Reason string               `json:"reason"`
+	From   DependencyFromObject `json:"from"`
+	To     DependencyToObject   `json:"to"`
 }
 
 // DependencyFromObject represents the object that dependency data comes from.
@@ -490,16 +491,20 @@ type ConditionRequirement struct {
 	Operator ConditionOperator `json:"op"`
 
 	// +optional
-	// Value is mutually exclusive with ValueFrom
+	// Value specifies an expected value
+	// This is mutually exclusive with ValueFrom
 	Value string `json:"value,omitempty"`
 	// +optional
+	// ValueFrom specifies expected value from AppConfig
 	// This is mutually exclusive with Value
 	ValueFrom ValueFrom `json:"valueFrom,omitempty"`
+
 	// +optional
+	// FieldPath specifies got value from workload/trait object
 	FieldPath string `json:"fieldPath,omitempty"`
 }
 
-// ValueFrom get value from AppConfig object by specify a path
+// ValueFrom gets value from AppConfig object by specifying a path
 type ValueFrom struct {
 	FieldPath string `json:"fieldPath"`
 }
