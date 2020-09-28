@@ -502,7 +502,7 @@ func (r *components) getDataInput(ctx context.Context, s *dagSource, ac *unstruc
 
 	pavedAC := fieldpath.Pave(ac.UnstructuredContent())
 	var acGeneration int
-	if err := pavedAC.GetValueInto("metadata.generation", &acGeneration); err != nil {
+	if err := pavedAC.GetValueInto("metadata.generation", &acGeneration); err != nil && !fieldpath.IsNotFound(err) {
 		return nil, false, err.Error(), err
 	}
 

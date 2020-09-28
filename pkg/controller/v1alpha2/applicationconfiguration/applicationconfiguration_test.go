@@ -1333,8 +1333,9 @@ func TestDependency(t *testing.T) {
 
 			ac := &v1alpha2.ApplicationConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-app",
-					Namespace: "test-ns",
+					Name:       "test-app",
+					Namespace:  "test-ns",
+					Generation: 0,
 				},
 				Spec: v1alpha2.ApplicationConfigurationSpec{
 					Components: tc.args.components,
