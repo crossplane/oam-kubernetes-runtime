@@ -101,16 +101,29 @@ spec:
                                 to match a value.
                               properties:
                                 fieldPath:
+                                  description: FieldPath specifies got value from
+                                    workload/trait object
                                   type: string
                                 op:
                                   description: ConditionOperator specifies the operator
                                     to match a value.
                                   type: string
                                 value:
+                                  description: Value specifies an expected value This
+                                    is mutually exclusive with ValueFrom
                                   type: string
+                                valueFrom:
+                                  description: ValueFrom specifies expected value
+                                    from AppConfig This is mutually exclusive with
+                                    Value
+                                  properties:
+                                    fieldPath:
+                                      type: string
+                                  required:
+                                  - fieldPath
+                                  type: object
                               required:
                               - op
-                              - value
                               type: object
                             type: array
                           fieldPath:
@@ -233,16 +246,29 @@ spec:
                                       requirement to match a value.
                                     properties:
                                       fieldPath:
+                                        description: FieldPath specifies got value
+                                          from workload/trait object
                                         type: string
                                       op:
                                         description: ConditionOperator specifies the
                                           operator to match a value.
                                         type: string
                                       value:
+                                        description: Value specifies an expected value
+                                          This is mutually exclusive with ValueFrom
                                         type: string
+                                      valueFrom:
+                                        description: ValueFrom specifies expected
+                                          value from AppConfig This is mutually exclusive
+                                          with Value
+                                        properties:
+                                          fieldPath:
+                                            type: string
+                                        required:
+                                        - fieldPath
+                                        type: object
                                     required:
                                     - op
-                                    - value
                                     type: object
                                   type: array
                                 fieldPath:
@@ -338,6 +364,8 @@ spec:
                           - kind
                           - name
                           type: object
+                        reason:
+                          type: string
                         to:
                           description: DependencyToObject represents the object that
                             dependency data goes to.
@@ -365,6 +393,7 @@ spec:
                           type: object
                       required:
                       - from
+                      - reason
                       - to
                       type: object
                     type: array

@@ -202,10 +202,17 @@ var _ = BeforeSuite(func(done Done) {
 						OpenAPIV3Schema: &crdv1.JSONSchemaProps{
 							Type: "object",
 							Properties: map[string]crdv1.JSONSchemaProps{
-								"status": {
+								"spec": {
 									Type: "object",
 									Properties: map[string]crdv1.JSONSchemaProps{
 										"key": {Type: "string"},
+									},
+								},
+								"status": {
+									Type: "object",
+									Properties: map[string]crdv1.JSONSchemaProps{
+										"key":      {Type: "string"},
+										"app-hash": {Type: "string"},
 									},
 								},
 							},
