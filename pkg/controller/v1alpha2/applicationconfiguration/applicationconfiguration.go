@@ -227,6 +227,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 	// execute the posthooks at the end no matter what
 	defer func() {
+		updateObservedGeneration(ac)
 		for name, hook := range r.postHooks {
 			exeResult, err := hook.Exec(ctx, ac, log)
 			if err != nil {
@@ -239,7 +240,6 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 			}
 			r.record.Event(ac, event.Normal(reasonExecutePosthook, "Successfully executed a posthook", "posthook name", name))
 		}
-		updateObservedGeneration(ac)
 		returnErr = errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 	}()
 
