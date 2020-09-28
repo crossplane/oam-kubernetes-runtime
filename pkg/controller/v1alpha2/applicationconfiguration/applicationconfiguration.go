@@ -228,6 +228,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 	// execute the posthooks at the end no matter what
 	defer func() {
+		updateObservedGeneration(ac)
 		for name, hook := range r.postHooks {
 			exeResult, err := hook.Exec(ctx, ac, log)
 			if err != nil {
@@ -346,6 +347,12 @@ func (r *OAMApplicationReconciler) updateStatus(ctx context.Context, ac, acPatch
 	// patch the extra fields in the status that is wiped by the Status() function
 	patchExtraStatusField(&ac.Status, acPatch.Status)
 	ac.SetConditions(v1alpha1.ReconcileSuccess())
+}
+
+func updateObservedGeneration(ac *v1alpha2.ApplicationConfiguration) {
+	if ac.Status.ObservedGeneration != ac.Generation {
+		ac.Status.ObservedGeneration = ac.Generation
+	}
 }
 
 func patchExtraStatusField(acStatus *v1alpha2.ApplicationConfigurationStatus, acPatchStatus v1alpha2.ApplicationConfigurationStatus) {

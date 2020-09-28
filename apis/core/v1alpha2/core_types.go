@@ -221,6 +221,10 @@ type ComponentSpec struct {
 
 // A ComponentStatus represents the observed state of a Component.
 type ComponentStatus struct {
+	// The generation observed by the component controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration"`
+
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
 	// LatestRevision of component
@@ -411,6 +415,10 @@ type ApplicationConfigurationStatus struct {
 
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`
+
+	// The generation observed by the appConfig controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration"`
 
 	// HistoryWorkloads will record history but still working revision workloads.
 	HistoryWorkloads []HistoryWorkload `json:"historyWorkloads"`
