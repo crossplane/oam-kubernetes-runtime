@@ -107,10 +107,18 @@ spec:
                                     to match a value.
                                   type: string
                                 value:
+                                  description: Value is mutually exclusive with ValueFrom
                                   type: string
+                                valueFrom:
+                                  description: This is mutually exclusive with Value
+                                  properties:
+                                    fieldPath:
+                                      type: string
+                                  required:
+                                  - fieldPath
+                                  type: object
                               required:
                               - op
-                              - value
                               type: object
                             type: array
                           fieldPath:
@@ -239,10 +247,20 @@ spec:
                                           operator to match a value.
                                         type: string
                                       value:
+                                        description: Value is mutually exclusive with
+                                          ValueFrom
                                         type: string
+                                      valueFrom:
+                                        description: This is mutually exclusive with
+                                          Value
+                                        properties:
+                                          fieldPath:
+                                            type: string
+                                        required:
+                                        - fieldPath
+                                        type: object
                                     required:
                                     - op
-                                    - value
                                     type: object
                                   type: array
                                 fieldPath:

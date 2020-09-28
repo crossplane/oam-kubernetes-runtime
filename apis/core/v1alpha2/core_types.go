@@ -488,9 +488,20 @@ type DataInputValueFrom struct {
 // ConditionRequirement specifies the requirement to match a value.
 type ConditionRequirement struct {
 	Operator ConditionOperator `json:"op"`
-	Value    string            `json:"value"`
+
+	// +optional
+	// Value is mutually exclusive with ValueFrom
+	Value string `json:"value,omitempty"`
+	// +optional
+	// This is mutually exclusive with Value
+	ValueFrom ValueFrom `json:"valueFrom,omitempty"`
 	// +optional
 	FieldPath string `json:"fieldPath,omitempty"`
+}
+
+// ValueFrom get value from AppConfig object by specify a path
+type ValueFrom struct {
+	FieldPath string `json:"fieldPath"`
 }
 
 // ConditionOperator specifies the operator to match a value.
