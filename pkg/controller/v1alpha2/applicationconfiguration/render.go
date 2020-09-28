@@ -509,7 +509,7 @@ func (r *components) getDataInput(ctx context.Context, s *dagSource, ac *unstruc
 	// The source object's app generation should match current AC. Otherwise it is from an old AC and we should wait until
 	// it is updated then reconcile again.
 	if g1, g2 := u.GetLabels()[oam.LabelAppGeneration], strconv.Itoa(acGeneration); g1 != g2 {
-		return nil, false, fmt.Sprintf("generation not match: %s, %s", g1, g2), nil
+		return nil, false, fmt.Sprintf("generation not match: obj (%s), ac (%s)", g1, g2), nil
 	}
 
 	paved := fieldpath.Pave(u.UnstructuredContent())
