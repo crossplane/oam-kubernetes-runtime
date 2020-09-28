@@ -369,12 +369,6 @@ spec:
                       type: object
                     type: array
                 type: object
-<<<<<<< HEAD
-              observedGeneration:
-                description: The generation observed by the appConfig controller.
-                format: int64
-                type: integer
-=======
               historyWorkloads:
                 description: HistoryWorkloads will record history but still working
                   revision workloads.
@@ -407,7 +401,10 @@ spec:
                       type: object
                   type: object
                 type: array
->>>>>>> upstream/master
+              observedGeneration:
+                description: The generation observed by the appConfig controller.
+                format: int64
+                type: integer
               status:
                 description: Status is a place holder for a customized controller
                   to fill if it needs a single place to summarize the status of the
