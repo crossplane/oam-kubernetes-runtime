@@ -34,15 +34,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 const (
 	// TypeField is the special field indicate the type of the workloadDefinition
 	TypeField = "type"
-
-	// WorkloadTypeLabel indicates the type of the workloadDefinition
-	WorkloadTypeLabel = "workload.oam.dev/type"
 )
 
 // MutatingHandler handles Component
@@ -124,7 +122,7 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.Component) error {
 		mutatelog.Info("Set the component workload GVK", "workload api version", workload.GetAPIVersion(), "workload Kind", workload.GetKind())
 		// copy namespace/label/annotation to the workload and add workloadType label
 		workload.SetNamespace(obj.GetNamespace())
-		workload.SetLabels(util.MergeMap(obj.GetLabels(), map[string]string{WorkloadTypeLabel: workloadType}))
+		workload.SetLabels(util.MergeMap(obj.GetLabels(), map[string]string{oam.WorkloadTypeLabel: workloadType}))
 		workload.SetAnnotations(obj.GetAnnotations())
 		// copy back the object
 		rawBye, err := json.Marshal(workload.Object)

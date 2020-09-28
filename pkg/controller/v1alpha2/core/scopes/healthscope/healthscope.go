@@ -41,7 +41,7 @@ import (
 const (
 	infoFmtUnknownWorkload = "APIVersion %v Kind %v workload is unknown for HealthScope "
 	infoFmtReady           = "Ready: %d/%d "
-	infoFmtNoChildRes      = "cannot get child resource references of ContainerizedWorkload %v"
+	infoFmtNoChildRes      = "cannot get child resource references of workload %v"
 	errHealthCheck         = "error occurs in health check "
 
 	defaultTimeout = 10 * time.Second
@@ -97,6 +97,7 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 		HealthStatus:   StatusHealthy,
 		TargetWorkload: ref,
 	}
+
 	cwObj := corev1alpha2.ContainerizedWorkload{}
 	cwObj.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Name}, &cwObj); err != nil {
@@ -104,19 +105,22 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
-
 	r.ComponentName = getComponentNameFromLabel(&cwObj)
 	r.TargetWorkload.UID = cwObj.GetUID()
 
-	subConditions := []*WorkloadHealthCondition{}
 	childRefs := cwObj.Status.Resources
+	updateChildResourcesCondition(ctx, c, namespace, r, ref, childRefs)
+	return r
+}
+
+func updateChildResourcesCondition(ctx context.Context, c client.Client, namespace string, r *WorkloadHealthCondition, ref runtimev1alpha1.TypedReference, childRefs []runtimev1alpha1.TypedReference) {
+	subConditions := []*WorkloadHealthCondition{}
 	if len(childRefs) != 2 {
 		// one deployment and one svc are required by containerizedworkload
 		r.Diagnosis = fmt.Sprintf(infoFmtNoChildRes, ref.Name)
 		r.HealthStatus = StatusUnhealthy
-		return r
+		return
 	}
-
 	for _, childRef := range childRefs {
 		switch childRef.Kind {
 		case kindDeployment:
@@ -145,7 +149,6 @@ func CheckContainerziedWorkloadHealth(ctx context.Context, c client.Client, ref 
 		}
 		r.Diagnosis = fmt.Sprintf("%s%s", r.Diagnosis, sc.Diagnosis)
 	}
-	return r
 }
 
 // CheckDeploymentHealth checks health condition of Deployment
