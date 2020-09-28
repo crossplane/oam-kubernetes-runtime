@@ -1408,9 +1408,8 @@ func TestPatchExtraField(t *testing.T) {
 			acStatus: &v1alpha2.ApplicationConfigurationStatus{
 				Workloads: []v1alpha2.WorkloadStatus{
 					{
-						HistoryWorkingRevision: false,
-						ComponentName:          "test",
-						ComponentRevisionName:  "test-v1",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
 						Traits: []v1alpha2.WorkloadTrait{
 							{
 								Reference: runtimev1alpha1.TypedReference{
@@ -1444,10 +1443,9 @@ func TestPatchExtraField(t *testing.T) {
 			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
 				Workloads: []v1alpha2.WorkloadStatus{
 					{
-						Status:                 "we need to add this",
-						HistoryWorkingRevision: false,
-						ComponentName:          "test",
-						ComponentRevisionName:  "test-v1",
+						Status:                "we need to add this",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
 						Traits: []v1alpha2.WorkloadTrait{
 							{
 								Status: "add this too",
@@ -1466,9 +1464,8 @@ func TestPatchExtraField(t *testing.T) {
 			acStatus: &v1alpha2.ApplicationConfigurationStatus{
 				Workloads: []v1alpha2.WorkloadStatus{
 					{
-						HistoryWorkingRevision: false,
-						ComponentName:          "test",
-						ComponentRevisionName:  "test-v1",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
 						Traits: []v1alpha2.WorkloadTrait{
 							{
 								Reference: runtimev1alpha1.TypedReference{
@@ -1502,10 +1499,9 @@ func TestPatchExtraField(t *testing.T) {
 			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
 				Workloads: []v1alpha2.WorkloadStatus{
 					{
-						Status:                 "we need to add this",
-						HistoryWorkingRevision: false,
-						ComponentName:          "test",
-						ComponentRevisionName:  "test-v1",
+						Status:                "we need to add this",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
 						Traits: []v1alpha2.WorkloadTrait{
 							{
 								Reference: runtimev1alpha1.TypedReference{
@@ -1523,9 +1519,8 @@ func TestPatchExtraField(t *testing.T) {
 			acStatus: &v1alpha2.ApplicationConfigurationStatus{
 				Workloads: []v1alpha2.WorkloadStatus{
 					{
-						HistoryWorkingRevision: false,
-						ComponentName:          "test",
-						ComponentRevisionName:  "test-v1",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
 						Traits: []v1alpha2.WorkloadTrait{
 							{
 								Reference: runtimev1alpha1.TypedReference{
@@ -1559,9 +1554,8 @@ func TestPatchExtraField(t *testing.T) {
 			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
 				Workloads: []v1alpha2.WorkloadStatus{
 					{
-						HistoryWorkingRevision: false,
-						ComponentName:          "test",
-						ComponentRevisionName:  "test-v1",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
 						Traits: []v1alpha2.WorkloadTrait{
 							{
 								Reference: runtimev1alpha1.TypedReference{
