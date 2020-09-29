@@ -2,7 +2,6 @@ apiVersion: core.oam.dev/v1alpha2
 kind: HealthScope
 metadata:
   name: example-health-scope
-  namespace: oam
 spec:
   probe-timeout: 5
   probe-interval: 5
