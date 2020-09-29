@@ -3,7 +3,15 @@ kind: HealthScope
 metadata:
   name: example-health-scope
 spec:
-  workloadRefs: []
+  probe-timeout: 5
+  probe-interval: 5
+  workloadRefs:
+    - apiVersion: core.oam.dev/v1alpha2
+      kind: ContainerizedWorkload
+      name: example-component
+    - apiVersion: core.oam.dev/v1alpha2
+      kind: ContainerizedWorkload
+      name: example-component2
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: ApplicationConfiguration
