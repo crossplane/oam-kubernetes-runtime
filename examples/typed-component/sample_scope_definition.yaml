@@ -1,0 +1,52 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: ScopeDefinition
+metadata:
+  name: healthscopes.core.oam.dev
+spec:
+  definitionRef:
+    name: healthscopes.core.oam.dev
+  workloadRefsPath: spec.workloadRefs
+  allowComponentOverlap: true
+
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: HealthScope
+metadata:
+  name: example-health-scope
+  namespace: oam
+spec:
+  probe-timeout: 5
+  probe-interval: 5
+  workloadRefs:
+    - apiVersion: core.oam.dev/v1alpha2
+      kind: ContainerizedWorkload
+      name: example-component
+    - apiVersion: core.oam.dev/v1alpha2
+      kind: ContainerizedWorkload
+      name: example-component2
+
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+  namespace: oam
+spec:
+  components:
+    - componentName: example-component
+      parameterValues:
+        - name: image
+          value: wordpress:php7.2
+      traits:
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            metadata:
+              name: example-appconfig-trait
+            spec:
+              replicaCount: 3
+      scopes:
+        - scopeRef:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: HealthScope
+            name: example-health-scope
