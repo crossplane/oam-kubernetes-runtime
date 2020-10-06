@@ -170,6 +170,10 @@ var _ = BeforeSuite(func(done Done) {
 				Kind: "User",
 				Name: "system:serviceaccount:crossplane-system:crossplane",
 			},
+			{
+				Kind: "User",
+				Name: "system:serviceaccount:oam-system:oam-kubernetes-runtime-e2e",
+			},
 		},
 		RoleRef: rbac.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
