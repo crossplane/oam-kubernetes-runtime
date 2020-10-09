@@ -38,13 +38,13 @@ rules:
 - apiGroups:
   - apps
   resources:
-  - deployment
+  - deployments
   verbs:
   - "*"
 - apiGroups:
   - ""
   resources:
-  - service
+  - services
   verbs:
   - "*"
 
