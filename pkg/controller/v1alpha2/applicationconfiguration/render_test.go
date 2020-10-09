@@ -955,6 +955,9 @@ func TestMatchValue(t *testing.T) {
 	if err := unstructured.SetNestedField(ac.Object, "test", "metadata", "labels", "app-hash"); err != nil {
 		t.Fatal(err)
 	}
+	if err := unstructured.SetNestedField(ac.Object, "test", "metadata", "labels", "app.hash"); err != nil {
+		t.Fatal(err)
+	}
 	if err := unstructured.SetNestedField(ac.Object, "different", "metadata", "annotations", "app-hash"); err != nil {
 		t.Fatal(err)
 	}
@@ -1099,6 +1102,20 @@ func TestMatchValue(t *testing.T) {
 				conds: []v1alpha2.ConditionRequirement{{
 					Operator:  v1alpha2.ConditionEqual,
 					ValueFrom: v1alpha2.ValueFrom{FieldPath: "metadata.labels.app-hash"},
+					FieldPath: "key",
+				}},
+				paved: paved,
+				ac:    pavedAC,
+			},
+			want: want{
+				matched: true,
+			},
+		},
+		"eq condition with same value but contain period in annotation should match": {
+			args: args{
+				conds: []v1alpha2.ConditionRequirement{{
+					Operator:  v1alpha2.ConditionEqual,
+					ValueFrom: v1alpha2.ValueFrom{FieldPath: "metadata.labels[app.hash]"},
 					FieldPath: "key",
 				}},
 				paved: paved,

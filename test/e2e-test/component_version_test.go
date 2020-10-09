@@ -383,13 +383,16 @@ var _ = Describe("Versioning mechanism of components", func() {
 
 			By("Check AppConfig status")
 			Eventually(
-				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: appconfig.Name}, &appconfig)
+				func() string {
+					err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: appconfig.Name}, &appconfig)
+					if err != nil {
+						return ""
+					}
+					return appconfig.Status.Workloads[0].ComponentRevisionName
 				},
-				time.Second*15, time.Millisecond*500).Should(BeNil())
+				time.Second*60, time.Millisecond*500).Should(BeEquivalentTo(revisionNameV2))
 
 			Expect(len(appconfig.Status.Workloads)).Should(BeEquivalentTo(1))
-			Expect(appconfig.Status.Workloads[0].ComponentRevisionName).Should(BeEquivalentTo(revisionNameV2))
 
 			Expect(len(appconfig.Status.HistoryWorkloads)).Should(BeEquivalentTo(1))
 			Expect(appconfig.Status.HistoryWorkloads[0].Revision).Should(BeEquivalentTo(revisionNameV1))

@@ -1,0 +1,47 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: source
+spec:
+  workload:
+    apiVersion: example.com/v1
+    kind: Foo
+    metadata:
+      name: source
+    spec:
+      key: test-value
+    status:
+      state: pending
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: sink
+spec:
+  workload:
+    apiVersion: example.com/v1
+    kind: Foo
+    metadata:
+      name: sink
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - componentName: source
+      dataOutputs:
+        - name: example-key
+          fieldPath: "spec.key"
+          conditions:
+            - op: eq
+              valueFrom:
+                fieldPath: metadata.annotations[oam.updateVersion]
+              fieldPath: "status.state"
+    - componentName: sink
+      dataInputs:
+        - valueFrom:
+            dataOutputName: example-key
+          toFieldPaths:
+            - "spec.key"

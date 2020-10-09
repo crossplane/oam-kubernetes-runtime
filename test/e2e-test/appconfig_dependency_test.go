@@ -46,8 +46,13 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		}
 		logf.Log.Info("Start to run a test, clean up previous resources")
 		// delete the namespace with all its resources
-		Expect(k8sClient.Delete(ctx, &ns, client.PropagationPolicy(metav1.DeletePropagationForeground))).
-			Should(SatisfyAny(BeNil(), &util.NotFoundMatcher{}))
+		Eventually(
+			// gomega has a bug that can't take nil as the actual input, so has to make it a func
+			func() error {
+				return k8sClient.Delete(ctx, &ns, client.PropagationPolicy(metav1.DeletePropagationForeground))
+			},
+			time.Second*30, time.Millisecond*500).Should(SatisfyAny(BeNil(), &util.NotFoundMatcher{}))
+
 		logf.Log.Info("make sure all the resources are removed")
 		objectKey := client.ObjectKey{
 			Name: namespace,
@@ -193,7 +198,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				k8sClient.Get(ctx, appconfigKey, appconfig)
 				return appconfig.Status.Dependency
 			},
-			time.Second*60, time.Second*2).Should(Equal(depStatus))
+			time.Second*120, time.Second*2).Should(Equal(depStatus))
 		// fill value to fieldPath
 		err := unstructured.SetNestedField(outFoo.Object, "test", "status", "key")
 		Expect(err).Should(BeNil())
@@ -205,7 +210,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 			func() error {
 				return k8sClient.Get(ctx, inFooKey, inFoo)
 			},
-			time.Second*80, time.Second*2).Should(BeNil())
+			time.Second*120, time.Second*2).Should(BeNil())
 		By("Verify the appconfig's dependency is satisfied")
 		appconfig = &v1alpha2.ApplicationConfiguration{}
 		logf.Log.Info("Checking on appconfig", "Key", appconfigKey)
@@ -214,7 +219,7 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 				k8sClient.Get(ctx, appconfigKey, appconfig)
 				return appconfig.Status.Dependency.Unsatisfied
 			},
-			time.Second*80, time.Second*2).Should(BeNil())
+			time.Second*300, time.Second*2).Should(BeNil())
 	}
 
 	It("trait depends on another trait", func() {
