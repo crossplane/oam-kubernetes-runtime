@@ -175,7 +175,7 @@ var _ = BeforeSuite(func(done Done) {
 			Verbs:     []string{rbac.VerbAll},
 		}},
 	}
-	Expect(k8sClient.Create(context.Background(), &exampleClusterRole)).Should(BeNil())
+	Expect(k8sClient.Create(context.Background(), &exampleClusterRole)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
 	By("Created example.com cluster role for the test service account")
 
 	adminRoleBinding := rbac.ClusterRoleBinding{
