@@ -54,6 +54,11 @@ type WorkloadDefinitionSpec struct {
 	// +optional
 	RevisionLabel string `json:"revisionLabel,omitempty"`
 
+	// PodSpecPath indicates where/if this workload has K8s podSpec field
+	// if one workload has podSpec, trait can do lot's of assumption such as port, env, volume fields.
+	// +optional
+	PodSpecPath string `json:"podSpecPath,omitempty"`
+
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -189,9 +194,7 @@ type ComponentParameter struct {
 	// paths without a leading dot, for example 'spec.replicas'.
 	FieldPaths []string `json:"fieldPaths"`
 
-	// TODO(negz): Use +kubebuilder:default marker to default Required to false
-	// once we're generating v1 CRDs.
-
+	// +kubebuilder:default:=false
 	// Required specifies whether or not a value for this parameter must be
 	// supplied when authoring an ApplicationConfiguration.
 	// +optional
@@ -231,9 +234,7 @@ type ComponentStatus struct {
 	// +optional
 	LatestRevision *Revision `json:"latestRevision,omitempty"`
 
-	// TODO(negz): Maintain references to any ApplicationConfigurations that
-	// reference this component? Doing so would allow us to queue a reconcile
-	// for consuming ApplicationConfigurations when this Component changed.
+	// One Component should only be used by one AppConfig
 }
 
 // Revision has name and revision number
