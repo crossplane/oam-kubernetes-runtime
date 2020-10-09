@@ -200,6 +200,7 @@ func TestRenderComponents(t *testing.T) {
 								oam.LabelAppName:              acName,
 								oam.LabelAppComponentRevision: "",
 								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+								oam.LabelAppGeneration:        "0",
 							})
 							return w
 						}(),
@@ -214,6 +215,7 @@ func TestRenderComponents(t *testing.T) {
 									oam.LabelAppName:              acName,
 									oam.LabelAppComponentRevision: "",
 									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+									oam.LabelAppGeneration:        "0",
 								})
 								return &Trait{Object: *t}
 							}(),
@@ -275,6 +277,7 @@ func TestRenderComponents(t *testing.T) {
 								oam.LabelAppName:              acName,
 								oam.LabelAppComponentRevision: revisionName,
 								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+								oam.LabelAppGeneration:        "0",
 							})
 							return w
 						}(),
@@ -289,6 +292,7 @@ func TestRenderComponents(t *testing.T) {
 									oam.LabelAppName:              acName,
 									oam.LabelAppComponentRevision: revisionName,
 									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+									oam.LabelAppGeneration:        "0",
 								})
 								return &Trait{Object: *t}
 							}(),
@@ -341,6 +345,7 @@ func TestRenderComponents(t *testing.T) {
 								oam.LabelAppName:              acName,
 								oam.LabelAppComponentRevision: revisionName2,
 								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+								oam.LabelAppGeneration:        "0",
 							})
 							return w
 						}(),
@@ -355,6 +360,7 @@ func TestRenderComponents(t *testing.T) {
 									oam.LabelAppName:              acName,
 									oam.LabelAppComponentRevision: revisionName2,
 									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+									oam.LabelAppGeneration:        "0",
 								})
 								return &Trait{Object: *t}
 							}(),

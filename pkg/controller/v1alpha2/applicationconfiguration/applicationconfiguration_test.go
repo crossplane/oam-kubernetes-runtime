@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 )
 
@@ -856,6 +857,7 @@ func TestDependency(t *testing.T) {
 	unreadyWorkload.SetKind("Workload")
 	unreadyWorkload.SetNamespace("test-ns")
 	unreadyWorkload.SetName("unready-workload")
+	unreadyWorkload.SetLabels(map[string]string{oam.LabelAppGeneration: "0"})
 
 	readyWorkload := unreadyWorkload.DeepCopy()
 	readyWorkload.SetName("ready-workload")
@@ -879,6 +881,7 @@ func TestDependency(t *testing.T) {
 	unreadyTrait.SetKind("Trait")
 	unreadyTrait.SetNamespace("test-ns")
 	unreadyTrait.SetName("unready-trait")
+	unreadyTrait.SetLabels(map[string]string{oam.LabelAppGeneration: "0"})
 
 	readyTrait := unreadyTrait.DeepCopy()
 	readyTrait.SetName("ready-trait")
@@ -887,10 +890,14 @@ func TestDependency(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	readyTraitNewGen := readyTrait.DeepCopy()
+	readyTraitNewGen.SetLabels(map[string]string{oam.LabelAppGeneration: "1"})
+
 	type args struct {
 		components []v1alpha2.ApplicationConfigurationComponent
 		wl         *unstructured.Unstructured
 		trait      *unstructured.Unstructured
+		generation int64
 	}
 	type want struct {
 		err             error
@@ -1292,6 +1299,92 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{}},
 		},
+		"DataOutput from old generation should be regarded as not ready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataOutputs: []v1alpha2.DataOutput{{
+							Name:      "test-output",
+							FieldPath: "status.key",
+						}},
+					}},
+				}},
+				wl:         unreadyWorkload.DeepCopy(),
+				trait:      readyTrait.DeepCopy(),
+				generation: 1,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if !ws[0].HasDep {
+						t.Error("Workload should be unready to apply")
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{
+					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "generation not match: obj (0), ac (1)",
+						From: v1alpha2.DependencyFromObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: readyTrait.GetAPIVersion(),
+								Kind:       readyTrait.GetKind(),
+								Name:       readyTrait.GetName(),
+							},
+							FieldPath: "status.key",
+						},
+						To: v1alpha2.DependencyToObject{
+							TypedReference: runtimev1alpha1.TypedReference{
+								APIVersion: unreadyWorkload.GetAPIVersion(),
+								Kind:       unreadyWorkload.GetKind(),
+								Name:       unreadyWorkload.GetName(),
+							},
+							FieldPaths: []string{"spec.key"},
+						},
+					}},
+				},
+			},
+		},
+		"DataOutput from the same generation should be ready": {
+			args: args{
+				components: []v1alpha2.ApplicationConfigurationComponent{{
+					ComponentName: "test-component-sink",
+					DataInputs: []v1alpha2.DataInput{{
+						ValueFrom:    v1alpha2.DataInputValueFrom{DataOutputName: "test-output"},
+						ToFieldPaths: []string{"spec.key"},
+					}},
+					Traits: []v1alpha2.ComponentTrait{{
+						Trait: runtime.RawExtension{},
+						DataOutputs: []v1alpha2.DataOutput{{
+							Name:      "test-output",
+							FieldPath: "status.key",
+						}},
+					}},
+				}},
+				wl:         unreadyWorkload.DeepCopy(),
+				trait:      readyTraitNewGen.DeepCopy(),
+				generation: 1,
+			},
+			want: want{
+				verifyWorkloads: func(ws []Workload) {
+					if ws[0].HasDep {
+						t.Error("Workload should be ready to apply")
+					}
+
+					s, _, err := unstructured.NestedString(ws[0].Workload.UnstructuredContent(), "spec", "key")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if diff := cmp.Diff(s, "test"); diff != "" {
+						t.Fatal(diff)
+					}
+				},
+				depStatus: &v1alpha2.DependencyStatus{},
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -1324,17 +1417,18 @@ func TestDependency(t *testing.T) {
 				},
 				params: ParameterResolveFn(resolve),
 				workload: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
-					return tc.args.wl, nil
+					return tc.args.wl.DeepCopy(), nil
 				}),
 				trait: ResourceRenderFn(func(data []byte, p ...Parameter) (*unstructured.Unstructured, error) {
-					return tc.args.trait, nil
+					return tc.args.trait.DeepCopy(), nil
 				}),
 			}
 
 			ac := &v1alpha2.ApplicationConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-app",
-					Namespace: "test-ns",
+					Name:       "test-app",
+					Namespace:  "test-ns",
+					Generation: tc.args.generation,
 				},
 				Spec: v1alpha2.ApplicationConfigurationSpec{
 					Components: tc.args.components,

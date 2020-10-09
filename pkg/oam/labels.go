@@ -25,6 +25,8 @@ const (
 	LabelAppComponent = "app.oam.dev/component"
 	// LabelAppComponentRevision records the revision name of Component
 	LabelAppComponentRevision = "app.oam.dev/revision"
+	// LabelAppGeneration records the generation of AppConfig
+	LabelAppGeneration = "app.oam.dev/generation"
 	// LabelOAMResourceType whether a CR is workload or trait
 	LabelOAMResourceType = "app.oam.dev/resourceType"
 )
