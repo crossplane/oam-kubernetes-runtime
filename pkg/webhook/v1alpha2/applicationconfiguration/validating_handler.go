@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
+	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
@@ -22,13 +25,13 @@ import (
 )
 
 const (
-	reasonFmtWorkloadNameNotEmpty = "Versioning-enabled component's workload name MUST NOT be assigned. Expect workload name %q to be empty."
+	reasonFmtWorkloadNameNotEmpty = "Versioning-enabled component's workload name MUST NOT be assigned. Expect trait name %q to be empty."
 
 	errFmtCheckWorkloadName = "Error occurs when checking workload name. %q"
 
 	errFmtUnmarshalWorkload = "Error occurs when unmarshal workload of component %q error: %q"
 
-	// WorkloadNamePath indicates field path of workload name
+	// WorkloadNamePath indicates field path of trait name
 	WorkloadNamePath = "metadata.name"
 )
 
@@ -65,16 +68,54 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		if err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
+		if allErrs := ValidateTraitObject(obj); len(allErrs) > 0 {
+			klog.Info("create or update failed", "name", obj.Name, "errMsg", allErrs.ToAggregate().Error())
+			return admission.Denied(allErrs.ToAggregate().Error())
+		}
 		if pass, reason := checkRevisionName(obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
-		// TODO(wonderflow): Add more validation logic here.
-
 		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
+		// TODO(wonderflow): Add more validation logic here.
 	}
 	return admission.ValidationResponse(true, "")
+}
+
+// ValidateTraitObject validates the ApplicationConfiguration on creation/update
+func ValidateTraitObject(obj *v1alpha2.ApplicationConfiguration) field.ErrorList {
+	klog.Info("validate applicationConfiguration", "name", obj.Name)
+	allErrs := apimachineryvalidation.ValidateObjectMeta(&obj.ObjectMeta, true,
+		apimachineryvalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
+	for cidx, comp := range obj.Spec.Components {
+		for idx, tr := range comp.Traits {
+			fldPath := field.NewPath("spec").Child("components").Index(cidx).Child("traits").Index(idx).Child("trait")
+			var content map[string]interface{}
+			if err := json.Unmarshal(tr.Trait.Raw, &content); err != nil {
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+					"the trait is malformed"))
+				return allErrs
+			}
+			if content[TraitTypeField] != nil {
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+					"the trait contains 'name' info that should be mutated to GVK"))
+			}
+			if content[TraitSpecField] != nil {
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+					"the trait contains 'properties' info that should be mutated to spec"))
+			}
+			trait := unstructured.Unstructured{
+				Object: content,
+			}
+			if len(trait.GetAPIVersion()) == 0 || len(trait.GetKind()) == 0 {
+				allErrs = append(allErrs, field.Invalid(fldPath, content,
+					fmt.Sprintf("the trait data missing GVK, api = %s, kind = %s,", trait.GetAPIVersion(), trait.GetKind())))
+			}
+		}
+	}
+
+	return allErrs
 }
 
 func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
@@ -136,8 +177,8 @@ func (h *ValidatingHandler) InjectDecoder(d *admission.Decoder) error {
 	return nil
 }
 
-// Register will register application configuration validation to webhook
-func Register(mgr manager.Manager) {
+// RegisterValidatingHandler will register application configuration validation to webhook
+func RegisterValidatingHandler(mgr manager.Manager) {
 	server := mgr.GetWebhookServer()
 	server.Register("/validating-core-oam-dev-v1alpha2-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{}})
 }

@@ -27,6 +27,11 @@ const (
 	LabelAppComponentRevision = "app.oam.dev/revision"
 	// LabelOAMResourceType whether a CR is workload or trait
 	LabelOAMResourceType = "app.oam.dev/resourceType"
+
+	// WorkloadTypeLabel indicates the type of the workloadDefinition
+	WorkloadTypeLabel = "workload.oam.dev/type"
+	// TraitTypeLabel indicates the type of the traitDefinition
+	TraitTypeLabel = "trait.oam.dev/type"
 )
 
 const (

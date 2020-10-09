@@ -57,17 +57,27 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 	dec, _ := admission.NewDecoder(scheme)
 	decoder.InjectDecoder(dec)
 
-	app1, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			RevisionName:  "r1",
-			ComponentName: "c1",
+	app1, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
 		},
-	}}})
-	app2, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			RevisionName: "r1",
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				RevisionName:  "r1",
+				ComponentName: "c1",
+			},
+		}}})
+	app2, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
 		},
-	}}})
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				RevisionName: "r1",
+			},
+		}}})
 
 	tests := []struct {
 		req    admission.Request
