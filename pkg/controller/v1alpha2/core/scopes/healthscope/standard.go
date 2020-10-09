@@ -13,33 +13,35 @@ import (
 )
 
 var (
-	standardContainerziedGVK = schema.GroupVersionKind{
+	// PodSpecWorkload is a generic PaaS workload which adopts full K8s pod spec.
+	// More details refer to oam-dev/kubevela
+	podSpecWorkloadGVK = schema.GroupVersionKind{
 		Group:   "standard.oam.dev",
 		Version: "v1alpha1",
-		Kind:    "Containerized",
+		Kind:    "PodSpecWorkload",
 	}
 )
 
-// CheckStandardContainerziedHealth check health condition of containerizeds.standard.oam.dev
-func CheckStandardContainerziedHealth(ctx context.Context, c client.Client, ref runtimev1alpha1.TypedReference, namespace string) *WorkloadHealthCondition {
-	if ref.GroupVersionKind() != standardContainerziedGVK {
+// CheckPodSpecWorkloadHealth check health condition of podspecworkloads.standard.oam.dev
+func CheckPodSpecWorkloadHealth(ctx context.Context, c client.Client, ref runtimev1alpha1.TypedReference, namespace string) *WorkloadHealthCondition {
+	if ref.GroupVersionKind() != podSpecWorkloadGVK {
 		return nil
 	}
 	r := &WorkloadHealthCondition{
 		HealthStatus:   StatusHealthy,
 		TargetWorkload: ref,
 	}
-	containerizedObj := unstructured.Unstructured{}
-	containerizedObj.SetGroupVersionKind(ref.GroupVersionKind())
-	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Name}, &containerizedObj); err != nil {
+	workloadObj := unstructured.Unstructured{}
+	workloadObj.SetGroupVersionKind(ref.GroupVersionKind())
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Name}, &workloadObj); err != nil {
 		r.HealthStatus = StatusUnhealthy
 		r.Diagnosis = errors.Wrap(err, errHealthCheck).Error()
 		return r
 	}
-	r.ComponentName = getComponentNameFromLabel(&containerizedObj)
-	r.TargetWorkload.UID = containerizedObj.GetUID()
+	r.ComponentName = getComponentNameFromLabel(&workloadObj)
+	r.TargetWorkload.UID = workloadObj.GetUID()
 
-	childRefsData, _, _ := unstructured.NestedSlice(containerizedObj.Object, "status", "resources")
+	childRefsData, _, _ := unstructured.NestedSlice(workloadObj.Object, "status", "resources")
 	childRefs := []runtimev1alpha1.TypedReference{}
 	for _, v := range childRefsData {
 		v := v.(map[string]interface{})
