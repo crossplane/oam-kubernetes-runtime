@@ -41,7 +41,7 @@ func checkComponentVersionEnabled(ctx context.Context, client client.Reader, acc
 	return false, nil
 }
 
-// checkParams will check whethter exist parameter assigning value to trait name
+// checkParams will check whether exist parameter assigning value to workload name
 func checkParams(cp []v1alpha2.ComponentParameter, cpv []v1alpha2.ComponentParameterValue) (bool, string) {
 	targetParams := make(map[string]bool)
 	for _, v := range cp {
@@ -54,7 +54,7 @@ func checkParams(cp []v1alpha2.ComponentParameter, cpv []v1alpha2.ComponentParam
 	}
 	for _, v := range cpv {
 		if targetParams[v.Name] {
-			// check fails if get parameter to overwrite trait name
+			// check fails if get parameter to overwrite workload name
 			return false, v.Value.StrVal
 		}
 	}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -25,13 +24,13 @@ import (
 )
 
 const (
-	reasonFmtWorkloadNameNotEmpty = "Versioning-enabled component's workload name MUST NOT be assigned. Expect trait name %q to be empty."
+	reasonFmtWorkloadNameNotEmpty = "Versioning-enabled component's workload name MUST NOT be assigned. Expect workload name %q to be empty."
 
 	errFmtCheckWorkloadName = "Error occurs when checking workload name. %q"
 
 	errFmtUnmarshalWorkload = "Error occurs when unmarshal workload of component %q error: %q"
 
-	// WorkloadNamePath indicates field path of trait name
+	// WorkloadNamePath indicates field path of workload name
 	WorkloadNamePath = "metadata.name"
 )
 
@@ -86,8 +85,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 // ValidateTraitObject validates the ApplicationConfiguration on creation/update
 func ValidateTraitObject(obj *v1alpha2.ApplicationConfiguration) field.ErrorList {
 	klog.Info("validate applicationConfiguration", "name", obj.Name)
-	allErrs := apimachineryvalidation.ValidateObjectMeta(&obj.ObjectMeta, true,
-		apimachineryvalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
+	var allErrs field.ErrorList
 	for cidx, comp := range obj.Spec.Components {
 		for idx, tr := range comp.Traits {
 			fldPath := field.NewPath("spec").Child("components").Index(cidx).Child("traits").Index(idx).Child("trait")

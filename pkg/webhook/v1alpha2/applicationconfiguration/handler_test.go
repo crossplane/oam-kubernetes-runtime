@@ -25,18 +25,16 @@ import (
 
 var _ = Describe("ApplicationConfiguration Admission controller Test", func() {
 	var appConfig v1alpha2.ApplicationConfiguration
-	var appConfigName, namespace string
+	var appConfigName string
 	var label map[string]string
 	BeforeEach(func() {
-		namespace = "appconfig-test"
 		label = map[string]string{"test": "test-appConfig"}
 		// Create a appConfig definition
 		appConfigName = "example-app"
 		appConfig = v1alpha2.ApplicationConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      appConfigName,
-				Namespace: namespace,
-				Labels:    label,
+				Name:   appConfigName,
+				Labels: label,
 			},
 			Spec: v1alpha2.ApplicationConfigurationSpec{
 				Components: []v1alpha2.ApplicationConfigurationComponent{

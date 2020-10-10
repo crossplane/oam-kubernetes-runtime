@@ -83,7 +83,7 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.ApplicationConfiguration) error {
 			if err := json.Unmarshal(tr.Trait.Raw, &content); err != nil {
 				return err
 			}
-			rawByte, mutated, err := h.mutateTrait(content, comp.ComponentName, obj.GetNamespace())
+			rawByte, mutated, err := h.mutateTrait(content, comp.ComponentName)
 			if err != nil {
 				return err
 			}
@@ -102,7 +102,7 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.ApplicationConfiguration) error {
 	return nil
 }
 
-func (h *MutatingHandler) mutateTrait(content map[string]interface{}, compName, namespace string) ([]byte, bool, error) {
+func (h *MutatingHandler) mutateTrait(content map[string]interface{}, compName string) ([]byte, bool, error) {
 	if content[TraitTypeField] == nil {
 		return nil, false, nil
 	}
@@ -140,8 +140,7 @@ func (h *MutatingHandler) mutateTrait(content map[string]interface{}, compName, 
 	trait.SetAPIVersion(apiVersion)
 	trait.SetKind(customResourceDefinition.Spec.Names.Kind)
 	mutatelog.Info("Set the trait GVK", "trait api version", trait.GetAPIVersion(), "trait Kind", trait.GetKind())
-	// copy namespace/label/annotation to the trait and add traitType label
-	trait.SetNamespace(namespace)
+	// add traitType label
 	trait.SetLabels(util.MergeMap(trait.GetLabels(), map[string]string{oam.TraitTypeLabel: traitType}))
 	// copy back the object
 	rawBye, err := json.Marshal(trait.Object)
