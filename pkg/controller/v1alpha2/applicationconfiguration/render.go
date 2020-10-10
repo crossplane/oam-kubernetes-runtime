@@ -445,7 +445,7 @@ func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInp
 		}
 		if !ready {
 			uds = append(uds, makeUnsatisfiedDependency(obj, s, in, reason))
-			return uds, nil
+			continue
 		}
 
 		err = fillValue(obj, in.ToFieldPaths, val)
@@ -619,8 +619,10 @@ func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
 		for _, trait := range w.Traits {
 			if trait.Reference.APIVersion == apiVersion && trait.Reference.Kind == kind {
 				traitName = trait.Reference.Name
+				break
 			}
 		}
+		break
 	}
 
 	if len(traitName) == 0 {
