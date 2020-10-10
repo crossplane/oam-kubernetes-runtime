@@ -98,11 +98,11 @@ Here's an example and `HealthScope` CRD refers to [here](https://github.com/cros
 apiVersion: core.oam.dev/v1alpha2
 kind: ScopeDefinition
 metadata:
-  name: healthscope.core.oam.dev
+  name: healthscopes.core.oam.dev
 spec:
   allowComponentOverlap: true
   definitionRef:
-    name: healthscope.core.oam.dev
+    name: healthscopes.core.oam.dev
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: HealthScope

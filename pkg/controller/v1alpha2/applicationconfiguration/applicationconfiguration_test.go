@@ -29,10 +29,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -924,6 +927,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyWorkload.GetAPIVersion(),
@@ -1006,6 +1010,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyTrait.GetAPIVersion(),
@@ -1091,6 +1096,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyWorkload.GetAPIVersion(),
@@ -1178,6 +1184,7 @@ func TestDependency(t *testing.T) {
 				},
 				depStatus: &v1alpha2.DependencyStatus{
 					Unsatisfied: []v1alpha2.UnstaifiedDependency{{
+						Reason: "status.key not found in object",
 						From: v1alpha2.DependencyFromObject{
 							TypedReference: runtimev1alpha1.TypedReference{
 								APIVersion: unreadyTrait.GetAPIVersion(),
@@ -1393,4 +1400,237 @@ func TestAddDataOutputsToDAG(t *testing.T) {
 	if diff := cmp.Diff(s.Conditions, outs[0].Conditions); diff != "" {
 		t.Errorf("didn't add conditions to source correctly: %s", diff)
 	}
+}
+
+func TestPatchExtraField(t *testing.T) {
+	tests := map[string]struct {
+		acStatus      *v1alpha2.ApplicationConfigurationStatus
+		acPatchStatus v1alpha2.ApplicationConfigurationStatus
+		wantedStatus  *v1alpha2.ApplicationConfigurationStatus
+	}{
+		"patch extra": {
+			acStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			acPatchStatus: v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"patch trait mismatch": {
+			acStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			acPatchStatus: v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait2",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"patch workload revision mismatch": {
+			acStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			acPatchStatus: v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						Status:                "we need to add this",
+						ComponentRevisionName: "test-v2",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Status: "add this too",
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedStatus: &v1alpha2.ApplicationConfigurationStatus{
+				Workloads: []v1alpha2.WorkloadStatus{
+					{
+						ComponentName:         "test",
+						ComponentRevisionName: "test-v1",
+						Traits: []v1alpha2.WorkloadTrait{
+							{
+								Reference: runtimev1alpha1.TypedReference{
+									APIVersion: "apiVersion1",
+									Kind:       "kind1",
+									Name:       "trait1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for testName, tt := range tests {
+		t.Run(testName, func(t *testing.T) {
+			patchExtraStatusField(tt.acStatus, tt.acPatchStatus)
+			if diff := cmp.Diff(tt.acStatus, tt.wantedStatus); diff != "" {
+				t.Errorf("didn't patch to the statsu correctly: %s", diff)
+			}
+
+		})
+	}
+}
+
+func TestUpdateStatus(t *testing.T) {
+
+	mockGetAppConfigFn := func(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
+		if o, ok := obj.(*v1alpha2.ApplicationConfiguration); ok {
+			*o = v1alpha2.ApplicationConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "example-appconfig",
+					Generation: 1,
+				},
+				Spec: v1alpha2.ApplicationConfigurationSpec{
+					Components: []v1alpha2.ApplicationConfigurationComponent{
+						{
+							ComponentName: "example-component",
+							ParameterValues: []v1alpha2.ComponentParameterValue{
+								{
+									Name: "image",
+									Value: intstr.IntOrString{
+										StrVal: "wordpress:php7.3",
+									},
+								},
+							},
+						},
+					},
+				},
+				Status: v1alpha2.ApplicationConfigurationStatus{
+					ObservedGeneration: 0,
+				},
+			}
+		}
+		return nil
+	}
+
+	m := &mock.Manager{
+		Client: &test.MockClient{
+			MockGet: mockGetAppConfigFn,
+		},
+	}
+
+	r := NewReconciler(m)
+
+	ac := &v1alpha2.ApplicationConfiguration{}
+	err := r.client.Get(context.Background(), types.NamespacedName{Name: "example-appconfig"}, ac)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, ac.Status.ObservedGeneration, int64(0))
+
+	updateObservedGeneration(ac)
+	assert.Equal(t, ac.Status.ObservedGeneration, int64(1))
+
 }

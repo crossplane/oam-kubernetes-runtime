@@ -26,7 +26,9 @@ import (
 
 func TestComponentHandler(t *testing.T) {
 	q := controllertest.Queue{Interface: workqueue.New()}
-	var curComp = &v1alpha2.Component{}
+	var curComp = &v1alpha2.Component{
+		ObjectMeta: metav1.ObjectMeta{Generation: 1},
+	}
 	var createdRevisions = []appsv1.ControllerRevision{}
 	var instance = ComponentHandler{
 		Client: &test.MockClient{
@@ -109,7 +111,7 @@ func TestComponentHandler(t *testing.T) {
 		RevisionLimit: 2,
 	}
 	comp := &v1alpha2.Component{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "biz", Name: "comp1"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: "biz", Name: "comp1", Generation: 1},
 		Spec:       v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &v1.Deployment{Spec: v1.DeploymentSpec{Template: v12.PodTemplateSpec{Spec: v12.PodSpec{Containers: []v12.Container{{Image: "nginx:v1"}}}}}}}},
 	}
 
@@ -137,6 +139,8 @@ func TestComponentHandler(t *testing.T) {
 	// check component's status saved in corresponding controllerRevision
 	assert.Equal(t, gotComp.Status.LatestRevision.Name, revisions.Items[0].Name)
 	assert.Equal(t, gotComp.Status.LatestRevision.Revision, revisions.Items[0].Revision)
+	// check component's status ObservedGeneration
+	assert.Equal(t, gotComp.Status.ObservedGeneration, comp.Generation)
 	q.Done(item)
 	// ============ Test Create Event End ===================
 

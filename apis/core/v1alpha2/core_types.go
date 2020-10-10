@@ -54,6 +54,11 @@ type WorkloadDefinitionSpec struct {
 	// +optional
 	RevisionLabel string `json:"revisionLabel,omitempty"`
 
+	// PodSpecPath indicates where/if this workload has K8s podSpec field
+	// if one workload has podSpec, trait can do lot's of assumption such as port, env, volume fields.
+	// +optional
+	PodSpecPath string `json:"podSpecPath,omitempty"`
+
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -189,9 +194,7 @@ type ComponentParameter struct {
 	// paths without a leading dot, for example 'spec.replicas'.
 	FieldPaths []string `json:"fieldPaths"`
 
-	// TODO(negz): Use +kubebuilder:default marker to default Required to false
-	// once we're generating v1 CRDs.
-
+	// +kubebuilder:default:=false
 	// Required specifies whether or not a value for this parameter must be
 	// supplied when authoring an ApplicationConfiguration.
 	// +optional
@@ -221,15 +224,17 @@ type ComponentSpec struct {
 
 // A ComponentStatus represents the observed state of a Component.
 type ComponentStatus struct {
+	// The generation observed by the component controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration"`
+
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
 
 	// LatestRevision of component
 	// +optional
 	LatestRevision *Revision `json:"latestRevision,omitempty"`
 
-	// TODO(negz): Maintain references to any ApplicationConfigurations that
-	// reference this component? Doing so would allow us to queue a reconcile
-	// for consuming ApplicationConfigurations when this Component changed.
+	// One Component should only be used by one AppConfig
 }
 
 // Revision has name and revision number
@@ -370,9 +375,6 @@ type WorkloadStatus struct {
 	// if it needs a single place to summarize the entire status of the workload
 	Status string `json:"status,omitempty"`
 
-	// HistoryWorkingRevision is a flag showing if it's history revision but still working
-	HistoryWorkingRevision bool `json:"currentWorkingRevision,omitempty"`
-
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
 
@@ -389,6 +391,15 @@ type WorkloadStatus struct {
 	Scopes []WorkloadScope `json:"scopes,omitempty"`
 }
 
+// HistoryWorkload contain the old component revision that are still running
+type HistoryWorkload struct {
+	//component revision of this workload
+	Revision string `json:"revision,omitempty"`
+
+	// Reference to running workload.
+	Reference runtimev1alpha1.TypedReference `json:"workloadRef,omitempty"`
+}
+
 // A ApplicationStatus represents the state of the entire application.
 type ApplicationStatus string
 
@@ -401,10 +412,17 @@ type ApplicationConfigurationStatus struct {
 	// if it needs a single place to summarize the status of the entire application
 	Status ApplicationStatus `json:"status,omitempty"`
 
-	Dependency DependencyStatus `json:"dependency"`
+	Dependency DependencyStatus `json:"dependency,omitempty"`
 
 	// Workloads created by this ApplicationConfiguration.
 	Workloads []WorkloadStatus `json:"workloads,omitempty"`
+
+	// The generation observed by the appConfig controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration"`
+
+	// HistoryWorkloads will record history but still working revision workloads.
+	HistoryWorkloads []HistoryWorkload `json:"historyWorkloads"`
 }
 
 // DependencyStatus represents the observed state of the dependency of
@@ -416,8 +434,9 @@ type DependencyStatus struct {
 // UnstaifiedDependency describes unsatisfied dependency flow between
 // one pair of objects.
 type UnstaifiedDependency struct {
-	From DependencyFromObject `json:"from"`
-	To   DependencyToObject   `json:"to"`
+	Reason string               `json:"reason"`
+	From   DependencyFromObject `json:"from"`
+	To     DependencyToObject   `json:"to"`
 }
 
 // DependencyFromObject represents the object that dependency data comes from.
@@ -488,9 +507,24 @@ type DataInputValueFrom struct {
 // ConditionRequirement specifies the requirement to match a value.
 type ConditionRequirement struct {
 	Operator ConditionOperator `json:"op"`
-	Value    string            `json:"value"`
+
 	// +optional
+	// Value specifies an expected value
+	// This is mutually exclusive with ValueFrom
+	Value string `json:"value,omitempty"`
+	// +optional
+	// ValueFrom specifies expected value from AppConfig
+	// This is mutually exclusive with Value
+	ValueFrom ValueFrom `json:"valueFrom,omitempty"`
+
+	// +optional
+	// FieldPath specifies got value from workload/trait object
 	FieldPath string `json:"fieldPath,omitempty"`
+}
+
+// ValueFrom gets value from AppConfig object by specifying a path
+type ValueFrom struct {
+	FieldPath string `json:"fieldPath"`
 }
 
 // ConditionOperator specifies the operator to match a value.

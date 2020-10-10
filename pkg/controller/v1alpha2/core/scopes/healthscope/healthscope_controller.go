@@ -38,8 +38,7 @@ import (
 
 const (
 	reconcileTimeout = 1 * time.Minute
-	// shortWait        = 30 * time.Second
-	longWait = 1 * time.Minute
+	longWait         = 1 * time.Minute
 )
 
 // Reconcile error strings.
@@ -123,6 +122,7 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *Reconciler {
 		record:       event.NewNopRecorder(),
 		traitChecker: WorkloadHealthCheckFn(CheckByHealthCheckTrait),
 		checkers: []WorloadHealthChecker{
+			WorkloadHealthCheckFn(CheckPodSpecWorkloadHealth),
 			WorkloadHealthCheckFn(CheckContainerziedWorkloadHealth),
 			WorkloadHealthCheckFn(CheckDeploymentHealth),
 			WorkloadHealthCheckFn(CheckStatefulsetHealth),

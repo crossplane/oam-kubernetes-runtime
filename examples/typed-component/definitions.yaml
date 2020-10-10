@@ -10,3 +10,13 @@ spec:
       kind: Deployment
     - apiVersion: v1
       kind: Service
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ScopeDefinition
+metadata:
+  name: healthscopes.core.oam.dev
+spec:
+  definitionRef:
+    name: healthscopes.core.oam.dev
+  workloadRefsPath: spec.workloadRefs
+  allowComponentOverlap: true

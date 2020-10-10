@@ -17,6 +17,12 @@ OAM Kubernetes Runtime implements [OAM specification](https://github.com/oam-dev
 
 This plug-in is designed as building block for creating OAM compliant platform with Kubernetes, rather than being used directly by developers or end-users.
 
+## OAM Specification support
+
+|   OAM Runtime Release    |         Supported Spec Release          |          Comments          |
+| :---------------------------- | :--------------------------------: |  :--------------------------------: |
+| [Latest release](https://github.com/crossplane/oam-kubernetes-runtime/releases) | [OAM Spec v0.2.1](https://github.com/oam-dev/spec/blob/v0.2.1/SPEC_LATEST_STABLE.md)  | |
+
 ## Architecture
 
 ![Architecture](assets/arch.png)
@@ -77,7 +83,7 @@ Or you can install with webhook enabled by following steps:
     kubectl -n oam-system create secret generic webhook-server-cert --from-file=tls.key=./oam-kubernetes-runtime-webhook.key --from-file=tls.crt=./oam-kubernetes-runtime-webhook.pem
     ```
 
-  - Step 3: Get CA Bundle info and install with it's value
+  - Step 3: Get CA Bundle info and install with its value
 
     ```shell script
     caValue=`kubectl config view --raw --minify --flatten -o jsonpath='{.clusters[].cluster.certificate-authority-data}'`

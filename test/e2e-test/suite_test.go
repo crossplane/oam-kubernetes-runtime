@@ -49,6 +49,7 @@ var k8sClient client.Client
 var scheme = runtime.NewScheme()
 var manualscalertrait v1alpha2.TraitDefinition
 var extendedmanualscalertrait v1alpha2.TraitDefinition
+var roleName = "oam-example-com"
 var roleBindingName = "oam-role-binding"
 var crd crdv1.CustomResourceDefinition
 
@@ -160,6 +161,23 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(k8sClient.Create(context.Background(), &wd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
 	By("Created containerizedworkload.core.oam.dev")
 
+	exampleClusterRole := rbac.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: roleName,
+			Labels: map[string]string{
+				"oam":                                  "clusterrole",
+				"rbac.oam.dev/aggregate-to-controller": "true",
+			},
+		},
+		Rules: []rbac.PolicyRule{{
+			APIGroups: []string{"example.com"},
+			Resources: []string{rbac.ResourceAll},
+			Verbs:     []string{rbac.VerbAll},
+		}},
+	}
+	Expect(k8sClient.Create(context.Background(), &exampleClusterRole)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
+	By("Created example.com cluster role for the test service account")
+
 	adminRoleBinding := rbac.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   roleBindingName,
@@ -168,7 +186,7 @@ var _ = BeforeSuite(func(done Done) {
 		Subjects: []rbac.Subject{
 			{
 				Kind: "User",
-				Name: "system:serviceaccount:crossplane-system:crossplane",
+				Name: "system:serviceaccount:oam-system:oam-kubernetes-runtime-e2e",
 			},
 		},
 		RoleRef: rbac.RoleRef{
@@ -178,7 +196,7 @@ var _ = BeforeSuite(func(done Done) {
 		},
 	}
 	Expect(k8sClient.Create(context.Background(), &adminRoleBinding)).Should(BeNil())
-	By("Created cluster role bind for the test service account")
+	By("Created cluster role binding for the test service account")
 	// Create a crd for appconfig dependency test
 	crd = crdv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -202,10 +220,17 @@ var _ = BeforeSuite(func(done Done) {
 						OpenAPIV3Schema: &crdv1.JSONSchemaProps{
 							Type: "object",
 							Properties: map[string]crdv1.JSONSchemaProps{
-								"status": {
+								"spec": {
 									Type: "object",
 									Properties: map[string]crdv1.JSONSchemaProps{
 										"key": {Type: "string"},
+									},
+								},
+								"status": {
+									Type: "object",
+									Properties: map[string]crdv1.JSONSchemaProps{
+										"key":      {Type: "string"},
+										"app-hash": {Type: "string"},
 									},
 								},
 							},

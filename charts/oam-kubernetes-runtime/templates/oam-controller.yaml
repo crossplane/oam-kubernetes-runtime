@@ -5,18 +5,61 @@ kind: ServiceAccount
 metadata:
   name: {{ include "oam-kubernetes-runtime.serviceAccountName" . }}
   labels:
-  {{ include "oam-kubernetes-runtime.labels" . | nindent 4 }}
-  {{- end }}
----
+  {{- include "oam-kubernetes-runtime.labels" . | nindent 4 }}
+{{- end }}
 
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}
+  labels:
+  {{- include "oam-kubernetes-runtime.labels" . | nindent 4 }}
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.oam.dev/aggregate-to-controller: "true"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}:system:aggregate-to-controller
+  labels:
+    {{- include "oam-kubernetes-runtime.labels" . | nindent 4 }}
+    rbac.oam.dev/aggregate-to-controller: "true"
+rules:
+- apiGroups:
+  - core.oam.dev
+  resources:
+  - "*"
+  verbs:
+  - "*"
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - "*"
+- apiGroups:
+  - ""
+  resources:
+  - events
+  - services
+  verbs:
+  - "*"
+
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: manager-rolebinding
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}
+  labels:
+  {{- include "oam-kubernetes-runtime.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: "cluster-admin"
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "oam-kubernetes-runtime.serviceAccountName" . }}
@@ -27,7 +70,9 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: leader-election-role
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}-leader-election
+  labels:
+  {{- include "oam-kubernetes-runtime.labels" . | nindent 4 }}
 rules:
   - apiGroups:
       - ""
@@ -60,11 +105,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: leader-election-rolebinding
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}-leader-election
+  labels:
+  {{- include "oam-kubernetes-runtime.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: leader-election-role
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}-leader-election
 subjects:
   - kind: ServiceAccount
     name: {{ include "oam-kubernetes-runtime.serviceAccountName" . }}
@@ -123,15 +170,15 @@ spec:
             secretName: {{ .Values.certificate.secretName | quote }}
       {{ end }}
       terminationGracePeriodSeconds: 10
-    {{- with .Values.nodeSelector }}
-    nodeSelector:
-      {{ toYaml . | indent 8 }}
-    {{- end }}
-    {{- with .Values.affinity }}
-    affinity:
-      {{- toYaml . | nindent 8 }}
-    {{- end }}
-    {{- with .Values.tolerations }}
-    tolerations:
-      {{- toYaml . | nindent 8 }}
-    {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

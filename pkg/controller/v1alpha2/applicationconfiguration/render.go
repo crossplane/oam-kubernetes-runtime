@@ -102,7 +102,7 @@ func (r *components) Render(ctx context.Context, ac *v1alpha2.ApplicationConfigu
 	ds := &v1alpha2.DependencyStatus{}
 	res := make([]Workload, 0, len(ac.Spec.Components))
 	for i, acc := range ac.Spec.Components {
-		unsatisfied, err := r.handleDependency(ctx, workloads[i], acc, dag)
+		unsatisfied, err := r.handleDependency(ctx, workloads[i], acc, dag, ac)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -381,10 +381,13 @@ func addDataOutputsToDAG(dag *dag, outs []v1alpha2.DataOutput, obj *unstructured
 	}
 }
 
-func (r *components) handleDependency(ctx context.Context, w *Workload, acc v1alpha2.ApplicationConfigurationComponent, dag *dag) ([]v1alpha2.UnstaifiedDependency, error) {
+func (r *components) handleDependency(ctx context.Context, w *Workload, acc v1alpha2.ApplicationConfigurationComponent, dag *dag, ac *v1alpha2.ApplicationConfiguration) ([]v1alpha2.UnstaifiedDependency, error) {
 	uds := make([]v1alpha2.UnstaifiedDependency, 0)
-
-	unsatisfied, err := r.handleDataInput(ctx, acc.DataInputs, dag, w.Workload)
+	unstructuredAC, err := util.Object2Unstructured(ac)
+	if err != nil {
+		return nil, errors.Wrapf(err, "handleDataInput by convert AppConfig (%s) to unstructured object failed", ac.Name)
+	}
+	unsatisfied, err := r.handleDataInput(ctx, acc.DataInputs, dag, w.Workload, unstructuredAC)
 	if err != nil {
 		return nil, errors.Wrapf(err, "handleDataInput for workload (%s/%s) failed", w.Workload.GetNamespace(), w.Workload.GetName())
 	}
@@ -395,7 +398,7 @@ func (r *components) handleDependency(ctx context.Context, w *Workload, acc v1al
 
 	for i, ct := range acc.Traits {
 		trait := w.Traits[i]
-		unsatisfied, err := r.handleDataInput(ctx, ct.DataInputs, dag, &trait.Object)
+		unsatisfied, err := r.handleDataInput(ctx, ct.DataInputs, dag, &trait.Object, unstructuredAC)
 		if err != nil {
 			return nil, errors.Wrapf(err, "handleDataInput for trait (%s/%s) failed", trait.Object.GetNamespace(), trait.Object.GetName())
 		}
@@ -407,8 +410,9 @@ func (r *components) handleDependency(ctx context.Context, w *Workload, acc v1al
 	return uds, nil
 }
 
-func makeUnsatisfiedDependency(obj *unstructured.Unstructured, s *dagSource, in v1alpha2.DataInput) v1alpha2.UnstaifiedDependency {
+func makeUnsatisfiedDependency(obj *unstructured.Unstructured, s *dagSource, in v1alpha2.DataInput, reason string) v1alpha2.UnstaifiedDependency {
 	return v1alpha2.UnstaifiedDependency{
+		Reason: reason,
 		From: v1alpha2.DependencyFromObject{
 			TypedReference: runtimev1alpha1.TypedReference{
 				APIVersion: s.ObjectRef.APIVersion,
@@ -428,19 +432,19 @@ func makeUnsatisfiedDependency(obj *unstructured.Unstructured, s *dagSource, in 
 	}
 }
 
-func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInput, dag *dag, obj *unstructured.Unstructured) ([]v1alpha2.UnstaifiedDependency, error) {
+func (r *components) handleDataInput(ctx context.Context, ins []v1alpha2.DataInput, dag *dag, obj, ac *unstructured.Unstructured) ([]v1alpha2.UnstaifiedDependency, error) {
 	uds := make([]v1alpha2.UnstaifiedDependency, 0)
 	for _, in := range ins {
 		s, ok := dag.Sources[in.ValueFrom.DataOutputName]
 		if !ok {
 			return nil, errors.Wrapf(ErrDataOutputNotExist, "DataOutputName (%s)", in.ValueFrom.DataOutputName)
 		}
-		val, ready, err := r.getDataInput(ctx, s)
+		val, ready, reason, err := r.getDataInput(ctx, s, ac)
 		if err != nil {
 			return nil, errors.Wrap(err, "getDataInput failed")
 		}
 		if !ready {
-			uds = append(uds, makeUnsatisfiedDependency(obj, s, in))
+			uds = append(uds, makeUnsatisfiedDependency(obj, s, in, reason))
 			return uds, nil
 		}
 
@@ -480,7 +484,7 @@ func fillValue(obj *unstructured.Unstructured, fs []string, val interface{}) err
 	return nil
 }
 
-func (r *components) getDataInput(ctx context.Context, s *dagSource) (interface{}, bool, error) {
+func (r *components) getDataInput(ctx context.Context, s *dagSource, ac *unstructured.Unstructured) (interface{}, bool, string, error) {
 	obj := s.ObjectRef
 	key := types.NamespacedName{
 		Namespace: obj.Namespace,
@@ -490,79 +494,106 @@ func (r *components) getDataInput(ctx context.Context, s *dagSource) (interface{
 	u.SetGroupVersionKind(obj.GroupVersionKind())
 	err := r.client.Get(ctx, key, u)
 	if err != nil {
-		return nil, false, errors.Wrap(resource.IgnoreNotFound(err), fmt.Sprintf("failed to get object (%s)", key.String()))
+		reason := fmt.Sprintf("failed to get object (%s)", key.String())
+		return nil, false, reason, errors.Wrap(resource.IgnoreNotFound(err), reason)
 	}
 	paved := fieldpath.Pave(u.UnstructuredContent())
+	pavedAC := fieldpath.Pave(ac.UnstructuredContent())
 
 	rawval, err := paved.GetValue(obj.FieldPath)
 	if err != nil {
 		if fieldpath.IsNotFound(err) {
-			return "", false, nil
+			return "", false, fmt.Sprintf("%s not found in object", obj.FieldPath), nil
 		}
-		return nil, false, fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
+		err = fmt.Errorf("failed to get field value (%s) in object (%s): %w", obj.FieldPath, key.String(), err)
+		return nil, false, err.Error(), err
 	}
 
 	var ok bool
+	var reason string
 	switch val := rawval.(type) {
 	case string:
 		// For string input we will:
 		// - check its value not empty if no condition is given.
 		// - check its value against conditions if no field path is specified.
-		ok, err = matchValue(s.Conditions, val, paved)
+		ok, reason = matchValue(s.Conditions, val, paved, pavedAC)
 	default:
-		ok, err = checkConditions(s.Conditions, paved, nil)
-	}
-	if err != nil {
-		return nil, false, err
+		ok, reason = checkConditions(s.Conditions, paved, nil, pavedAC)
 	}
 	if !ok {
-		return nil, false, nil
+		return nil, false, reason, nil
 	}
 
-	return rawval, true, nil
+	return rawval, true, "", nil
 }
 
-func matchValue(conds []v1alpha2.ConditionRequirement, val string, paved *fieldpath.Paved) (bool, error) {
+func matchValue(conds []v1alpha2.ConditionRequirement, val string, paved, ac *fieldpath.Paved) (bool, string) {
 	// If no condition is specified, it is by default to check value not empty.
 	if len(conds) == 0 {
-		return val != "", nil
+		if val == "" {
+			return false, "value should not be empty"
+		}
+		return true, ""
 	}
 
-	return checkConditions(conds, paved, &val)
+	return checkConditions(conds, paved, &val, ac)
 }
 
-func checkConditions(conds []v1alpha2.ConditionRequirement, paved *fieldpath.Paved, val *string) (bool, error) {
+func getCheckVal(m v1alpha2.ConditionRequirement, paved *fieldpath.Paved, val *string) (string, error) {
+	var checkVal string
+	switch {
+	case m.FieldPath != "":
+		return paved.GetString(m.FieldPath)
+	case val != nil:
+		checkVal = *val
+	default:
+		return "", errors.New("FieldPath not specified")
+	}
+	return checkVal, nil
+}
+
+func getExpectVal(m v1alpha2.ConditionRequirement, ac *fieldpath.Paved) (string, error) {
+	if m.Value != "" {
+		return m.Value, nil
+	}
+	if m.ValueFrom.FieldPath == "" || ac == nil {
+		return "", nil
+	}
+	var err error
+	value, err := ac.GetString(m.ValueFrom.FieldPath)
+	if err != nil {
+		return "", fmt.Errorf("get valueFrom.fieldPath fail: %v", err)
+	}
+	return value, nil
+}
+
+func checkConditions(conds []v1alpha2.ConditionRequirement, paved *fieldpath.Paved, val *string, ac *fieldpath.Paved) (bool, string) {
 	for _, m := range conds {
-		var checkVal string
-		var err error
-		switch {
-		case m.FieldPath != "":
-			checkVal, err = paved.GetString(m.FieldPath)
-			if err != nil {
-				return false, err
-			}
-		case val != nil:
-			checkVal = *val
-		default:
-			return false, errors.New("FieldPath not specified")
+		checkVal, err := getCheckVal(m, paved, val)
+		if err != nil {
+			return false, fmt.Sprintf("can't get value to check %v", err)
+		}
+		m.Value, err = getExpectVal(m, ac)
+		if err != nil {
+			return false, err.Error()
 		}
 
 		switch m.Operator {
 		case v1alpha2.ConditionEqual:
 			if m.Value != checkVal {
-				return false, nil
+				return false, fmt.Sprintf("got(%v) expected to be %v", checkVal, m.Value)
 			}
 		case v1alpha2.ConditionNotEqual:
 			if m.Value == checkVal {
-				return false, nil
+				return false, fmt.Sprintf("got(%v) expected not to be %v", checkVal, m.Value)
 			}
 		case v1alpha2.ConditionNotEmpty:
 			if checkVal == "" {
-				return false, nil
+				return false, "value should not be empty"
 			}
 		}
 	}
-	return true, nil
+	return true, ""
 }
 
 // GetTraitName return trait name
