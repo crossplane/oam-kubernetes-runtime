@@ -749,7 +749,7 @@ func TestGetDefinitionName(t *testing.T) {
 	}
 	for name, ti := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := util.GetDefinitionName(ti.u)
+			got := util.GetDefinitionName(ti.u, "")
 			if got != ti.exp {
 				t.Errorf("%s getCRDName want %s got %s ", ti.reason, ti.exp, got)
 			}

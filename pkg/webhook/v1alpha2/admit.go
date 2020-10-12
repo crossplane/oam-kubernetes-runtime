@@ -9,7 +9,8 @@ import (
 
 // Add will be called in main and register all validation handlers
 func Add(mgr manager.Manager) {
-	applicationconfiguration.Register(mgr)
+	applicationconfiguration.RegisterValidatingHandler(mgr)
+	applicationconfiguration.RegisterMutatingHandler(mgr)
 	component.RegisterMutatingHandler(mgr)
 	component.RegisterValidatingHandler(mgr)
 }
