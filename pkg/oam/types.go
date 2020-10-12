@@ -27,9 +27,6 @@ import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )
 
-// WorkloadTypeLabel indicates the type of the workloadDefinition
-const WorkloadTypeLabel = "workload.oam.dev/type"
-
 // ScopeKind contains the type metadata for a kind of an OAM scope resource.
 type ScopeKind schema.GroupVersionKind
 

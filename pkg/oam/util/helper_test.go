@@ -698,8 +698,9 @@ var _ = Describe("Test workload related helper utils", func() {
 var _ = Describe("Test unstructured related helper utils", func() {
 	It("Test get CRD name from an unstructured object", func() {
 		tests := map[string]struct {
-			u   *unstructured.Unstructured
-			exp string
+			u         *unstructured.Unstructured
+			typeLabel string
+			exp       string
 		}{
 			"native resource": {
 				u: &unstructured.Unstructured{Object: map[string]interface{}{
@@ -715,11 +716,37 @@ var _ = Describe("Test unstructured related helper utils", func() {
 				}},
 				exp: "simplerollouttraits.extend.oam.dev",
 			},
+			"trait": {
+				u: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "extend.oam.dev/v1alpha2",
+					"kind":       "SimpleRolloutTrait",
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							oam.TraitTypeLabel: "rollout",
+						},
+					},
+				}},
+				typeLabel: oam.TraitTypeLabel,
+				exp:       "rollout",
+			},
+			"workload": {
+				u: &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							oam.WorkloadTypeLabel: "deploy",
+						},
+					},
+				}},
+				typeLabel: oam.WorkloadTypeLabel,
+				exp:       "deploy",
+			},
 		}
 		for name, ti := range tests {
-			got := util.GetDefinitionName(ti.u)
+			got := util.GetDefinitionName(ti.u, ti.typeLabel)
 			By(fmt.Sprint("Running test: ", name))
-			Expect(ti.exp).Should(Equal(got))
+			Expect(got).Should(Equal(ti.exp))
 		}
 	})
 })

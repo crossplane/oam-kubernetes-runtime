@@ -41,7 +41,7 @@ func checkComponentVersionEnabled(ctx context.Context, client client.Reader, acc
 	return false, nil
 }
 
-// checkParams will check whethter exist parameter assigning value to workload name
+// checkParams will check whether exist parameter assigning value to workload name
 func checkParams(cp []v1alpha2.ComponentParameter, cpv []v1alpha2.ComponentParameterValue) (bool, string) {
 	targetParams := make(map[string]bool)
 	for _, v := range cp {

@@ -47,6 +47,22 @@ metadata:
   labels:
   {{- include "oam-kubernetes-runtime.selectorLabels" . | nindent 4 }}
 webhooks:
+  - name: "mutate.applicationconfigurations.core.oam.dev"
+    clientConfig:
+      service:
+        name: {{ template "oam-kubernetes-runtime.name" . }}-webhook
+        namespace: {{.Release.Namespace}}
+        path: /mutating-core-oam-dev-v1alpha2-applicationconfigurations
+      caBundle: "{{.Values.certificate.caBundle}}"
+    rules:
+      - apiGroups:   ["core.oam.dev"]
+        apiVersions: ["v1alpha2"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["applicationconfigurations"]
+        scope:       "Namespaced"
+    admissionReviewVersions: ["v1beta1"]
+    failurePolicy: Fail
+    timeoutSeconds: 5
   - name: "mutate.component.core.oam.dev"
     clientConfig:
       service:

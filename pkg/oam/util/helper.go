@@ -115,7 +115,8 @@ func FetchWorkload(ctx context.Context, c client.Client, mLog logr.Logger, oamTr
 func FetchScopeDefinition(ctx context.Context, r client.Reader,
 	scope *unstructured.Unstructured) (*v1alpha2.ScopeDefinition, error) {
 	// The name of the scopeDefinition CR is the CRD name of the scope
-	spName := GetDefinitionName(scope)
+	// TODO(wonderflow): we haven't support scope definition label type yet.
+	spName := GetDefinitionName(scope, "")
 	// the scopeDefinition crd is cluster scoped
 	nn := types.NamespacedName{Name: spName}
 	// Fetch the corresponding scopeDefinition CR
@@ -130,7 +131,7 @@ func FetchScopeDefinition(ctx context.Context, r client.Reader,
 func FetchTraitDefinition(ctx context.Context, r client.Reader,
 	trait *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
 	// The name of the traitDefinition CR is the CRD name of the trait
-	trName := GetDefinitionName(trait)
+	trName := GetDefinitionName(trait, oam.TraitTypeLabel)
 	// the traitDefinition crd is cluster scoped
 	nn := types.NamespacedName{Name: trName}
 	// Fetch the corresponding traitDefinition CR
@@ -145,7 +146,7 @@ func FetchTraitDefinition(ctx context.Context, r client.Reader,
 func FetchWorkloadDefinition(ctx context.Context, r client.Reader,
 	workload *unstructured.Unstructured) (*v1alpha2.WorkloadDefinition, error) {
 	// The name of the workloadDefinition CR is the CRD name of the component
-	wldName := GetDefinitionName(workload)
+	wldName := GetDefinitionName(workload, oam.WorkloadTypeLabel)
 	// the workloadDefinition crd is cluster scoped
 	nn := types.NamespacedName{Name: wldName}
 	// Fetch the corresponding workloadDefinition CR
@@ -227,10 +228,11 @@ func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject
 // GetDefinitionName return the Definition name of any resources
 // the format of the definition of a resource is <kind plurals>.<group>
 // Now the definition name of a resource could also be defined as `definition.oam.dev/name` in `metadata.annotations`
-func GetDefinitionName(u *unstructured.Unstructured) string {
-	if labels := u.GetLabels(); labels != nil {
-		if resourceType, ok := labels[oam.LabelOAMResourceType]; ok && resourceType == "WORKLOAD" {
-			if definitionName, ok := labels[oam.WorkloadTypeLabel]; ok {
+// typeLabel specified which Definition it is, if specified, will directly get definition from label.
+func GetDefinitionName(u *unstructured.Unstructured, typeLabel string) string {
+	if typeLabel != "" {
+		if labels := u.GetLabels(); labels != nil {
+			if definitionName, ok := labels[typeLabel]; ok {
 				return definitionName
 			}
 		}
