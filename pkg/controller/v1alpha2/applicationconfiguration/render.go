@@ -79,6 +79,8 @@ func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.Application
 	return fn(ctx, ac)
 }
 
+var _ ComponentRenderer = &components{}
+
 type components struct {
 	client   client.Reader
 	params   ParameterResolver
@@ -149,12 +151,14 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	traits := make([]*Trait, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
 	compInfoLabels[oam.LabelOAMResourceType] = oam.ResourceTypeTrait
+
 	for _, ct := range acc.Traits {
 		t, traitDef, err := r.renderTrait(ctx, ct, ac, acc.ComponentName, ref, dag)
 		if err != nil {
 			return nil, err
 		}
 		util.AddLabels(t, compInfoLabels)
+
 		// pass through labels and annotation from app-config to trait
 		util.PassLabelAndAnnotation(ac, t)
 		traits = append(traits, &Trait{Object: *t})
@@ -163,7 +167,23 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 		return nil, err
 	}
-
+	// create the ref after the workload name is set
+	workloadRef := runtimev1alpha1.TypedReference{
+		APIVersion: w.GetAPIVersion(),
+		Kind:       w.GetKind(),
+		Name:       w.GetName(),
+	}
+	//  We only patch a TypedReference object to the trait if it asks for it
+	for i := range acc.Traits {
+		traitDef := traitDefs[i]
+		trait := traits[i]
+		workloadRefPath := traitDef.Spec.WorkloadRefPath
+		if len(workloadRefPath) != 0 {
+			if err := fieldpath.Pave(trait.Object.UnstructuredContent()).SetValue(workloadRefPath, workloadRef); err != nil {
+				return nil, errors.Wrapf(err, errFmtSetWorkloadRef, trait.Object.GetName(), w.GetName())
+			}
+		}
+	}
 	scopes := make([]unstructured.Unstructured, 0, len(acc.Scopes))
 	for _, cs := range acc.Scopes {
 		scopeObject, err := r.renderScope(ctx, cs, ac.GetNamespace())
