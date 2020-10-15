@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
@@ -88,6 +89,7 @@ func TestRenderComponents(t *testing.T) {
 		},
 	}
 	ref := metav1.NewControllerRef(ac, v1alpha2.ApplicationConfigurationGroupVersionKind)
+	errTrait := errors.New("errTrait")
 
 	type fields struct {
 		client   client.Reader
@@ -165,6 +167,38 @@ func TestRenderComponents(t *testing.T) {
 			args: args{ac: ac},
 			want: want{
 				err: errors.Wrapf(errBoom, errFmtRenderTrait, componentName),
+			},
+		},
+		"GetTraitDefinitionError": {
+			reason: "Errors getting a traitDefinition should be reflected as a status condition",
+			fields: fields{
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+					switch robj := obj.(type) {
+					case *v1alpha2.Component:
+						ccomp := v1alpha2.Component{Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: revisionName2}}}
+						ccomp.DeepCopyInto(robj)
+					case *v1alpha2.TraitDefinition:
+						return errTrait
+					}
+					return nil
+				})},
+				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+					return nil, nil
+				}),
+				workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					return &unstructured.Unstructured{}, nil
+				}),
+				trait: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					t := &unstructured.Unstructured{}
+					t.SetName(traitName)
+					t.SetAPIVersion("traitAPI")
+					t.SetKind("traitKind")
+					return t, nil
+				}),
+			},
+			args: args{ac: ac},
+			want: want{
+				err: errors.Wrapf(errTrait, errFmtGetTraitDefinition, "traitAPI", "traitKind", traitName),
 			},
 		},
 		"Success": {
@@ -361,6 +395,102 @@ func TestRenderComponents(t *testing.T) {
 						},
 						RevisionEnabled: true,
 						Scopes:          []unstructured.Unstructured{},
+					},
+				},
+			},
+		},
+		"Success-With-WorkloadRef": {
+			reason: "Workload should successfully be rendered with fixed componentRevision",
+			fields: fields{
+				client: &test.MockClient{MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
+					robj, ok := obj.(*v1.ControllerRevision)
+					if ok {
+						rev := &v1.ControllerRevision{
+							ObjectMeta: metav1.ObjectMeta{Name: revisionName, Namespace: namespace},
+							Data: runtime.RawExtension{Object: &v1alpha2.Component{
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      componentName,
+									Namespace: namespace,
+								},
+								Spec:   v1alpha2.ComponentSpec{Workload: runtime.RawExtension{Object: &unstructured.Unstructured{}}},
+								Status: v1alpha2.ComponentStatus{},
+							}},
+							Revision: 1,
+						}
+						rev.DeepCopyInto(robj)
+						return nil
+					}
+					trd, ok := obj.(*v1alpha2.TraitDefinition)
+					if ok {
+						td := v1alpha2.TraitDefinition{
+							Spec: v1alpha2.TraitDefinitionSpec{
+								WorkloadRefPath: "spec.workload.path",
+							},
+						}
+						td.DeepCopyInto(trd)
+					}
+					return nil
+				})},
+				params: ParameterResolveFn(func(_ []v1alpha2.ComponentParameter, _ []v1alpha2.ComponentParameterValue) ([]Parameter, error) {
+					return nil, nil
+				}),
+				workload: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					w := &unstructured.Unstructured{}
+					w.SetAPIVersion("traitApiVersion")
+					w.SetKind("traitKind")
+					return w, nil
+				}),
+				trait: ResourceRenderFn(func(_ []byte, _ ...Parameter) (*unstructured.Unstructured, error) {
+					t := &unstructured.Unstructured{}
+					t.SetName(traitName)
+					return t, nil
+				}),
+			},
+			args: args{ac: revAC},
+			want: want{
+				w: []Workload{
+					{
+						ComponentName:         componentName,
+						ComponentRevisionName: revisionName,
+						Workload: func() *unstructured.Unstructured {
+							w := &unstructured.Unstructured{}
+							w.SetAPIVersion("traitApiVersion")
+							w.SetKind("traitKind")
+							w.SetNamespace(namespace)
+							w.SetName(componentName)
+							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetLabels(map[string]string{
+								oam.LabelAppComponent:         componentName,
+								oam.LabelAppName:              acName,
+								oam.LabelAppComponentRevision: revisionName,
+								oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
+							})
+							return w
+						}(),
+						Traits: []*Trait{
+							func() *Trait {
+								tr := &unstructured.Unstructured{}
+								tr.SetNamespace(namespace)
+								tr.SetName(traitName)
+								tr.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								tr.SetLabels(map[string]string{
+									oam.LabelAppComponent:         componentName,
+									oam.LabelAppName:              acName,
+									oam.LabelAppComponentRevision: revisionName,
+									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
+								})
+								workloadRef := runtimev1alpha1.TypedReference{
+									APIVersion: "traitApiVersion",
+									Kind:       "traitKind",
+									Name:       componentName,
+								}
+								if err := fieldpath.Pave(tr.Object).SetValue("spec.workload.path", workloadRef); err != nil {
+									t.Fail()
+								}
+								return &Trait{Object: *tr}
+							}(),
+						},
+						Scopes: []unstructured.Unstructured{},
 					},
 				},
 			},
