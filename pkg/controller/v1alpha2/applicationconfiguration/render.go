@@ -179,7 +179,6 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		trait := traits[i]
 		workloadRefPath := traitDef.Spec.WorkloadRefPath
 		if len(workloadRefPath) != 0 {
-			fmt.Printf("\n\n\nworkloadRef path = %s\n\n\n", workloadRefPath)
 			if err := fieldpath.Pave(trait.Object.UnstructuredContent()).SetValue(workloadRefPath, workloadRef); err != nil {
 				return nil, errors.Wrapf(err, errFmtSetWorkloadRef, trait.Object.GetName(), w.GetName())
 			}
