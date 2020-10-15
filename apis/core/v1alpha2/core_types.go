@@ -422,7 +422,7 @@ type ApplicationConfigurationStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration"`
 
 	// HistoryWorkloads will record history but still working revision workloads.
-	HistoryWorkloads []HistoryWorkload `json:"historyWorkloads"`
+	HistoryWorkloads []HistoryWorkload `json:"historyWorkloads,omitempty"`
 }
 
 // DependencyStatus represents the observed state of the dependency of
