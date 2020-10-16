@@ -346,7 +346,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 					w1.SetKind("Bar")
 					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: revisionNameV1}, &w1)
 				},
-				time.Second*15, time.Millisecond*500).Should(BeNil())
+				time.Second*20, time.Millisecond*500).Should(BeNil())
 			k1, _, _ := unstructured.NestedString(w1.Object, "spec", "key")
 			Expect(k1).Should(BeEquivalentTo("v1"), fmt.Sprintf("%v", w1.Object))
 

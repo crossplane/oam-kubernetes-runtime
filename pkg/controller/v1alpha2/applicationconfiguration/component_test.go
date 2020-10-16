@@ -267,25 +267,33 @@ func TestIsMatch(t *testing.T) {
 }
 
 func TestSortedControllerRevision(t *testing.T) {
+	componentName := "foo"
+	componentName1 := "foo1"
 	appconfigs := []v1alpha2.ApplicationConfiguration{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "foo-app", Namespace: "test"},
 			Spec: v1alpha2.ApplicationConfigurationSpec{
-				Components: []v1alpha2.ApplicationConfigurationComponent{{ComponentName: "foo", RevisionName: "revision1"}},
+				Components: []v1alpha2.ApplicationConfigurationComponent{{ComponentName: componentName, RevisionName: "foo-v1"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "foo1-app", Namespace: "test"},
+			Spec: v1alpha2.ApplicationConfigurationSpec{
+				Components: []v1alpha2.ApplicationConfigurationComponent{{ComponentName: componentName1, RevisionName: "foo1-v1"}},
 			},
 		},
 	}
 	emptyAppconfigs := []v1alpha2.ApplicationConfiguration{}
 	revision1 := appsv1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: "revision1", Namespace: "foo-namespace"},
+		ObjectMeta: metav1.ObjectMeta{Name: "foo-v1", Namespace: "foo-namespace"},
 		Revision:   3,
 	}
 	revision2 := appsv1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: "revision2", Namespace: "foo-namespace"},
+		ObjectMeta: metav1.ObjectMeta{Name: "foo-v2", Namespace: "foo-namespace"},
 		Revision:   1,
 	}
 	revision3 := appsv1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: "revision2", Namespace: "foo-namespace"},
+		ObjectMeta: metav1.ObjectMeta{Name: "foo-v3", Namespace: "foo-namespace"},
 		Revision:   2,
 	}
 	revisions := []appsv1.ControllerRevision{
@@ -299,14 +307,15 @@ func TestSortedControllerRevision(t *testing.T) {
 		revision1,
 	}
 
-	_, toKill, _ := sortedControllerRevision(appconfigs, revisions, 3)
+	_, toKill, _ := sortedControllerRevision(appconfigs, revisions, 3, componentName)
 	assert.Equal(t, 0, toKill, "Not over limit, needn't to delete")
 
-	sortedRevisions, toKill, _ := sortedControllerRevision(emptyAppconfigs, revisions, 2)
+	sortedRevisions, toKill, _ := sortedControllerRevision(emptyAppconfigs, revisions, 2, componentName)
 	assert.Equal(t, expectedRevison, sortedRevisions, "Export controllerRevision sorted ascending accord to revision")
 	assert.Equal(t, 1, toKill, "Over limit")
 
-	_, toKill, liveHashes := sortedControllerRevision(appconfigs, revisions, 2)
+	_, toKill, liveHashes := sortedControllerRevision(appconfigs, revisions, 2, componentName)
 	assert.Equal(t, 0, toKill, "Needn't to delete")
 	assert.Equal(t, 1, len(liveHashes), "LiveHashes worked")
+	assert.NotEqual(t, 2, len(liveHashes), "LiveHashes worked")
 }

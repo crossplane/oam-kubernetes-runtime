@@ -193,7 +193,7 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 
 // get sorted controllerRevisions, prepare to delete controllerRevisions
 func sortedControllerRevision(appConfigs []v1alpha2.ApplicationConfiguration, revisions []appsv1.ControllerRevision,
-	revisionLimit int) (sortedRevisions []appsv1.ControllerRevision, toKill int, liveHashes map[string]bool) {
+	revisionLimit int, currentComponentName string) (sortedRevisions []appsv1.ControllerRevision, toKill int, liveHashes map[string]bool) {
 	liveHashes = make(map[string]bool)
 	sortedRevisions = revisions
 
@@ -201,7 +201,9 @@ func sortedControllerRevision(appConfigs []v1alpha2.ApplicationConfiguration, re
 	for _, appConfig := range appConfigs {
 		for _, component := range appConfig.Spec.Components {
 			if component.RevisionName != "" {
-				liveHashes[component.RevisionName] = true
+				if ExtractComponentName(component.RevisionName) == currentComponentName {
+					liveHashes[component.RevisionName] = true
+				}
 			}
 		}
 	}
@@ -244,7 +246,7 @@ func (c *ComponentHandler) cleanupControllerRevision(curComp *v1alpha2.Component
 	}
 
 	// get sorted revisions
-	controllerRevisions, toKill, liveHashes := sortedControllerRevision(appConfigs.Items, revisions.Items, c.RevisionLimit)
+	controllerRevisions, toKill, liveHashes := sortedControllerRevision(appConfigs.Items, revisions.Items, c.RevisionLimit, curComp.Name)
 	for _, revision := range controllerRevisions {
 		if toKill <= 0 {
 			break
