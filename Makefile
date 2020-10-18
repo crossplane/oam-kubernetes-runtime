@@ -151,3 +151,9 @@ e2e-test:
 e2e-cleanup:
 	helm uninstall e2e -n oam-system
 	kubectl delete namespace oam-system --wait
+
+rollout: build
+	docker tag $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH) crossplane/oam-kubernetes-runtime:$(VERSION)
+	kind load docker-image crossplane/oam-kubernetes-runtime:$(VERSION) --name kind
+	kind load docker-image crossplane/oam-kubernetes-runtime:$(VERSION) --name kind
+	kubectl -n oam-system patch deployment oam-kubernetes-runtime-oam --patch "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"date\":\"`date +'%s'`\"}}}}}"

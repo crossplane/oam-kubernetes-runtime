@@ -101,6 +101,14 @@ var (
 	HealthScopeGroupVersionKind = SchemeGroupVersion.WithKind(HealthScopeKind)
 )
 
+// CategoryScope type metadata.
+var (
+	CategoryScopeKind             = reflect.TypeOf(CategoryScope{}).Name()
+	CategoryScopeGroupKind        = schema.GroupKind{Group: Group, Kind: CategoryScopeKind}.String()
+	CategoryScopeKindAPIVersion   = CategoryScopeKind + "." + SchemeGroupVersion.String()
+	CategoryScopeGroupVersionKind = SchemeGroupVersion.WithKind(CategoryScopeKind)
+)
+
 func init() {
 	SchemeBuilder.Register(&WorkloadDefinition{}, &WorkloadDefinitionList{})
 	SchemeBuilder.Register(&TraitDefinition{}, &TraitDefinitionList{})
@@ -110,4 +118,5 @@ func init() {
 	SchemeBuilder.Register(&ContainerizedWorkload{}, &ContainerizedWorkloadList{})
 	SchemeBuilder.Register(&ManualScalerTrait{}, &ManualScalerTraitList{})
 	SchemeBuilder.Register(&HealthScope{}, &HealthScopeList{})
+	SchemeBuilder.Register(&CategoryScope{}, &CategoryScopeList{})
 }

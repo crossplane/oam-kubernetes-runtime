@@ -53,6 +53,8 @@ rules:
   resources:
   - events
   - services
+  - secrets
+  - configmaps
   verbs:
   - "*"
 
@@ -85,6 +87,7 @@ rules:
       - ""
     resources:
       - configmaps
+      - secrets
     verbs:
       - get
       - list
