@@ -24,12 +24,6 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/event"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +31,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/event"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
@@ -364,7 +365,7 @@ func patchExtraStatusField(acStatus *v1alpha2.ApplicationConfigurationStatus, ac
 				if len(w.Status) > 0 {
 					acStatus.Workloads[i].Status = w.Status
 				}
-				//find the trait
+				// find the trait
 				for j := range acStatus.Workloads[i].Traits {
 					for _, t := range w.Traits {
 						tr := acStatus.Workloads[i].Traits[j].Reference
@@ -404,7 +405,7 @@ type Workload struct {
 	// ComponentName that produced this workload.
 	ComponentName string
 
-	//ComponentRevisionName of current component
+	// ComponentRevisionName of current component
 	ComponentRevisionName string
 
 	// A Workload object.

@@ -61,7 +61,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		return admission.Denied(err.Error())
 	}
 
-	switch req.AdmissionRequest.Operation {
+	switch req.AdmissionRequest.Operation { //nolint:exhaustive
 	case admissionv1beta1.Create:
 		if allErrs := ValidateComponentObject(obj); len(allErrs) > 0 {
 			validatelog.Info("create failed", "name", obj.Name, "errMsg", allErrs.ToAggregate().Error())

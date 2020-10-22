@@ -52,7 +52,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 	if req.Resource.String() != appConfigResource.String() {
 		return admission.Errored(http.StatusBadRequest, fmt.Errorf("expect resource to be %s", appConfigResource))
 	}
-	switch req.Operation {
+	switch req.Operation { //nolint:exhaustive
 	case admissionv1beta1.Delete:
 		if len(req.OldObject.Raw) != 0 {
 			if err := h.Decoder.DecodeRaw(req.OldObject, obj); err != nil {

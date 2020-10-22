@@ -17,6 +17,11 @@ S3_BUCKET ?= crossplane.releases/oam
 -include build/makelib/output.mk
 
 # ====================================================================================
+# Setup Kubernetes tools
+
+-include build/makelib/k8s_tools.mk
+
+# ====================================================================================
 # Setup Helm
 
 HELM_BASE_URL = https://charts.crossplane.io

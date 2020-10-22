@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/davecgh/go-spew/spew"
 	plur "github.com/gertd/go-pluralize"
 	"github.com/go-logr/logr"
@@ -22,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
@@ -357,7 +358,7 @@ func AddLabels(o *unstructured.Unstructured, labels map[string]string) {
 	o.SetLabels(MergeMap(o.GetLabels(), labels))
 }
 
-//MergeMap merges two could be nil maps
+// MergeMap merges two could be nil maps
 func MergeMap(src, dst map[string]string) map[string]string {
 	if len(src) == 0 {
 		return dst

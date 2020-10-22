@@ -397,7 +397,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 			Expect(len(appconfig.Status.HistoryWorkloads)).Should(BeEquivalentTo(1))
 			Expect(appconfig.Status.HistoryWorkloads[0].Revision).Should(BeEquivalentTo(revisionNameV1))
 
-			//Clean
+			// Clean
 			k8sClient.Delete(ctx, &appconfig)
 			k8sClient.Delete(ctx, &comp1)
 			k8sClient.Delete(ctx, &comp2)
