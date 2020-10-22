@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	util "github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
@@ -49,7 +50,7 @@ func (c *ComponentHandler) Update(evt event.UpdateEvent, q workqueue.RateLimitin
 		// No revision created, return
 		return
 	}
-	//Note(wonderflow): MetaOld => MetaNew, requeue once is enough
+	// Note(wonderflow): MetaOld => MetaNew, requeue once is enough
 	for _, req := range c.getRelatedAppConfig(evt.MetaNew) {
 		q.Add(req)
 	}

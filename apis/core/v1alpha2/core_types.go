@@ -17,10 +17,11 @@ limitations under the License.
 package v1alpha2
 
 import (
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )
 
 // A DefinitionReference refers to a CustomResourceDefinition by name.
@@ -378,7 +379,7 @@ type WorkloadStatus struct {
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
 
-	//ComponentRevisionName of current component
+	// ComponentRevisionName of current component
 	ComponentRevisionName string `json:"componentRevisionName,omitempty"`
 
 	// Reference to a workload created by an ApplicationConfiguration.
@@ -393,7 +394,7 @@ type WorkloadStatus struct {
 
 // HistoryWorkload contain the old component revision that are still running
 type HistoryWorkload struct {
-	//component revision of this workload
+	// Revision of this workload
 	Revision string `json:"revision,omitempty"`
 
 	// Reference to running workload.
