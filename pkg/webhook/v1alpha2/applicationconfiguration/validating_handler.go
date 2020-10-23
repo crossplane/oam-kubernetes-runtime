@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -39,6 +43,7 @@ var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationcon
 // ValidatingHandler handles CloneSet
 type ValidatingHandler struct {
 	Client client.Client
+	Mapper meta.RESTMapper
 
 	// Decoder decodes objects
 	Decoder *admission.Decoder
@@ -74,7 +79,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		if pass, reason := checkRevisionName(obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
-		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, obj); !pass {
+		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, h.Mapper, obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
 		// TODO(wonderflow): Add more validation logic here.
@@ -126,10 +131,11 @@ func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, stri
 }
 
 // checkWorkloadNameForVersioning check whether versioning-enabled component workload name is empty
-func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
+func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, mapper meta.RESTMapper,
+	appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
 	for _, v := range appConfig.Spec.Components {
 		acc := v
-		vEnabled, err := checkComponentVersionEnabled(ctx, client, &acc)
+		vEnabled, err := checkComponentVersionEnabled(ctx, client, mapper, &acc)
 		if err != nil {
 			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
 		}
@@ -176,7 +182,14 @@ func (h *ValidatingHandler) InjectDecoder(d *admission.Decoder) error {
 }
 
 // RegisterValidatingHandler will register application configuration validation to webhook
-func RegisterValidatingHandler(mgr manager.Manager) {
+func RegisterValidatingHandler(mgr manager.Manager) error {
 	server := mgr.GetWebhookServer()
-	server.Register("/validating-core-oam-dev-v1alpha2-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{}})
+	mapper, err := apiutil.NewDiscoveryRESTMapper(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+	server.Register("/validating-core-oam-dev-v1alpha2-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{
+		Mapper: mapper,
+	}})
+	return nil
 }

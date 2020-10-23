@@ -314,7 +314,7 @@ var _ = AfterSuite(func() {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "foo.example.com",
 			Labels: map[string]string{"crd": "dependency"},
-		},
+		}
 	}
 	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
 

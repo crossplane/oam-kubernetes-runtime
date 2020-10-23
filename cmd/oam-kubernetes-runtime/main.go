@@ -88,7 +88,11 @@ func main() {
 
 	if useWebhook {
 		oamLog.Info("OAM webhook enabled, will serving at :" + strconv.Itoa(webhookPort))
-		webhook.Add(mgr)
+		if err = webhook.Add(mgr); err != nil {
+			oamLog.Error(err, "unable to setup the webhook for core controller")
+			os.Exit(1)
+		}
+
 	}
 
 	if err = appController.Setup(mgr, controllerArgs, logging.NewLogrLogger(oamLog)); err != nil {

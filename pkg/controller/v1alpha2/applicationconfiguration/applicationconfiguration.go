@@ -18,17 +18,18 @@ package applicationconfiguration
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
-
 	"github.com/pkg/errors"
+	meta2 "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -41,6 +42,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
 const (
@@ -79,6 +81,10 @@ const (
 
 // Setup adds a controller that reconciles ApplicationConfigurations.
 func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
+	mapper, err := apiutil.NewDiscoveryRESTMapper(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("create discovery mapper fail %v", err)
+	}
 	name := "oam/" + strings.ToLower(v1alpha2.ApplicationConfigurationGroupKind)
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -89,7 +95,7 @@ func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
 			Logger:        l,
 			RevisionLimit: args.RevisionLimit,
 		}).
-		Complete(NewReconciler(mgr,
+		Complete(NewReconciler(mgr, mapper,
 			WithLogger(l.WithValues("controller", name)),
 			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -164,12 +170,13 @@ func WithPosthook(name string, hook ControllerHooks) ReconcilerOption {
 
 // NewReconciler returns an OAMApplicationReconciler that reconciles ApplicationConfigurations
 // by rendering and instantiating their Components and Traits.
-func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *OAMApplicationReconciler {
+func NewReconciler(m ctrl.Manager, mapper meta2.RESTMapper, o ...ReconcilerOption) *OAMApplicationReconciler {
 	r := &OAMApplicationReconciler{
 		client: m.GetClient(),
 		scheme: m.GetScheme(),
 		components: &components{
 			client:   m.GetClient(),
+			mapper:   mapper,
 			params:   ParameterResolveFn(resolve),
 			workload: ResourceRenderFn(renderWorkload),
 			trait:    ResourceRenderFn(renderTrait),
@@ -177,6 +184,7 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *OAMApplicationReconci
 		workloads: &workloads{
 			client:    resource.NewAPIPatchingApplicator(m.GetClient()),
 			rawClient: m.GetClient(),
+			mapper:    mapper,
 		},
 		gc:        GarbageCollectorFn(eligible),
 		log:       logging.NewNopLogger(),

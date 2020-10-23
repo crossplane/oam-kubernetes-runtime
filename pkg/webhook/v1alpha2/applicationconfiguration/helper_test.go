@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
+
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/stretchr/testify/assert"
 
@@ -98,11 +100,12 @@ func TestCheckComponentVersionEnabled(t *testing.T) {
 			result: false,
 		},
 	}
+	mapper := mock.NewMockMapper()
 
 	for _, tv := range tests {
 		func(t *testing.T) {
 			mockClient.MockGet = tv.mockGetFun
-			result, _ := checkComponentVersionEnabled(ctx, mockClient, &tv.acc)
+			result, _ := checkComponentVersionEnabled(ctx, mockClient, mapper, &tv.acc)
 			assert.Equal(t, tv.result, result, fmt.Sprintf("Test case: %q", tv.caseName))
 		}(t)
 	}

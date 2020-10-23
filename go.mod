@@ -5,7 +5,6 @@ go 1.13
 require (
 	github.com/crossplane/crossplane-runtime v0.8.0
 	github.com/davecgh/go-spew v1.1.1
-	github.com/gertd/go-pluralize v0.1.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.1.0
 	github.com/google/go-cmp v0.4.0
@@ -15,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.4.0
 	go.uber.org/zap v1.10.0
-	golang.org/x/tools v0.0.0-20200630223951-c138986dd9b9 // indirect
+	golang.org/x/tools v0.0.0-20200630223951-c138986dd9b9
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.18.5
 	k8s.io/apiextensions-apiserver v0.18.2

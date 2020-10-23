@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -189,7 +191,8 @@ var _ = Describe("ApplicationConfiguration Admission controller Test", func() {
 	})
 
 	It("Test validating handler", func() {
-		var handler admission.Handler = &ValidatingHandler{}
+		mapper := mock.NewMockMapper()
+		var handler admission.Handler = &ValidatingHandler{Mapper: mapper}
 		decoderInjector := handler.(admission.DecoderInjector)
 		decoderInjector.InjectDecoder(decoder)
 		By("Creating valid trait")

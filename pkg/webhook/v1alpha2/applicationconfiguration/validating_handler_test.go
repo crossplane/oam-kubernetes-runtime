@@ -152,6 +152,8 @@ func TestCheckWorkloadNameForVersioning(t *testing.T) {
 			Name: tName,
 		}})
 
+	mapper := mock.NewMockMapper()
+
 	tests := []struct {
 		caseName     string
 		appConfig    v1alpha2.ApplicationConfiguration
@@ -376,7 +378,7 @@ func TestCheckWorkloadNameForVersioning(t *testing.T) {
 	for _, tc := range tests {
 		func(t *testing.T) {
 			mockClient.MockGet = tc.mockGetFunc
-			result, reason := checkWorkloadNameForVersioning(ctx, mockClient, &tc.appConfig)
+			result, reason := checkWorkloadNameForVersioning(ctx, mockClient, mapper, &tc.appConfig)
 			assert.Equal(t, tc.expectResult, result, fmt.Sprintf("Test case: %q", tc.caseName))
 			assert.Equal(t, tc.expectReason, reason, fmt.Sprintf("Test case: %q", tc.caseName))
 		}(t)
