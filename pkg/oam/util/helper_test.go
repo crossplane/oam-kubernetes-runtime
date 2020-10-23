@@ -341,7 +341,7 @@ func TestScopeRelatedUtils(t *testing.T) {
 		tclient := test.MockClient{
 			MockGet: test.NewMockGetFn(nil, tc.fields.getFunc),
 		}
-		got, err := util.FetchScopeDefinition(ctx, &tclient, mock.NewMockMapper(), unstructuredScope)
+		got, err := util.FetchScopeDefinition(ctx, &tclient, mock.NewMockDiscoveryMapper(), unstructuredScope)
 		t.Log(fmt.Sprint("Running test: ", name))
 		assert.Equal(t, tc.want.err, err)
 		assert.Equal(t, tc.want.spd, got)
@@ -434,7 +434,7 @@ func TestTraitHelper(t *testing.T) {
 		tclient := test.MockClient{
 			MockGet: test.NewMockGetFn(nil, tc.fields.getFunc),
 		}
-		got, err := util.FetchTraitDefinition(ctx, &tclient, mock.NewMockMapper(), unstructuredTrait)
+		got, err := util.FetchTraitDefinition(ctx, &tclient, mock.NewMockDiscoveryMapper(), unstructuredTrait)
 		t.Log(fmt.Sprint("Running test: ", name))
 		assert.Equal(t, tc.want.err, err)
 		assert.Equal(t, tc.want.td, got)
@@ -521,7 +521,7 @@ func TestUtils(t *testing.T) {
 		tclient := test.MockClient{
 			MockGet: test.NewMockGetFn(nil, tc.fields.getFunc),
 		}
-		got, err := util.FetchWorkloadDefinition(ctx, &tclient, mock.NewMockMapper(), unstructuredWorkload)
+		got, err := util.FetchWorkloadDefinition(ctx, &tclient, mock.NewMockDiscoveryMapper(), unstructuredWorkload)
 		t.Log(fmt.Sprint("Running test: ", name))
 
 		assert.Equal(t, tc.want.err, err)
@@ -705,7 +705,7 @@ func TestChildResources(t *testing.T) {
 			MockGet:  test.NewMockGetFn(nil, tc.fields.getFunc),
 			MockList: test.NewMockListFn(nil, tc.fields.listFunc),
 		}
-		got, err := util.FetchWorkloadChildResources(ctx, log, &tclient, mock.NewMockMapper(), unstructuredWorkload)
+		got, err := util.FetchWorkloadChildResources(ctx, log, &tclient, mock.NewMockDiscoveryMapper(), unstructuredWorkload)
 		t.Log(fmt.Sprint("Running test: ", name))
 		assert.Equal(t, tc.want.err, err)
 		assert.Equal(t, tc.want.crks, got)
@@ -763,7 +763,7 @@ func TestUnstructured(t *testing.T) {
 		},
 	}
 	for name, ti := range tests {
-		mapper := mock.NewMockMapper()
+		mapper := mock.NewMockDiscoveryMapper()
 		mapper.MockRESTMapping = mock.NewMockRESTMapping(ti.resource)
 		got, err := util.GetDefinitionName(mapper, ti.u, ti.typeLabel)
 		assert.NoError(t, err)

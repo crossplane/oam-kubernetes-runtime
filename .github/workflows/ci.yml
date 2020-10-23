@@ -120,6 +120,9 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: install Kubebuilder
+        uses: RyanSiu1995/kubebuilder-action@v1
+
       - name: Cache Go Dependencies
         uses: actions/cache@v2
         with:

@@ -134,7 +134,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 			func() error {
 				return k8sClient.Get(ctx, objectKey, res)
 			},
-			time.Second*60, time.Millisecond*500).Should(&util.NotFoundMatcher{})
+			time.Second*120, time.Millisecond*500).Should(&util.NotFoundMatcher{})
 		Eventually(
 			func() error {
 				return k8sClient.Create(ctx, &ns)
@@ -334,7 +334,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 					k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &comp1)
 					return comp1.Status.LatestRevision
 				},
-				time.Second*30, time.Millisecond*500).ShouldNot(BeNil())
+				time.Second*120, time.Millisecond*500).ShouldNot(BeNil())
 
 			revisionNameV1 := comp1.Status.LatestRevision.Name
 
@@ -365,7 +365,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 					}
 					return nil
 				},
-				time.Second*30, time.Millisecond*500).ShouldNot(BeNil())
+				time.Second*120, time.Millisecond*500).ShouldNot(BeNil())
 
 			revisionNameV2 := comp2.Status.LatestRevision.Name
 
@@ -377,7 +377,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 					w2.SetKind("Bar")
 					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: revisionNameV2}, &w2)
 				},
-				time.Second*15, time.Millisecond*500).Should(BeNil())
+				time.Second*60, time.Millisecond*500).Should(BeNil())
 			k2, _, _ := unstructured.NestedString(w2.Object, "spec", "key")
 			Expect(k2).Should(BeEquivalentTo("v2"), fmt.Sprintf("%v", w2.Object))
 
@@ -436,7 +436,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 					w1.SetKind("Bar")
 					return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &w1)
 				},
-				time.Second*15, time.Millisecond*500).Should(BeNil())
+				time.Second*60, time.Millisecond*500).Should(BeNil())
 
 			k1, _, _ := unstructured.NestedString(w1.Object, "spec", "key")
 			Expect(k1).Should(BeEquivalentTo("v1"), fmt.Sprintf("%v", w1.Object))
@@ -461,7 +461,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 					k2, _, _ := unstructured.NestedString(w2.Object, "spec", "key")
 					return k2
 				},
-				time.Second*15, time.Millisecond*500).Should(BeEquivalentTo("v2"))
+				time.Second*120, time.Millisecond*500).Should(BeEquivalentTo("v2"))
 
 			By("Check AppConfig status")
 			Eventually(

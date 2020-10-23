@@ -887,7 +887,7 @@ func TestDependency(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mapper := mock.NewMockMapper()
+	mapper := mock.NewMockDiscoveryMapper()
 
 	type args struct {
 		components []v1alpha2.ApplicationConfigurationComponent
@@ -1299,7 +1299,7 @@ func TestDependency(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			c := components{
-				mapper: mapper,
+				dm: mapper,
 				client: &test.MockClient{
 					MockGet: test.MockGetFn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 						if obj.GetObjectKind().GroupVersionKind().Kind == "Workload" {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -22,6 +20,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -191,7 +190,7 @@ var _ = Describe("ApplicationConfiguration Admission controller Test", func() {
 	})
 
 	It("Test validating handler", func() {
-		mapper := mock.NewMockMapper()
+		mapper := mock.NewMockDiscoveryMapper()
 		var handler admission.Handler = &ValidatingHandler{Mapper: mapper}
 		decoderInjector := handler.(admission.DecoderInjector)
 		decoderInjector.InjectDecoder(decoder)

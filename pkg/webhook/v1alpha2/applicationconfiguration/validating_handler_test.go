@@ -152,7 +152,7 @@ func TestCheckWorkloadNameForVersioning(t *testing.T) {
 			Name: tName,
 		}})
 
-	mapper := mock.NewMockMapper()
+	mapper := mock.NewMockDiscoveryMapper()
 
 	tests := []struct {
 		caseName     string

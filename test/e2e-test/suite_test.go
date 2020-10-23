@@ -197,52 +197,6 @@ var _ = BeforeSuite(func(done Done) {
 	}
 	Expect(k8sClient.Create(context.Background(), &adminRoleBinding)).Should(BeNil())
 	By("Created cluster role binding for the test service account")
-	// Create a crd for appconfig dependency test
-	crd = crdv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "foo.example.com",
-			Labels: map[string]string{"crd": "dependency"},
-		},
-		Spec: crdv1.CustomResourceDefinitionSpec{
-			Group: "example.com",
-			Names: crdv1.CustomResourceDefinitionNames{
-				Kind:     "Foo",
-				ListKind: "FooList",
-				Plural:   "foo",
-				Singular: "foo",
-			},
-			Versions: []crdv1.CustomResourceDefinitionVersion{
-				{
-					Name:    "v1",
-					Served:  true,
-					Storage: true,
-					Schema: &crdv1.CustomResourceValidation{
-						OpenAPIV3Schema: &crdv1.JSONSchemaProps{
-							Type: "object",
-							Properties: map[string]crdv1.JSONSchemaProps{
-								"spec": {
-									Type: "object",
-									Properties: map[string]crdv1.JSONSchemaProps{
-										"key": {Type: "string"},
-									},
-								},
-								"status": {
-									Type: "object",
-									Properties: map[string]crdv1.JSONSchemaProps{
-										"key":      {Type: "string"},
-										"app-hash": {Type: "string"},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			Scope: crdv1.NamespaceScoped,
-		},
-	}
-	Expect(k8sClient.Create(context.Background(), &crd)).Should(SatisfyAny(BeNil(), &util.AlreadyExistMatcher{}))
-	By("Created a crd for appconfig dependency test")
 
 	crd = crdv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -301,22 +255,6 @@ var _ = AfterSuite(func() {
 	}
 	Expect(k8sClient.Delete(context.Background(), &adminRoleBinding)).Should(BeNil())
 	By("Deleted the cluster role binding")
-	manualscalertrait = v1alpha2.TraitDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "manualscalertraits.core.oam.dev",
-			Labels: map[string]string{"trait": "manualscalertrait"},
-		},
-	}
-	Expect(k8sClient.Delete(context.Background(), &manualscalertrait)).Should(BeNil())
-	Expect(k8sClient.Delete(context.Background(), &extendedmanualscalertrait)).Should(BeNil())
-	By("Deleted the manual scalertrait definition")
-	crd = crdv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "foo.example.com",
-			Labels: map[string]string{"crd": "dependency"},
-		}
-	}
-	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
 
 	crd = crdv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -327,18 +265,19 @@ var _ = AfterSuite(func() {
 	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
 	By("Deleted the custom resource definition")
 
-	td := v1alpha2.TraitDefinition{
+	crd = crdv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "bars.example.com",
+			Name: "workloaddefinitions.core.oam.dev",
 		},
 	}
-	k8sClient.Delete(context.Background(), &td)
+	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
+	By("Deleted the workloaddefinitions CRD")
 
-	wd := v1alpha2.WorkloadDefinition{
+	crd = crdv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "bars.example.com",
+			Name: "traitdefinitions.core.oam.dev",
 		},
 	}
-	k8sClient.Delete(context.Background(), &wd)
-
+	Expect(k8sClient.Delete(context.Background(), &crd)).Should(BeNil())
+	By("Deleted the workloaddefinitions CRD")
 })

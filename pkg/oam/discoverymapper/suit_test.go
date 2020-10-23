@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	corev1 "k8s.io/api/core/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,8 +26,6 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
-var controllerDone chan struct{}
-var routeNS corev1.Namespace
 var scheme = runtime.NewScheme()
 
 func TestMapper(t *testing.T) {
@@ -70,7 +67,7 @@ var _ = Describe("Mapper discovery resources", func() {
 		Expect(err).Should(BeNil())
 		mapper, err := dism.GetMapper()
 		Expect(err).Should(BeNil())
-		mapping, err := mapper.RESTMapping(schema.GroupKind{"apps", "Deployment"}, "v1")
+		mapping, err := mapper.RESTMapping(schema.GroupKind{Group: "apps", Kind: "Deployment"}, "v1")
 		Expect(err).Should(BeNil())
 		Expect(mapping.Resource).Should(Equal(schema.GroupVersionResource{
 			Group:    "apps",
@@ -87,7 +84,7 @@ var _ = Describe("Mapper discovery resources", func() {
 		mapper, err := dism.GetMapper()
 		Expect(err).Should(BeNil())
 		var mapping *meta.RESTMapping
-		mapping, err = mapper.RESTMapping(schema.GroupKind{"", "Pod"}, "v1")
+		mapping, err = mapper.RESTMapping(schema.GroupKind{Group: "", Kind: "Pod"}, "v1")
 		Expect(err).Should(BeNil())
 		Expect(mapping.Resource).Should(Equal(schema.GroupVersionResource{
 			Group:    "",
@@ -122,7 +119,7 @@ var _ = Describe("Mapper discovery resources", func() {
 		Expect(k8sClient.Create(context.Background(), &crd)).Should(BeNil())
 
 		Eventually(func() error {
-			mapping, err = dism.RESTMapping(schema.GroupKind{"example.com", "Foo"}, "v1")
+			mapping, err = dism.RESTMapping(schema.GroupKind{Group: "example.com", Kind: "Foo"}, "v1")
 			return err
 		}, time.Second*5, time.Millisecond*500).Should(BeNil())
 		Expect(mapping.Resource).Should(Equal(schema.GroupVersionResource{

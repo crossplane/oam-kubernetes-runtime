@@ -20,9 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
@@ -42,6 +39,7 @@ import (
 
 	oamv1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -54,14 +52,14 @@ const (
 
 // Setup adds a controller that reconciles ContainerizedWorkload.
 func Setup(mgr ctrl.Manager, args controller.Args, log logging.Logger) error {
-	mapper, err := apiutil.NewDiscoveryRESTMapper(mgr.GetConfig())
+	dm, err := discoverymapper.New(mgr.GetConfig())
 	if err != nil {
 		return err
 	}
 	reconciler := Reconciler{
 		Client:          mgr.GetClient(),
 		DiscoveryClient: *discovery.NewDiscoveryClientForConfigOrDie(mgr.GetConfig()),
-		mapper:          mapper,
+		dm:              dm,
 		log:             ctrl.Log.WithName("ManualScalarTrait"),
 		record:          event.NewAPIRecorder(mgr.GetEventRecorderFor("ManualScalarTrait")),
 		Scheme:          mgr.GetScheme(),
@@ -73,7 +71,7 @@ func Setup(mgr ctrl.Manager, args controller.Args, log logging.Logger) error {
 type Reconciler struct {
 	client.Client
 	discovery.DiscoveryClient
-	mapper meta.RESTMapper
+	dm     discoverymapper.DiscoveryMapper
 	log    logr.Logger
 	record event.Recorder
 	Scheme *runtime.Scheme
@@ -114,7 +112,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Fetch the child resources list from the corresponding workload
-	resources, err := util.FetchWorkloadChildResources(ctx, mLog, r, r.mapper, workload)
+	resources, err := util.FetchWorkloadChildResources(ctx, mLog, r, r.dm, workload)
 	if err != nil {
 		mLog.Error(err, "Error while fetching the workload child resources", "workload", workload.UnstructuredContent())
 		r.record.Event(eventObj, event.Warning(util.ErrFetchChildResources, err))

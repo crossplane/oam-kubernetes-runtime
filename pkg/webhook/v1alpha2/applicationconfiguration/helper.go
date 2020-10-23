@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -21,7 +20,7 @@ const (
 )
 
 // checkComponentVersionEnabled check whethter a component is versioning mechanism enabled
-func checkComponentVersionEnabled(ctx context.Context, client client.Reader, mapper meta.RESTMapper,
+func checkComponentVersionEnabled(ctx context.Context, client client.Reader, dm discoverymapper.DiscoveryMapper,
 	acc *v1alpha2.ApplicationConfigurationComponent) (bool, error) {
 	if acc.RevisionName != "" {
 		return true, nil
@@ -31,7 +30,7 @@ func checkComponentVersionEnabled(ctx context.Context, client client.Reader, map
 		if err := json.Unmarshal(ct.Trait.Raw, ut); err != nil {
 			return false, errors.Wrap(err, errUnmarshalTrait)
 		}
-		td, err := util.FetchTraitDefinition(ctx, client, mapper, ut)
+		td, err := util.FetchTraitDefinition(ctx, client, dm, ut)
 		if err != nil {
 			return false, errors.Wrapf(err, errFmtGetTraitDefinition, ut.GetAPIVersion(), ut.GetKind(), ut.GetName())
 		}

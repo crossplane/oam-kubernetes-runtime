@@ -6,19 +6,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-
-	"k8s.io/apimachinery/pkg/api/meta"
-
-	"k8s.io/apimachinery/pkg/util/validation/field"
-
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -43,7 +38,7 @@ var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationcon
 // ValidatingHandler handles CloneSet
 type ValidatingHandler struct {
 	Client client.Client
-	Mapper meta.RESTMapper
+	Mapper discoverymapper.DiscoveryMapper
 
 	// Decoder decodes objects
 	Decoder *admission.Decoder
@@ -131,11 +126,11 @@ func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, stri
 }
 
 // checkWorkloadNameForVersioning check whether versioning-enabled component workload name is empty
-func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, mapper meta.RESTMapper,
+func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, dm discoverymapper.DiscoveryMapper,
 	appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
 	for _, v := range appConfig.Spec.Components {
 		acc := v
-		vEnabled, err := checkComponentVersionEnabled(ctx, client, mapper, &acc)
+		vEnabled, err := checkComponentVersionEnabled(ctx, client, dm, &acc)
 		if err != nil {
 			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
 		}
@@ -184,7 +179,7 @@ func (h *ValidatingHandler) InjectDecoder(d *admission.Decoder) error {
 // RegisterValidatingHandler will register application configuration validation to webhook
 func RegisterValidatingHandler(mgr manager.Manager) error {
 	server := mgr.GetWebhookServer()
-	mapper, err := apiutil.NewDiscoveryRESTMapper(mgr.GetConfig())
+	mapper, err := discoverymapper.New(mgr.GetConfig())
 	if err != nil {
 		return err
 	}

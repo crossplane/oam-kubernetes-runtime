@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
-
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/stretchr/testify/assert"
 
@@ -17,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 )
 
 func TestCheckComponentVersionEnabled(t *testing.T) {
@@ -100,7 +99,7 @@ func TestCheckComponentVersionEnabled(t *testing.T) {
 			result: false,
 		},
 	}
-	mapper := mock.NewMockMapper()
+	mapper := mock.NewMockDiscoveryMapper()
 
 	for _, tv := range tests {
 		func(t *testing.T) {

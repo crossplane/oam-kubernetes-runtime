@@ -9,25 +9,22 @@ import (
 	"reflect"
 	"time"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"k8s.io/apimachinery/pkg/api/meta"
-
+	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 )
 
 var (
@@ -115,11 +112,11 @@ func FetchWorkload(ctx context.Context, c client.Client, mLog logr.Logger, oamTr
 }
 
 // FetchScopeDefinition fetch corresponding scopeDefinition given a scope
-func FetchScopeDefinition(ctx context.Context, r client.Reader, mapper meta.RESTMapper,
+func FetchScopeDefinition(ctx context.Context, r client.Reader, dm discoverymapper.DiscoveryMapper,
 	scope *unstructured.Unstructured) (*v1alpha2.ScopeDefinition, error) {
 	// The name of the scopeDefinition CR is the CRD name of the scope
 	// TODO(wonderflow): we haven't support scope definition label type yet.
-	spName, err := GetDefinitionName(mapper, scope, "")
+	spName, err := GetDefinitionName(dm, scope, "")
 	if err != nil {
 		return nil, err
 	}
@@ -134,10 +131,10 @@ func FetchScopeDefinition(ctx context.Context, r client.Reader, mapper meta.REST
 }
 
 // FetchTraitDefinition fetch corresponding traitDefinition given a trait
-func FetchTraitDefinition(ctx context.Context, r client.Reader, mapper meta.RESTMapper,
+func FetchTraitDefinition(ctx context.Context, r client.Reader, dm discoverymapper.DiscoveryMapper,
 	trait *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
 	// The name of the traitDefinition CR is the CRD name of the trait
-	trName, err := GetDefinitionName(mapper, trait, oam.TraitTypeLabel)
+	trName, err := GetDefinitionName(dm, trait, oam.TraitTypeLabel)
 	if err != nil {
 		return nil, err
 	}
@@ -152,10 +149,10 @@ func FetchTraitDefinition(ctx context.Context, r client.Reader, mapper meta.REST
 }
 
 // FetchWorkloadDefinition fetch corresponding workloadDefinition given a workload
-func FetchWorkloadDefinition(ctx context.Context, r client.Reader, mapper meta.RESTMapper,
+func FetchWorkloadDefinition(ctx context.Context, r client.Reader, dm discoverymapper.DiscoveryMapper,
 	workload *unstructured.Unstructured) (*v1alpha2.WorkloadDefinition, error) {
 	// The name of the workloadDefinition CR is the CRD name of the component
-	wldName, err := GetDefinitionName(mapper, workload, oam.WorkloadTypeLabel)
+	wldName, err := GetDefinitionName(dm, workload, oam.WorkloadTypeLabel)
 	if err != nil {
 		return nil, err
 	}
@@ -171,9 +168,9 @@ func FetchWorkloadDefinition(ctx context.Context, r client.Reader, mapper meta.R
 
 // FetchWorkloadChildResources fetch corresponding child resources given a workload
 func FetchWorkloadChildResources(ctx context.Context, mLog logr.Logger, r client.Reader,
-	mapper meta.RESTMapper, workload *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+	dm discoverymapper.DiscoveryMapper, workload *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
 	// Fetch the corresponding workloadDefinition CR
-	workloadDefinition, err := FetchWorkloadDefinition(ctx, r, mapper, workload)
+	workloadDefinition, err := FetchWorkloadDefinition(ctx, r, dm, workload)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +238,7 @@ func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject
 // the format of the definition of a resource is <kind plurals>.<group>
 // Now the definition name of a resource could also be defined as `definition.oam.dev/name` in `metadata.annotations`
 // typeLabel specified which Definition it is, if specified, will directly get definition from label.
-func GetDefinitionName(mapper meta.RESTMapper, u *unstructured.Unstructured, typeLabel string) (string, error) {
+func GetDefinitionName(dm discoverymapper.DiscoveryMapper, u *unstructured.Unstructured, typeLabel string) (string, error) {
 	if typeLabel != "" {
 		if labels := u.GetLabels(); labels != nil {
 			if definitionName, ok := labels[typeLabel]; ok {
@@ -253,7 +250,7 @@ func GetDefinitionName(mapper meta.RESTMapper, u *unstructured.Unstructured, typ
 	if err != nil {
 		return "", err
 	}
-	mapping, err := mapper.RESTMapping(schema.GroupKind{Group: groupVersion.Group, Kind: u.GetKind()}, groupVersion.Version)
+	mapping, err := dm.RESTMapping(schema.GroupKind{Group: groupVersion.Group, Kind: u.GetKind()}, groupVersion.Version)
 	if err != nil {
 		return "", err
 	}

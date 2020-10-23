@@ -8,6 +8,7 @@ import (
 	"k8s.io/client-go/restmapper"
 )
 
+// DiscoveryMapper is a interface for refresh and discovery resources from GVK.
 type DiscoveryMapper interface {
 	GetMapper() (meta.RESTMapper, error)
 	Refresh() (meta.RESTMapper, error)
@@ -52,6 +53,7 @@ func (d *DefaultDiscoveryMapper) Refresh() (meta.RESTMapper, error) {
 	return d.mapper, nil
 }
 
+// RESTMapping will mapping resources from GVK, if not found, it will refresh from APIServer and try once again
 func (d *DefaultDiscoveryMapper) RESTMapping(gk schema.GroupKind, version ...string) (*meta.RESTMapping, error) {
 	mapper, err := d.GetMapper()
 	if err != nil {

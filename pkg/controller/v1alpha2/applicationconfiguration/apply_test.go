@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
-
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
@@ -36,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -320,9 +319,9 @@ func TestApplyWorkloads(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			mapper := mock.NewMockMapper()
+			mapper := mock.NewMockDiscoveryMapper()
 
-			w := workloads{client: tc.client, rawClient: tc.rawClient, mapper: mapper}
+			w := workloads{client: tc.client, rawClient: tc.rawClient, dm: mapper}
 			err := w.Apply(tc.args.ctx, tc.args.ws, tc.args.w)
 
 			if diff := cmp.Diff(tc.want, err, test.EquateErrors()); diff != "" {
@@ -467,8 +466,8 @@ func TestFinalizeWorkloadScopes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.caseName, func(t *testing.T) {
 			acTest := ac
-			mapper := mock.NewMockMapper()
-			w := workloads{client: tc.client, rawClient: tc.rawClient, mapper: mapper}
+			mapper := mock.NewMockDiscoveryMapper()
+			w := workloads{client: tc.client, rawClient: tc.rawClient, dm: mapper}
 			err := w.Finalize(ctx, &acTest)
 
 			if diff := cmp.Diff(tc.wantErr, err, test.EquateErrors()); diff != "" {
