@@ -5,15 +5,8 @@ on:
     branches:
       - master
       - release-*
-    paths-ignore:
-      - '**.md'
-      - '**.png'
-      - '**.jpg'
-  pull_request:
-    paths-ignore:
-      - '**.md'
-      - '**.png'
-      - '**.jpg'
+  pull_request: {}
+  workflow_dispatch: {}
 
 env:
   # Common versions
