@@ -47,6 +47,9 @@ NPROCS ?= 1
 # parallel can lead to high CPU utilization. by default we reduce the parallelism
 # to half the number of CPU cores.
 GO_TEST_PARALLEL := $(shell echo $$(( $(NPROCS) / 2 )))
+GO_TEST_FLAGS += -race
+GO_COVER_MODE = atomic
+GO_CGO_ENABLED = 1
 
 GO_INTEGRATION_TESTS_SUBDIRS = test
 
@@ -88,7 +91,7 @@ cobertura:
 		$(GOCOVER_COBERTURA) > $(GO_TEST_OUTPUT)/cobertura-coverage.xml
 
 # Ensure a PR is ready for review.
-reviewable: generate lint
+reviewable: prepare-legacy-chart generate lint
 	@go mod tidy
 
 # Ensure branch is clean.
@@ -126,7 +129,7 @@ oam-kubernetes-runtime.help:
 
 help-special: oam-kubernetes-runtime.help
 
-.PHONY: oam-kubernetes-runtime.help help-special kind-load e2e e2e-setup e2e-test e2e-cleanup run install-crds uninstall-crds
+.PHONY: oam-kubernetes-runtime.help help-special kind-load e2e e2e-setup e2e-test e2e-cleanup run install-crds uninstall-crds prepare-legacy-chart
 
 # Install CRDs into a cluster. This is for convenience.
 install-crds: reviewable
