@@ -15,6 +15,8 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,6 +41,12 @@ var (
 const (
 	// TraitPrefixKey is prefix of trait name
 	TraitPrefixKey = "trait"
+
+	// Dummy used for dummy definition
+	Dummy = "dummy"
+
+	// DummyTraitMessage is a message for trait which don't have definition found
+	DummyTraitMessage = "No valid TraitDefinition found, all framework capabilities will work as default or disabled"
 )
 
 const (
@@ -111,6 +119,34 @@ func FetchWorkload(ctx context.Context, c client.Client, mLog logr.Logger, oamTr
 	return &workload, nil
 }
 
+// GetDummyTraitDefinition will generate a dummy TraitDefinition for CustomResource that won't block app from running.
+// OAM runtime will report warning if they got this dummy definition.
+func GetDummyTraitDefinition(u *unstructured.Unstructured) *v1alpha2.TraitDefinition {
+	return &v1alpha2.TraitDefinition{
+		TypeMeta: metav1.TypeMeta{Kind: v1alpha2.TraitDefinitionKind, APIVersion: v1alpha2.SchemeGroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: Dummy, Annotations: map[string]string{
+			"apiVersion": u.GetAPIVersion(),
+			"kind":       u.GetKind(),
+			"name":       u.GetName(),
+		}},
+		Spec: v1alpha2.TraitDefinitionSpec{Reference: v1alpha2.DefinitionReference{Name: Dummy}},
+	}
+}
+
+// GetDummyWorkloadDefinition will generate a dummy WorkloadDefinition for CustomResource that won't block app from running.
+// OAM runtime will report warning if they got this dummy definition.
+func GetDummyWorkloadDefinition(u *unstructured.Unstructured) *v1alpha2.WorkloadDefinition {
+	return &v1alpha2.WorkloadDefinition{
+		TypeMeta: metav1.TypeMeta{Kind: v1alpha2.WorkloadDefinitionKind, APIVersion: v1alpha2.SchemeGroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: Dummy, Annotations: map[string]string{
+			"apiVersion": u.GetAPIVersion(),
+			"kind":       u.GetKind(),
+			"name":       u.GetName(),
+		}},
+		Spec: v1alpha2.WorkloadDefinitionSpec{Reference: v1alpha2.DefinitionReference{Name: Dummy}},
+	}
+}
+
 // FetchScopeDefinition fetch corresponding scopeDefinition given a scope
 func FetchScopeDefinition(ctx context.Context, r client.Reader, dm discoverymapper.DiscoveryMapper,
 	scope *unstructured.Unstructured) (*v1alpha2.ScopeDefinition, error) {
@@ -172,6 +208,10 @@ func FetchWorkloadChildResources(ctx context.Context, mLog logr.Logger, r client
 	// Fetch the corresponding workloadDefinition CR
 	workloadDefinition, err := FetchWorkloadDefinition(ctx, r, dm, workload)
 	if err != nil {
+		// No definition will won't block app from running
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return fetchChildResources(ctx, mLog, r, workload, workloadDefinition.Spec.ChildResourceKinds)

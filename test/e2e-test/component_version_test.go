@@ -334,7 +334,7 @@ var _ = Describe("Versioning mechanism of components", func() {
 					k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: componentName}, &comp1)
 					return comp1.Status.LatestRevision
 				},
-				time.Second*120, time.Millisecond*500).ShouldNot(BeNil())
+				time.Second*300, time.Millisecond*500).ShouldNot(BeNil())
 
 			revisionNameV1 := comp1.Status.LatestRevision.Name
 

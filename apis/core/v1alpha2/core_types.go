@@ -355,6 +355,9 @@ type WorkloadTrait struct {
 
 	// Reference to a trait created by an ApplicationConfiguration.
 	Reference runtimev1alpha1.TypedReference `json:"traitRef"`
+
+	// Message will allow controller to leave some additional information for this trait
+	Message string `json:"message,omitempty"`
 }
 
 // A ScopeStatus represents the state of a scope.

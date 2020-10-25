@@ -1182,3 +1182,28 @@ func TestAddLabels(t *testing.T) {
 		assert.Equal(t, wantObj.GetLabels(), obj.GetLabels())
 	}
 }
+
+func TestGetDummy(t *testing.T) {
+	var u = &unstructured.Unstructured{}
+	u.SetKind("Testkind")
+	u.SetAPIVersion("test.api/v1")
+	u.SetName("testdummy")
+	assert.Equal(t, &v1alpha2.TraitDefinition{
+		TypeMeta: metav1.TypeMeta{Kind: v1alpha2.TraitDefinitionKind, APIVersion: v1alpha2.SchemeGroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: "dummy", Annotations: map[string]string{
+			"apiVersion": u.GetAPIVersion(),
+			"kind":       u.GetKind(),
+			"name":       u.GetName(),
+		}},
+		Spec: v1alpha2.TraitDefinitionSpec{Reference: v1alpha2.DefinitionReference{Name: "dummy"}},
+	}, util.GetDummyTraitDefinition(u))
+	assert.Equal(t, &v1alpha2.WorkloadDefinition{
+		TypeMeta: metav1.TypeMeta{Kind: v1alpha2.WorkloadDefinitionKind, APIVersion: v1alpha2.SchemeGroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: "dummy", Annotations: map[string]string{
+			"apiVersion": u.GetAPIVersion(),
+			"kind":       u.GetKind(),
+			"name":       u.GetName(),
+		}},
+		Spec: v1alpha2.WorkloadDefinitionSpec{Reference: v1alpha2.DefinitionReference{Name: "dummy"}},
+	}, util.GetDummyWorkloadDefinition(u))
+}
