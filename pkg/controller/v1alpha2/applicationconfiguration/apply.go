@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -76,6 +77,7 @@ func (fn WorkloadApplyFns) Finalize(ctx context.Context, ac *v1alpha2.Applicatio
 type workloads struct {
 	client    resource.Applicator
 	rawClient client.Client
+	dm        discoverymapper.DiscoveryMapper
 }
 
 func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
@@ -183,7 +185,7 @@ func findDereferencedScopes(statusScopes []v1alpha2.WorkloadScope, scopes []unst
 
 func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.Unstructured, workloadRef runtimev1alpha1.TypedReference) error {
 	// get ScopeDefinition
-	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, &s)
+	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, a.dm, &s)
 	if err != nil {
 		return errors.Wrapf(err, errFmtGetScopeDefinition, s.GetAPIVersion(), s.GetKind(), s.GetName())
 	}
@@ -237,7 +239,7 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, wr 
 		return errors.Wrapf(err, errFmtApplyScope, s.Reference.APIVersion, s.Reference.Kind, s.Reference.Name)
 	}
 
-	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, &scopeObject)
+	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, a.dm, &scopeObject)
 	if err != nil {
 		return errors.Wrapf(err, errFmtGetScopeDefinition, scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName())
 	}

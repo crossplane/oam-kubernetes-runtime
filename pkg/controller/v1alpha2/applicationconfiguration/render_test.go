@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
+
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -498,7 +500,7 @@ func TestRenderComponents(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			r := &components{tc.fields.client, mock.NewMockDiscoveryMapper(), tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _, err := r.Render(tc.args.ctx, tc.args.ac)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, diff)
@@ -844,7 +846,7 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := &components{tc.fields.client, tc.fields.params, tc.fields.workload, tc.fields.trait}
+			r := &components{tc.fields.client, mock.NewMockDiscoveryMapper(), tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _, _ := r.Render(tc.args.ctx, tc.args.ac)
 			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].Object.GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy()) {
 				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
@@ -855,31 +857,38 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 }
 
 func TestGetDefinitionName(t *testing.T) {
+
 	tests := map[string]struct {
-		u      *unstructured.Unstructured
-		exp    string
-		reason string
+		u        *unstructured.Unstructured
+		exp      string
+		reason   string
+		resource string
 	}{
 		"native resource": {
 			u: &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "apps/v1",
 				"kind":       "Deployment",
 			}},
-			exp:    "deployments.apps",
-			reason: "native resource match",
+			exp:      "deployments.apps",
+			reason:   "native resource match",
+			resource: "deployments",
 		},
 		"extended resource": {
 			u: &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "extend.oam.dev/v1alpha2",
 				"kind":       "SimpleRolloutTrait",
 			}},
-			exp:    "simplerollouttraits.extend.oam.dev",
-			reason: "extend resource match",
+			exp:      "simplerollouttraits.extend.oam.dev",
+			reason:   "extend resource match",
+			resource: "simplerollouttraits",
 		},
 	}
 	for name, ti := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := util.GetDefinitionName(ti.u, "")
+			m := mock.NewMockDiscoveryMapper()
+			m.MockRESTMapping = mock.NewMockRESTMapping(ti.resource)
+			got, err := util.GetDefinitionName(m, ti.u, "")
+			assert.NoError(t, err)
 			if got != ti.exp {
 				t.Errorf("%s getCRDName want %s got %s ", ti.reason, ti.exp, got)
 			}
@@ -991,10 +1000,8 @@ func TestSetTraitProperties(t *testing.T) {
 	expU.SetOwnerReferences([]metav1.OwnerReference{{Name: "comp1"}})
 }
 
-var scheme = runtime.NewScheme()
-
 func TestRenderTraitName(t *testing.T) {
-
+	var scheme = runtime.NewScheme()
 	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
 	assert.NoError(t, core.AddToScheme(scheme))
 	namespace := "ns"

@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/pkg/errors"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,8 +34,6 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	corev1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
-
-	"github.com/pkg/errors"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )

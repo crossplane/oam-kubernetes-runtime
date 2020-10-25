@@ -35,6 +35,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -83,6 +84,7 @@ var _ ComponentRenderer = &components{}
 
 type components struct {
 	client   client.Reader
+	dm       discoverymapper.DiscoveryMapper
 	params   ParameterResolver
 	workload ResourceRenderer
 	trait    ResourceRenderer
@@ -211,7 +213,7 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 
 	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
 
-	traitDef, err := util.FetchTraitDefinition(ctx, r.client, t)
+	traitDef, err := util.FetchTraitDefinition(ctx, r.client, r.dm, t)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
 	}

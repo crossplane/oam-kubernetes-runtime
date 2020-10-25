@@ -659,7 +659,7 @@ func TestReconciler(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := NewReconciler(tc.args.m, tc.args.o...)
+			r := NewReconciler(tc.args.m, nil, tc.args.o...)
 			got, err := r.Reconcile(reconcile.Request{})
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
@@ -886,6 +886,8 @@ func TestDependency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	mapper := mock.NewMockDiscoveryMapper()
 
 	type args struct {
 		components []v1alpha2.ApplicationConfigurationComponent
@@ -1297,6 +1299,7 @@ func TestDependency(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			c := components{
+				dm: mapper,
 				client: &test.MockClient{
 					MockGet: test.MockGetFn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 						if obj.GetObjectKind().GroupVersionKind().Kind == "Workload" {
@@ -1623,7 +1626,7 @@ func TestUpdateStatus(t *testing.T) {
 		},
 	}
 
-	r := NewReconciler(m)
+	r := NewReconciler(m, nil)
 
 	ac := &v1alpha2.ApplicationConfiguration{}
 	err := r.client.Get(context.Background(), types.NamespacedName{Name: "example-appconfig"}, ac)

@@ -18,11 +18,10 @@ package applicationconfiguration
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,6 +40,8 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 )
 
 const (
@@ -79,6 +80,10 @@ const (
 
 // Setup adds a controller that reconciles ApplicationConfigurations.
 func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
+	dm, err := discoverymapper.New(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("create discovery dm fail %v", err)
+	}
 	name := "oam/" + strings.ToLower(v1alpha2.ApplicationConfigurationGroupKind)
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -89,7 +94,7 @@ func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
 			Logger:        l,
 			RevisionLimit: args.RevisionLimit,
 		}).
-		Complete(NewReconciler(mgr,
+		Complete(NewReconciler(mgr, dm,
 			WithLogger(l.WithValues("controller", name)),
 			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
 }
@@ -164,12 +169,13 @@ func WithPosthook(name string, hook ControllerHooks) ReconcilerOption {
 
 // NewReconciler returns an OAMApplicationReconciler that reconciles ApplicationConfigurations
 // by rendering and instantiating their Components and Traits.
-func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *OAMApplicationReconciler {
+func NewReconciler(m ctrl.Manager, dm discoverymapper.DiscoveryMapper, o ...ReconcilerOption) *OAMApplicationReconciler {
 	r := &OAMApplicationReconciler{
 		client: m.GetClient(),
 		scheme: m.GetScheme(),
 		components: &components{
 			client:   m.GetClient(),
+			dm:       dm,
 			params:   ParameterResolveFn(resolve),
 			workload: ResourceRenderFn(renderWorkload),
 			trait:    ResourceRenderFn(renderTrait),
@@ -177,6 +183,7 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *OAMApplicationReconci
 		workloads: &workloads{
 			client:    resource.NewAPIPatchingApplicator(m.GetClient()),
 			rawClient: m.GetClient(),
+			dm:        dm,
 		},
 		gc:        GarbageCollectorFn(eligible),
 		log:       logging.NewNopLogger(),
@@ -261,7 +268,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 	workloads, depStatus, err := r.components.Render(ctx, ac)
 	if err != nil {
-		log.Debug("Cannot render components", "error", err, "requeue-after", time.Now().Add(shortWait))
+		log.Info("Cannot render components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotRenderComponents, err))
 		ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errRenderComponents)))
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
