@@ -112,6 +112,13 @@ var _ = Describe("Mapper discovery resources", func() {
 						OpenAPIV3Schema: &crdv1.JSONSchemaProps{
 							Type: "object",
 						}},
+				}, {
+					Name:   "v1beta1",
+					Served: true,
+					Schema: &crdv1.CustomResourceValidation{
+						OpenAPIV3Schema: &crdv1.JSONSchemaProps{
+							Type: "object",
+						}},
 				}},
 				Scope: crdv1.NamespaceScoped,
 			},
@@ -121,11 +128,24 @@ var _ = Describe("Mapper discovery resources", func() {
 		Eventually(func() error {
 			mapping, err = dism.RESTMapping(schema.GroupKind{Group: "example.com", Kind: "Foo"}, "v1")
 			return err
-		}, time.Second*5, time.Millisecond*500).Should(BeNil())
+		}, time.Second*2, time.Millisecond*300).Should(BeNil())
 		Expect(mapping.Resource).Should(Equal(schema.GroupVersionResource{
 			Group:    "example.com",
 			Version:  "v1",
 			Resource: "foos",
 		}))
+
+		var kinds []schema.GroupVersionKind
+		Eventually(func() error {
+			kinds, err = dism.KindsFor(schema.GroupVersionResource{Group: "example.com", Version: "", Resource: "foos"})
+			return err
+		}, time.Second*2, time.Millisecond*300).Should(BeNil())
+		Expect(kinds).Should(Equal([]schema.GroupVersionKind{
+			{Group: "example.com", Version: "v1", Kind: "Foo"},
+			{Group: "example.com", Version: "v1beta1", Kind: "Foo"},
+		}))
+		kinds, err = dism.KindsFor(schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "foos"})
+		Expect(err).Should(BeNil())
+		Expect(kinds).Should(Equal([]schema.GroupVersionKind{{Group: "example.com", Version: "v1", Kind: "Foo"}}))
 	})
 })

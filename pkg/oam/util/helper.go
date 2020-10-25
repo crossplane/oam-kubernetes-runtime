@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
@@ -295,6 +297,23 @@ func GetDefinitionName(dm discoverymapper.DiscoveryMapper, u *unstructured.Unstr
 		return "", err
 	}
 	return mapping.Resource.Resource + "." + groupVersion.Group, nil
+}
+
+// GetGVKFromDefinition help get Group Version Kind from DefinitionReference
+func GetGVKFromDefinition(dm discoverymapper.DiscoveryMapper, definitionRef v1alpha2.DefinitionReference) (schema.GroupVersionKind, error) {
+	var gvk schema.GroupVersionKind
+	groupResource := schema.ParseGroupResource(definitionRef.Name)
+	gvr := schema.GroupVersionResource{Group: groupResource.Group, Resource: groupResource.Resource, Version: definitionRef.Version}
+	kinds, err := dm.KindsFor(gvr)
+	if err != nil {
+		return gvk, err
+	}
+	if len(kinds) < 1 {
+		return gvk, &meta.NoResourceMatchError{
+			PartialResource: gvr,
+		}
+	}
+	return kinds[0], nil
 }
 
 // Object2Unstructured convert an object to an unstructured struct
