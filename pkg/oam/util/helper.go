@@ -226,6 +226,12 @@ type labelAnnotationObject interface {
 	SetAnnotations(annotations map[string]string)
 }
 
+// PassLabel passes through labels from the parent to the child object
+func PassLabel(parentObj oam.Object, childObj labelAnnotationObject) {
+	// pass app-config labels
+	childObj.SetLabels(MergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+}
+
 // PassLabelAndAnnotation passes through labels and annotation objectMeta from the parent to the child object
 func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject) {
 	// pass app-config labels
