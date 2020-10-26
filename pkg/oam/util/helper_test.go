@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
@@ -770,6 +772,26 @@ func TestUnstructured(t *testing.T) {
 		t.Log(fmt.Sprint("Running test: ", name))
 		assert.Equal(t, ti.exp, got)
 	}
+}
+
+func TestGetGVKFromDef(t *testing.T) {
+	mapper := mock.NewMockDiscoveryMapper()
+	mapper.MockKindsFor = mock.NewMockKindsFor("Abc", "v1", "v2")
+	gvk, err := util.GetGVKFromDefinition(mapper, v1alpha2.DefinitionReference{Name: "abcs.example.com"})
+	assert.NoError(t, err)
+	assert.Equal(t, schema.GroupVersionKind{
+		Group:   "example.com",
+		Version: "v1",
+		Kind:    "Abc",
+	}, gvk)
+
+	gvk, err = util.GetGVKFromDefinition(mapper, v1alpha2.DefinitionReference{Name: "abcs.example.com", Version: "v2"})
+	assert.NoError(t, err)
+	assert.Equal(t, schema.GroupVersionKind{
+		Group:   "example.com",
+		Version: "v2",
+		Kind:    "Abc",
+	}, gvk)
 }
 
 func TestGenTraitName(t *testing.T) {

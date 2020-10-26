@@ -28,6 +28,10 @@ import (
 type DefinitionReference struct {
 	// Name of the referenced CustomResourceDefinition.
 	Name string `json:"name"`
+
+	// Version indicate which version should be used if CRD has multiple versions
+	// by default it will use the first one if not specified
+	Version string `json:"version,omitempty"`
 }
 
 // A ChildResourceKind defines a child Kubernetes resource kind with a selector

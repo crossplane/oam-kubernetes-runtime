@@ -22,7 +22,8 @@ import (
 	"fmt"
 	"net/http"
 
-	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,6 +47,7 @@ const (
 // MutatingHandler handles Component
 type MutatingHandler struct {
 	Client client.Client
+	Mapper discoverymapper.DiscoveryMapper
 
 	// Decoder decodes objects
 	Decoder *admission.Decoder
@@ -102,9 +104,8 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.Component) error {
 		if err := h.Client.Get(context.TODO(), types.NamespacedName{Name: workloadType}, workloadDefinition); err != nil {
 			return err
 		}
-		// fetch the CRDs definition
-		customResourceDefinition := &crdv1.CustomResourceDefinition{}
-		if err := h.Client.Get(context.TODO(), types.NamespacedName{Name: workloadDefinition.Spec.Reference.Name}, customResourceDefinition); err != nil {
+		gvk, err := util.GetGVKFromDefinition(h.Mapper, workloadDefinition.Spec.Reference)
+		if err != nil {
 			return err
 		}
 		// reconstruct the workload CR
@@ -114,11 +115,11 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.Component) error {
 		}
 		// find out the GVK from the CRD definition and set
 		apiVersion := metav1.GroupVersion{
-			Group:   customResourceDefinition.Spec.Group,
-			Version: customResourceDefinition.Spec.Versions[0].Name,
+			Group:   gvk.Group,
+			Version: gvk.Version,
 		}.String()
 		workload.SetAPIVersion(apiVersion)
-		workload.SetKind(customResourceDefinition.Spec.Names.Kind)
+		workload.SetKind(gvk.Kind)
 		mutatelog.Info("Set the component workload GVK", "workload api version", workload.GetAPIVersion(), "workload Kind", workload.GetKind())
 		// copy namespace/label/annotation to the workload and add workloadType label
 		workload.SetNamespace(obj.GetNamespace())
@@ -152,7 +153,12 @@ func (h *MutatingHandler) InjectDecoder(d *admission.Decoder) error {
 }
 
 // RegisterMutatingHandler will register component mutation handler to the webhook
-func RegisterMutatingHandler(mgr manager.Manager) {
+func RegisterMutatingHandler(mgr manager.Manager) error {
+	mapper, err := discoverymapper.New(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
 	server := mgr.GetWebhookServer()
-	server.Register("/mutating-core-oam-dev-v1alpha2-components", &webhook.Admission{Handler: &MutatingHandler{}})
+	server.Register("/mutating-core-oam-dev-v1alpha2-components", &webhook.Admission{Handler: &MutatingHandler{Mapper: mapper}})
+	return nil
 }

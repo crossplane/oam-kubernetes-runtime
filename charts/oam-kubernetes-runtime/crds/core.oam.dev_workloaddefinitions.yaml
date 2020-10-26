@@ -77,6 +77,11 @@ spec:
                   name:
                     description: Name of the referenced CustomResourceDefinition.
                     type: string
+                  version:
+                    description: Version indicate which version should be used if
+                      CRD has multiple versions by default it will use the first one
+                      if not specified
+                    type: string
                 required:
                 - name
                 type: object

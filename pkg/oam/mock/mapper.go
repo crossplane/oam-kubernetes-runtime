@@ -18,10 +18,14 @@ type Refresh func() (meta.RESTMapper, error)
 // nolint
 type RESTMapping func(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error)
 
-// NewMockDiscoveryMapper for mock
+// nolint
+type KindsFor func(input schema.GroupVersionResource) ([]schema.GroupVersionKind, error)
+
+// NewMockDiscoveryMapper for unit test only
 func NewMockDiscoveryMapper() *DiscoveryMapper {
 	return &DiscoveryMapper{
 		MockRESTMapping: NewMockRESTMapping(""),
+		MockKindsFor:    NewMockKindsFor(""),
 	}
 }
 
@@ -32,11 +36,30 @@ func NewMockRESTMapping(resource string) RESTMapping {
 	}
 }
 
+// NewMockKindsFor for unit test only
+func NewMockKindsFor(kind string, version ...string) KindsFor {
+	return func(input schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
+		if len(kind) <= 1 {
+			return []schema.GroupVersionKind{{Version: input.Version, Group: input.Group, Kind: kind}}, nil
+		}
+		var ss []schema.GroupVersionKind
+		for _, v := range version {
+			gvk := schema.GroupVersionKind{Version: v, Group: input.Group, Kind: kind}
+			if input.Version != "" && input.Version == v {
+				return []schema.GroupVersionKind{gvk}, nil
+			}
+			ss = append(ss, gvk)
+		}
+		return ss, nil
+	}
+}
+
 // DiscoveryMapper for unit test only, use GetMapper and refresh will panic
 type DiscoveryMapper struct {
 	MockGetMapper   GetMapper
 	MockRefresh     Refresh
 	MockRESTMapping RESTMapping
+	MockKindsFor    KindsFor
 }
 
 // GetMapper for mock
@@ -52,4 +75,9 @@ func (m *DiscoveryMapper) Refresh() (meta.RESTMapper, error) {
 // RESTMapping for mock
 func (m *DiscoveryMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
 	return m.MockRESTMapping(gk, versions...)
+}
+
+// KindsFor for mock
+func (m *DiscoveryMapper) KindsFor(input schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
+	return m.MockKindsFor(input)
 }
