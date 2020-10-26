@@ -42,6 +42,7 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 const (
@@ -437,6 +438,9 @@ type Trait struct {
 
 	// HasDep indicates whether this resource has dependencies and unready to be applied.
 	HasDep bool
+
+	// Definition indicates the trait's definition
+	Definition v1alpha2.TraitDefinition
 }
 
 // Status produces the status of this workload and its traits, suitable for use
@@ -453,7 +457,10 @@ func (w Workload) Status() v1alpha2.WorkloadStatus {
 		Traits: make([]v1alpha2.WorkloadTrait, len(w.Traits)),
 		Scopes: make([]v1alpha2.WorkloadScope, len(w.Scopes)),
 	}
-	for i := range w.Traits {
+	for i, tr := range w.Traits {
+		if tr.Definition.Name == util.Dummy && tr.Definition.Spec.Reference.Name == util.Dummy {
+			acw.Traits[i].Message = util.DummyTraitMessage
+		}
 		acw.Traits[i].Reference = runtimev1alpha1.TypedReference{
 			APIVersion: w.Traits[i].Object.GetAPIVersion(),
 			Kind:       w.Traits[i].Object.GetKind(),

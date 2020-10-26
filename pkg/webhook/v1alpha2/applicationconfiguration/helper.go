@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -31,7 +32,7 @@ func checkComponentVersionEnabled(ctx context.Context, client client.Reader, dm 
 			return false, errors.Wrap(err, errUnmarshalTrait)
 		}
 		td, err := util.FetchTraitDefinition(ctx, client, dm, ut)
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			return false, errors.Wrapf(err, errFmtGetTraitDefinition, ut.GetAPIVersion(), ut.GetKind(), ut.GetName())
 		}
 		if td.Spec.RevisionEnabled {

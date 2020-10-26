@@ -27,6 +27,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -163,7 +164,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 
 		// pass through labels and annotation from app-config to trait
 		util.PassLabelAndAnnotation(ac, t)
-		traits = append(traits, &Trait{Object: *t})
+		traits = append(traits, &Trait{Object: *t, Definition: *traitDef})
 		traitDefs = append(traitDefs, *traitDef)
 	}
 	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
@@ -215,6 +216,9 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 
 	traitDef, err := util.FetchTraitDefinition(ctx, r.client, r.dm, t)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return t, util.GetDummyTraitDefinition(t), nil
+		}
 		return nil, nil, errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
 	}
 

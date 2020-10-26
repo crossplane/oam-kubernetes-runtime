@@ -21,8 +21,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
-
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -43,6 +41,7 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -392,7 +391,8 @@ func TestRenderComponents(t *testing.T) {
 									oam.LabelAppComponentRevision: revisionName2,
 									oam.LabelOAMResourceType:      oam.ResourceTypeTrait,
 								})
-								return &Trait{Object: *t}
+								return &Trait{Object: *t,
+									Definition: v1alpha2.TraitDefinition{ObjectMeta: metav1.ObjectMeta{Name: "coolTrait"}, Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true}}}
 							}(),
 						},
 						RevisionEnabled: true,
@@ -489,7 +489,7 @@ func TestRenderComponents(t *testing.T) {
 								if err := fieldpath.Pave(tr.Object).SetValue("spec.workload.path", workloadRef); err != nil {
 									t.Fail()
 								}
-								return &Trait{Object: *tr}
+								return &Trait{Object: *tr, Definition: v1alpha2.TraitDefinition{Spec: v1alpha2.TraitDefinitionSpec{WorkloadRefPath: "spec.workload.path"}}}
 							}(),
 						},
 						Scopes: []unstructured.Unstructured{},

@@ -496,6 +496,10 @@ spec:
                         description: A WorkloadTrait represents a trait associated
                           with a workload and its status
                         properties:
+                          message:
+                            description: Message will allow controller to leave some
+                              additional information for this trait
+                            type: string
                           status:
                             description: Status is a place holder for a customized
                               controller to fill if it needs a single place to summarize
