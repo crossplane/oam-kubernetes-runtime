@@ -23,11 +23,12 @@ import (
 
 var _ = Describe("ContainerizedWorkload", func() {
 	ctx := context.TODO()
-	var namespace, fakeLabelKey, componentName, workloadInstanceName, imageName string
+	var namespace, fakeLabelKey, fakeAnnotationKey, componentName, workloadInstanceName, imageName string
 	var replica int32
 	var ns corev1.Namespace
 	var wd v1alpha2.WorkloadDefinition
 	var label map[string]string
+	var annotations map[string]string
 	var wl v1alpha2.ContainerizedWorkload
 	var comp v1alpha2.Component
 	var appConfig v1alpha2.ApplicationConfiguration
@@ -37,6 +38,7 @@ var _ = Describe("ContainerizedWorkload", func() {
 		// init the strings
 		namespace = "containerized-workload-test"
 		fakeLabelKey = "workload"
+		fakeAnnotationKey = "kubectl.kubernetes.io/last-applied-configuration"
 		componentName = "example-component"
 		workloadInstanceName = "example-appconfig-workload"
 		imageName = "wordpress:php7.2"
@@ -159,11 +161,13 @@ var _ = Describe("ContainerizedWorkload", func() {
 		// Create application configuration
 		workloadInstanceName := "example-appconfig-workload"
 		imageName := "wordpress:php7.2"
+		annotations = map[string]string{fakeAnnotationKey: "fake-annotation-key-item"}
 		appConfig = v1alpha2.ApplicationConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "example-appconfig",
-				Namespace: namespace,
-				Labels:    label,
+				Name:        "example-appconfig",
+				Namespace:   namespace,
+				Labels:      label,
+				Annotations: annotations,
 			},
 			Spec: v1alpha2.ApplicationConfigurationSpec{
 				Components: []v1alpha2.ApplicationConfigurationComponent{
@@ -268,7 +272,17 @@ var _ = Describe("ContainerizedWorkload", func() {
 			},
 			time.Second*60, time.Second*5).Should(BeEquivalentTo(replica))
 		Expect(*deploy.Spec.Replicas).Should(BeEquivalentTo(replica))
-
+		By("Verify pod annotations should not contain kubectl.kubernetes.io/last-applied-configuration")
+		Eventually(
+			func() bool {
+				k8sClient.Get(ctx, objectKey, deploy)
+				annotations := deploy.Spec.Template.Annotations
+				if _, ok := annotations[fakeAnnotationKey]; ok {
+					return false
+				}
+				return true
+			},
+			time.Second*15, time.Millisecond*500).Should(BeTrue())
 	})
 
 	It("checking appConfig status changed outside of the controller loop is preserved", func() {
