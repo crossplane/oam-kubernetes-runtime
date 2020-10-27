@@ -8,10 +8,7 @@ spec:
   workloadRefs:
     - apiVersion: core.oam.dev/v1alpha2
       kind: ContainerizedWorkload
-      name: example-component
-    - apiVersion: core.oam.dev/v1alpha2
-      kind: ContainerizedWorkload
-      name: example-component2
+      name: web-service-component
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: ApplicationConfiguration

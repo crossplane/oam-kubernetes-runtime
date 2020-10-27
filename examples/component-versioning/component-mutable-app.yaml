@@ -4,7 +4,7 @@ metadata:
   name: example-appconfig
 spec:
   components:
-    - revisionName: example-component-brkaek3ipt3d60vfo4u0
+    - revisionName: example-component-v1
       traits:
         - trait:
             apiVersion: core.oam.dev/v1alpha2
