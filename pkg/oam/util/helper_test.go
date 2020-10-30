@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/adler32"
+	"os"
 	"reflect"
 	"testing"
 
@@ -1228,4 +1229,13 @@ func TestGetDummy(t *testing.T) {
 		}},
 		Spec: v1alpha2.WorkloadDefinitionSpec{Reference: v1alpha2.DefinitionReference{Name: "dummy"}},
 	}, util.GetDummyWorkloadDefinition(u))
+}
+
+func TestNamespacedDefinition(t *testing.T) {
+	ns := "namespaced"
+	n := "definition"
+	_ = os.Setenv(util.DefinitionNamespaceEnv, ns)
+	nn := util.GenNamespacedDefinitionName(n)
+	assert.Equal(t, nn.Namespace, ns)
+	assert.Equal(t, nn.Name, n)
 }

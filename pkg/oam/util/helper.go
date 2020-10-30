@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"os"
 	"reflect"
 	"time"
 
@@ -49,6 +50,9 @@ const (
 
 	// DummyTraitMessage is a message for trait which don't have definition found
 	DummyTraitMessage = "No valid TraitDefinition found, all framework capabilities will work as default or disabled"
+
+	// DefinitionNamespaceEnv is env key for specifying a namespace to fetch definition
+	DefinitionNamespaceEnv = "DEFINITION_NAMESPACE"
 )
 
 const (
@@ -158,8 +162,7 @@ func FetchScopeDefinition(ctx context.Context, r client.Reader, dm discoverymapp
 	if err != nil {
 		return nil, err
 	}
-	// the scopeDefinition crd is cluster scoped
-	nn := types.NamespacedName{Name: spName}
+	nn := GenNamespacedDefinitionName(spName)
 	// Fetch the corresponding scopeDefinition CR
 	scopeDefinition := &v1alpha2.ScopeDefinition{}
 	if err := r.Get(ctx, nn, scopeDefinition); err != nil {
@@ -176,8 +179,7 @@ func FetchTraitDefinition(ctx context.Context, r client.Reader, dm discoverymapp
 	if err != nil {
 		return nil, err
 	}
-	// the traitDefinition crd is cluster scoped
-	nn := types.NamespacedName{Name: trName}
+	nn := GenNamespacedDefinitionName(trName)
 	// Fetch the corresponding traitDefinition CR
 	traitDefinition := &v1alpha2.TraitDefinition{}
 	if err := r.Get(ctx, nn, traitDefinition); err != nil {
@@ -194,14 +196,21 @@ func FetchWorkloadDefinition(ctx context.Context, r client.Reader, dm discoverym
 	if err != nil {
 		return nil, err
 	}
-	// the workloadDefinition crd is cluster scoped
-	nn := types.NamespacedName{Name: wldName}
+	nn := GenNamespacedDefinitionName(wldName)
 	// Fetch the corresponding workloadDefinition CR
 	workloadDefinition := &v1alpha2.WorkloadDefinition{}
 	if err := r.Get(ctx, nn, workloadDefinition); err != nil {
 		return nil, err
 	}
 	return workloadDefinition, nil
+}
+
+// GenNamespacedDefinitionName generate definition name with customized namespace
+func GenNamespacedDefinitionName(dn string) types.NamespacedName {
+	if dns := os.Getenv(DefinitionNamespaceEnv); dns != "" {
+		return types.NamespacedName{Name: dn, Namespace: dns}
+	}
+	return types.NamespacedName{Name: dn}
 }
 
 // FetchWorkloadChildResources fetch corresponding child resources given a workload
