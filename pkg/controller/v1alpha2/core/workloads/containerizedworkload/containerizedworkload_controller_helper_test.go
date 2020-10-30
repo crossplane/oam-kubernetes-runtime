@@ -81,10 +81,6 @@ func TestRenderDeployment(t *testing.T) {
 		t.Errorf("\nReason: %s\ncontainerizedWorkloadTranslator(...): -want, +got:\n%s", "pass label", diff)
 	}
 
-	if diff := cmp.Diff(dmAnnotation, deploy.Spec.Template.GetAnnotations()); diff != "" {
-		t.Errorf("\nReason: %s\ncontainerizedWorkloadTranslator(...): -want, +got:\n%s", "pass annotation", diff)
-	}
-
 	if len(deploy.GetOwnerReferences()) != 1 {
 		t.Errorf("deplyment should have one owner reference")
 	}

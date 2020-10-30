@@ -72,6 +72,7 @@ spec:
                         will specify parameter values using this name.
                       type: string
                     required:
+                      default: false
                       description: Required specifies whether or not a value for this
                         parameter must be supplied when authoring an ApplicationConfiguration.
                       type: boolean

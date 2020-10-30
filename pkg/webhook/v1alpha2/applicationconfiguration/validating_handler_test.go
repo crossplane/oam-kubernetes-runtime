@@ -57,17 +57,27 @@ func TestApplicationConfigurationValidation(t *testing.T) {
 	dec, _ := admission.NewDecoder(scheme)
 	decoder.InjectDecoder(dec)
 
-	app1, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			RevisionName:  "r1",
-			ComponentName: "c1",
+	app1, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
 		},
-	}}})
-	app2, _ := json.Marshal(v1alpha2.ApplicationConfiguration{Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-		{
-			RevisionName: "r1",
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				RevisionName:  "r1",
+				ComponentName: "c1",
+			},
+		}}})
+	app2, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test-ns",
 		},
-	}}})
+		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
+			{
+				RevisionName: "r1",
+			},
+		}}})
 
 	tests := []struct {
 		req    admission.Request
@@ -141,6 +151,8 @@ func TestCheckWorkloadNameForVersioning(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: tName,
 		}})
+
+	mapper := mock.NewMockDiscoveryMapper()
 
 	tests := []struct {
 		caseName     string
@@ -366,7 +378,7 @@ func TestCheckWorkloadNameForVersioning(t *testing.T) {
 	for _, tc := range tests {
 		func(t *testing.T) {
 			mockClient.MockGet = tc.mockGetFunc
-			result, reason := checkWorkloadNameForVersioning(ctx, mockClient, &tc.appConfig)
+			result, reason := checkWorkloadNameForVersioning(ctx, mockClient, mapper, &tc.appConfig)
 			assert.Equal(t, tc.expectResult, result, fmt.Sprintf("Test case: %q", tc.caseName))
 			assert.Equal(t, tc.expectReason, reason, fmt.Sprintf("Test case: %q", tc.caseName))
 		}(t)

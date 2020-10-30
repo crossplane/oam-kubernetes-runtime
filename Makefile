@@ -17,6 +17,11 @@ S3_BUCKET ?= crossplane.releases/oam
 -include build/makelib/output.mk
 
 # ====================================================================================
+# Setup Kubernetes tools
+
+-include build/makelib/k8s_tools.mk
+
+# ====================================================================================
 # Setup Helm
 
 HELM_BASE_URL = https://charts.crossplane.io
@@ -116,7 +121,7 @@ oam-kubernetes-runtime.help:
 
 help-special: oam-kubernetes-runtime.help
 
-.PHONY: oam-kubernetes-runtime.help help-special kind-load e2e-setup e2e-test e2e-cleanup run install-crds uninstall-crds
+.PHONY: oam-kubernetes-runtime.help help-special kind-load e2e e2e-setup e2e-test e2e-cleanup run install-crds uninstall-crds
 
 # Install CRDs into a cluster. This is for convenience.
 install-crds: reviewable
@@ -137,7 +142,7 @@ kind-load:
 	docker tag $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH) crossplane/oam-kubernetes-runtime:$(VERSION)
 	kind load docker-image crossplane/oam-kubernetes-runtime:$(VERSION) || { echo >&2 "kind not installed or error loading image: $(IMAGE)"; exit 1; }
 
-e2e-setup: build kind-load
+e2e-setup: kind-load
 	kubectl create namespace oam-system
 	helm install e2e ./charts/oam-kubernetes-runtime -n oam-system --set image.pullPolicy='Never' --wait \
 		|| { echo >&2 "helm install timeout"; \
@@ -151,3 +156,5 @@ e2e-test:
 e2e-cleanup:
 	helm uninstall e2e -n oam-system
 	kubectl delete namespace oam-system --wait
+
+e2e: e2e-setup e2e-test go-integration

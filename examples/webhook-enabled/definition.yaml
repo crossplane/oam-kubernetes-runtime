@@ -1,0 +1,57 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: foo.example.com
+spec:
+  group: example.com
+  names:
+    kind: Foo
+    listKind: FooList
+    plural: foo
+    singular: foo
+  scope: Namespaced
+  version: v1
+  preserveUnknownFields: true
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: WorkloadDefinition
+metadata:
+  name: fooworkload
+spec:
+  definitionRef:
+    name: foo.example.com
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: TraitDefinition
+metadata:
+  name: footrait
+spec:
+  definitionRef:
+    name: foo.example.com
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: foo:system:aggregate-to-controller
+  labels:
+    rbac.oam.dev/aggregate-to-controller: "true"
+rules:
+- apiGroups:
+  - example.com
+  resources:
+  - "*"
+  verbs:
+  - "*"
+- apiGroups:
+  - apps
+  resources:
+  - controllerrevisions
+  verbs:
+  - "*"
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - "*"

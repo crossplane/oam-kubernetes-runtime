@@ -258,8 +258,8 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 
 	// pass through label and annotation from the workload to the deployment
 	util.PassLabelAndAnnotation(w, d)
-	// pass through label and annotation from the workload to the pod template too
-	util.PassLabelAndAnnotation(w, &d.Spec.Template)
+	// pass through label from the workload to the pod template
+	util.PassLabel(w, &d.Spec.Template)
 
 	return []oam.Object{d}, nil
 }

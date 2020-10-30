@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -76,6 +77,7 @@ func (fn WorkloadApplyFns) Finalize(ctx context.Context, ac *v1alpha2.Applicatio
 type workloads struct {
 	client    resource.Applicator
 	rawClient client.Client
+	dm        discoverymapper.DiscoveryMapper
 }
 
 func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
@@ -88,35 +90,20 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 				return errors.Wrapf(err, errFmtApplyWorkload, wl.Workload.GetName())
 			}
 		}
-
+		for _, trait := range wl.Traits {
+			if trait.HasDep {
+				continue
+			}
+			t := trait.Object
+			if err := a.client.Apply(ctx, &trait.Object, ao...); err != nil {
+				return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
+			}
+		}
 		workloadRef := runtimev1alpha1.TypedReference{
 			APIVersion: wl.Workload.GetAPIVersion(),
 			Kind:       wl.Workload.GetKind(),
 			Name:       wl.Workload.GetName(),
 		}
-
-		for _, trait := range wl.Traits {
-			if trait.HasDep {
-				continue
-			}
-			//  We only patch a TypedReference object to the trait if it asks for it
-			t := trait.Object
-			if traitDefinition, err := util.FetchTraitDefinition(ctx, a.rawClient, &trait.Object); err == nil {
-				workloadRefPath := traitDefinition.Spec.WorkloadRefPath
-				if len(workloadRefPath) != 0 {
-					if err := fieldpath.Pave(t.UnstructuredContent()).SetValue(workloadRefPath, workloadRef); err != nil {
-						return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
-					}
-				}
-			} else {
-				return errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
-			}
-
-			if err := a.client.Apply(ctx, &trait.Object, ao...); err != nil {
-				return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
-			}
-		}
-
 		for _, s := range wl.Scopes {
 			if err := a.applyScope(ctx, wl, s, workloadRef); err != nil {
 				return err
@@ -198,7 +185,7 @@ func findDereferencedScopes(statusScopes []v1alpha2.WorkloadScope, scopes []unst
 
 func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.Unstructured, workloadRef runtimev1alpha1.TypedReference) error {
 	// get ScopeDefinition
-	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, &s)
+	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, a.dm, &s)
 	if err != nil {
 		return errors.Wrapf(err, errFmtGetScopeDefinition, s.GetAPIVersion(), s.GetKind(), s.GetName())
 	}
@@ -252,7 +239,7 @@ func (a *workloads) applyScopeRemoval(ctx context.Context, namespace string, wr 
 		return errors.Wrapf(err, errFmtApplyScope, s.Reference.APIVersion, s.Reference.Kind, s.Reference.Name)
 	}
 
-	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, &scopeObject)
+	scopeDefinition, err := util.FetchScopeDefinition(ctx, a.rawClient, a.dm, &scopeObject)
 	if err != nil {
 		return errors.Wrapf(err, errFmtGetScopeDefinition, scopeObject.GetAPIVersion(), scopeObject.GetKind(), scopeObject.GetName())
 	}

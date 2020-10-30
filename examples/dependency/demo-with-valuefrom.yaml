@@ -24,7 +24,7 @@ spec:
       name: source
     spec:
       key: test-value
-    status: # comment this part to mimic dependency wait time.
+    status:
       state: pending
 ---
 apiVersion: core.oam.dev/v1alpha2
@@ -42,6 +42,8 @@ apiVersion: core.oam.dev/v1alpha2
 kind: ApplicationConfiguration
 metadata:
   name: example-appconfig
+  labels:
+    state: running
 spec:
   components:
     - componentName: source
@@ -50,7 +52,8 @@ spec:
           fieldPath: "spec.key"
           conditions:
             - op: eq
-              value: running
+              valueFrom:
+                fieldPath: metadata.labels[state]
               fieldPath: "status.state"
     - componentName: sink
       dataInputs:

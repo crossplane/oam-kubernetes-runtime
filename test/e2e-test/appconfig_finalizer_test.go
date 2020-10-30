@@ -101,7 +101,7 @@ var _ = Describe("Finalizer for HealthScope in ApplicationConfiguration", func()
 			func() error {
 				return k8sClient.Get(ctx, objectKey, res)
 			},
-			time.Second*60, time.Millisecond*500).Should(&util.NotFoundMatcher{})
+			time.Second*120, time.Millisecond*500).Should(&util.NotFoundMatcher{})
 		Eventually(
 			func() error {
 				return k8sClient.Create(ctx, &ns)

@@ -14,7 +14,7 @@ func JSONMarshal(o interface{}) []byte {
 	return j
 }
 
-//AlreadyExistMatcher matches the error to be already exist
+// AlreadyExistMatcher matches the error to be already exist
 type AlreadyExistMatcher struct {
 }
 

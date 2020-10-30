@@ -1,0 +1,23 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: foo
+spec:
+  workload:
+    type: fooworkload
+    spec:
+      key: workload
+
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - componentName: foo
+      traits:
+        - trait:
+            name: footrait
+            properties:
+              key: trait

@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -37,6 +38,7 @@ var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationcon
 // ValidatingHandler handles CloneSet
 type ValidatingHandler struct {
 	Client client.Client
+	Mapper discoverymapper.DiscoveryMapper
 
 	// Decoder decodes objects
 	Decoder *admission.Decoder
@@ -50,7 +52,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 	if req.Resource.String() != appConfigResource.String() {
 		return admission.Errored(http.StatusBadRequest, fmt.Errorf("expect resource to be %s", appConfigResource))
 	}
-	switch req.Operation {
+	switch req.Operation { //nolint:exhaustive
 	case admissionv1beta1.Delete:
 		if len(req.OldObject.Raw) != 0 {
 			if err := h.Decoder.DecodeRaw(req.OldObject, obj); err != nil {
@@ -65,16 +67,53 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		if err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
+		if allErrs := ValidateTraitObject(obj); len(allErrs) > 0 {
+			klog.Info("create or update failed", "name", obj.Name, "errMsg", allErrs.ToAggregate().Error())
+			return admission.Denied(allErrs.ToAggregate().Error())
+		}
 		if pass, reason := checkRevisionName(obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
-		// TODO(wonderflow): Add more validation logic here.
-
-		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, obj); !pass {
+		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, h.Mapper, obj); !pass {
 			return admission.ValidationResponse(false, reason)
 		}
+		// TODO(wonderflow): Add more validation logic here.
 	}
 	return admission.ValidationResponse(true, "")
+}
+
+// ValidateTraitObject validates the ApplicationConfiguration on creation/update
+func ValidateTraitObject(obj *v1alpha2.ApplicationConfiguration) field.ErrorList {
+	klog.Info("validate applicationConfiguration", "name", obj.Name)
+	var allErrs field.ErrorList
+	for cidx, comp := range obj.Spec.Components {
+		for idx, tr := range comp.Traits {
+			fldPath := field.NewPath("spec").Child("components").Index(cidx).Child("traits").Index(idx).Child("trait")
+			var content map[string]interface{}
+			if err := json.Unmarshal(tr.Trait.Raw, &content); err != nil {
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+					"the trait is malformed"))
+				return allErrs
+			}
+			if content[TraitTypeField] != nil {
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+					"the trait contains 'name' info that should be mutated to GVK"))
+			}
+			if content[TraitSpecField] != nil {
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+					"the trait contains 'properties' info that should be mutated to spec"))
+			}
+			trait := unstructured.Unstructured{
+				Object: content,
+			}
+			if len(trait.GetAPIVersion()) == 0 || len(trait.GetKind()) == 0 {
+				allErrs = append(allErrs, field.Invalid(fldPath, content,
+					fmt.Sprintf("the trait data missing GVK, api = %s, kind = %s,", trait.GetAPIVersion(), trait.GetKind())))
+			}
+		}
+	}
+
+	return allErrs
 }
 
 func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
@@ -87,10 +126,11 @@ func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, stri
 }
 
 // checkWorkloadNameForVersioning check whether versioning-enabled component workload name is empty
-func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
+func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, dm discoverymapper.DiscoveryMapper,
+	appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
 	for _, v := range appConfig.Spec.Components {
 		acc := v
-		vEnabled, err := checkComponentVersionEnabled(ctx, client, &acc)
+		vEnabled, err := checkComponentVersionEnabled(ctx, client, dm, &acc)
 		if err != nil {
 			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
 		}
@@ -136,8 +176,15 @@ func (h *ValidatingHandler) InjectDecoder(d *admission.Decoder) error {
 	return nil
 }
 
-// Register will register application configuration validation to webhook
-func Register(mgr manager.Manager) {
+// RegisterValidatingHandler will register application configuration validation to webhook
+func RegisterValidatingHandler(mgr manager.Manager) error {
 	server := mgr.GetWebhookServer()
-	server.Register("/validating-core-oam-dev-v1alpha2-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{}})
+	mapper, err := discoverymapper.New(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+	server.Register("/validating-core-oam-dev-v1alpha2-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{
+		Mapper: mapper,
+	}})
+	return nil
 }

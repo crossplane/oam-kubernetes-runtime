@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/pkg/errors"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +36,6 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -249,7 +249,7 @@ func CheckDaemonsetHealth(ctx context.Context, client client.Client, ref runtime
 
 // CheckByHealthCheckTrait checks health condition through HealthCheckTrait.
 func CheckByHealthCheckTrait(ctx context.Context, c client.Client, wlRef runtimev1alpha1.TypedReference, ns string) *WorkloadHealthCondition {
-	//TODO(roywang) implement HealthCheckTrait feature
+	// TODO(roywang) implement HealthCheckTrait feature
 	return nil
 }
 

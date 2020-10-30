@@ -7,7 +7,20 @@ data:
   endpoint: ZGItd29ya2xvYWQ=
   password: ZGJwYXNzd29yZA==
   username: cG9zdGdyZXM=
-
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flight-tracker-clusterrole
+  labels:
+    rbac.oam.dev/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - extensions
+    resources:
+      - 'ingresses'
+    verbs:
+      - '*'
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: ApplicationConfiguration
@@ -43,7 +56,7 @@ spec:
     - componentName: quakes-api
       parameterValues:
         - name: dataUri
-          value: "http://data-api.default.svc.cluster.local:3009/"  
+          value: "http://data-api.default.svc.cluster.local:3009/"
       traits:
         - trait:
             apiVersion: core.oam.dev/v1alpha2
@@ -51,7 +64,7 @@ spec:
             metadata:
               name: quakes-api
             spec:
-              replicaCount: 2    
+              replicaCount: 2
     - componentName: weather-api
       parameterValues:
         - name: dataUri
@@ -63,7 +76,7 @@ spec:
             metadata:
               name: weather-api
             spec:
-              replicaCount: 2       
+              replicaCount: 2
     - componentName: service-tracker-ui
       parameterValues:
         - name: flightsUri
@@ -79,6 +92,6 @@ spec:
             metadata:
               name: tracker-ingress
             spec:
-                backend:
-                  serviceName: web-ui
-                  servicePort: 8080
+              backend:
+                serviceName: web-ui
+                servicePort: 8080

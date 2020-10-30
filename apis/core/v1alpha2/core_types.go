@@ -17,16 +17,21 @@ limitations under the License.
 package v1alpha2
 
 import (
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 )
 
 // A DefinitionReference refers to a CustomResourceDefinition by name.
 type DefinitionReference struct {
 	// Name of the referenced CustomResourceDefinition.
 	Name string `json:"name"`
+
+	// Version indicate which version should be used if CRD has multiple versions
+	// by default it will use the first one if not specified
+	Version string `json:"version,omitempty"`
 }
 
 // A ChildResourceKind defines a child Kubernetes resource kind with a selector
@@ -53,6 +58,11 @@ type WorkloadDefinitionSpec struct {
 	// can be used by trait to create resource selectors(e.g. label selector for pods).
 	// +optional
 	RevisionLabel string `json:"revisionLabel,omitempty"`
+
+	// PodSpecPath indicates where/if this workload has K8s podSpec field
+	// if one workload has podSpec, trait can do lot's of assumption such as port, env, volume fields.
+	// +optional
+	PodSpecPath string `json:"podSpecPath,omitempty"`
 
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
@@ -189,9 +199,7 @@ type ComponentParameter struct {
 	// paths without a leading dot, for example 'spec.replicas'.
 	FieldPaths []string `json:"fieldPaths"`
 
-	// TODO(negz): Use +kubebuilder:default marker to default Required to false
-	// once we're generating v1 CRDs.
-
+	// +kubebuilder:default:=false
 	// Required specifies whether or not a value for this parameter must be
 	// supplied when authoring an ApplicationConfiguration.
 	// +optional
@@ -231,9 +239,7 @@ type ComponentStatus struct {
 	// +optional
 	LatestRevision *Revision `json:"latestRevision,omitempty"`
 
-	// TODO(negz): Maintain references to any ApplicationConfigurations that
-	// reference this component? Doing so would allow us to queue a reconcile
-	// for consuming ApplicationConfigurations when this Component changed.
+	// One Component should only be used by one AppConfig
 }
 
 // Revision has name and revision number
@@ -353,6 +359,9 @@ type WorkloadTrait struct {
 
 	// Reference to a trait created by an ApplicationConfiguration.
 	Reference runtimev1alpha1.TypedReference `json:"traitRef"`
+
+	// Message will allow controller to leave some additional information for this trait
+	Message string `json:"message,omitempty"`
 }
 
 // A ScopeStatus represents the state of a scope.
@@ -377,7 +386,7 @@ type WorkloadStatus struct {
 	// ComponentName that produced this workload.
 	ComponentName string `json:"componentName,omitempty"`
 
-	//ComponentRevisionName of current component
+	// ComponentRevisionName of current component
 	ComponentRevisionName string `json:"componentRevisionName,omitempty"`
 
 	// Reference to a workload created by an ApplicationConfiguration.
@@ -392,7 +401,7 @@ type WorkloadStatus struct {
 
 // HistoryWorkload contain the old component revision that are still running
 type HistoryWorkload struct {
-	//component revision of this workload
+	// Revision of this workload
 	Revision string `json:"revision,omitempty"`
 
 	// Reference to running workload.
@@ -421,7 +430,7 @@ type ApplicationConfigurationStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration"`
 
 	// HistoryWorkloads will record history but still working revision workloads.
-	HistoryWorkloads []HistoryWorkload `json:"historyWorkloads"`
+	HistoryWorkloads []HistoryWorkload `json:"historyWorkloads,omitempty"`
 }
 
 // DependencyStatus represents the observed state of the dependency of

@@ -8,17 +8,20 @@ import (
 	"hash/fnv"
 	"os"
 	"reflect"
-	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/meta"
 
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/davecgh/go-spew/spew"
-	plur "github.com/gertd/go-pluralize"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +29,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 )
 
 var (
@@ -39,7 +43,15 @@ var (
 
 const (
 	// TraitPrefixKey is prefix of trait name
-	TraitPrefixKey         = "trait"
+	TraitPrefixKey = "trait"
+
+	// Dummy used for dummy definition
+	Dummy = "dummy"
+
+	// DummyTraitMessage is a message for trait which don't have definition found
+	DummyTraitMessage = "No valid TraitDefinition found, all framework capabilities will work as default or disabled"
+
+	// DefinitionNamespaceEnv is env key for specifying a namespace to fetch definition
 	DefinitionNamespaceEnv = "DEFINITION_NAMESPACE"
 )
 
@@ -113,11 +125,43 @@ func FetchWorkload(ctx context.Context, c client.Client, mLog logr.Logger, oamTr
 	return &workload, nil
 }
 
+// GetDummyTraitDefinition will generate a dummy TraitDefinition for CustomResource that won't block app from running.
+// OAM runtime will report warning if they got this dummy definition.
+func GetDummyTraitDefinition(u *unstructured.Unstructured) *v1alpha2.TraitDefinition {
+	return &v1alpha2.TraitDefinition{
+		TypeMeta: metav1.TypeMeta{Kind: v1alpha2.TraitDefinitionKind, APIVersion: v1alpha2.SchemeGroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: Dummy, Annotations: map[string]string{
+			"apiVersion": u.GetAPIVersion(),
+			"kind":       u.GetKind(),
+			"name":       u.GetName(),
+		}},
+		Spec: v1alpha2.TraitDefinitionSpec{Reference: v1alpha2.DefinitionReference{Name: Dummy}},
+	}
+}
+
+// GetDummyWorkloadDefinition will generate a dummy WorkloadDefinition for CustomResource that won't block app from running.
+// OAM runtime will report warning if they got this dummy definition.
+func GetDummyWorkloadDefinition(u *unstructured.Unstructured) *v1alpha2.WorkloadDefinition {
+	return &v1alpha2.WorkloadDefinition{
+		TypeMeta: metav1.TypeMeta{Kind: v1alpha2.WorkloadDefinitionKind, APIVersion: v1alpha2.SchemeGroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: Dummy, Annotations: map[string]string{
+			"apiVersion": u.GetAPIVersion(),
+			"kind":       u.GetKind(),
+			"name":       u.GetName(),
+		}},
+		Spec: v1alpha2.WorkloadDefinitionSpec{Reference: v1alpha2.DefinitionReference{Name: Dummy}},
+	}
+}
+
 // FetchScopeDefinition fetch corresponding scopeDefinition given a scope
-func FetchScopeDefinition(ctx context.Context, r client.Reader,
+func FetchScopeDefinition(ctx context.Context, r client.Reader, dm discoverymapper.DiscoveryMapper,
 	scope *unstructured.Unstructured) (*v1alpha2.ScopeDefinition, error) {
 	// The name of the scopeDefinition CR is the CRD name of the scope
-	spName := GetDefinitionName(scope)
+	// TODO(wonderflow): we haven't support scope definition label type yet.
+	spName, err := GetDefinitionName(dm, scope, "")
+	if err != nil {
+		return nil, err
+	}
 	nn := GenNamespacedDefinitionName(spName)
 	// Fetch the corresponding scopeDefinition CR
 	scopeDefinition := &v1alpha2.ScopeDefinition{}
@@ -128,10 +172,13 @@ func FetchScopeDefinition(ctx context.Context, r client.Reader,
 }
 
 // FetchTraitDefinition fetch corresponding traitDefinition given a trait
-func FetchTraitDefinition(ctx context.Context, r client.Reader,
+func FetchTraitDefinition(ctx context.Context, r client.Reader, dm discoverymapper.DiscoveryMapper,
 	trait *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
 	// The name of the traitDefinition CR is the CRD name of the trait
-	trName := GetDefinitionName(trait)
+	trName, err := GetDefinitionName(dm, trait, oam.TraitTypeLabel)
+	if err != nil {
+		return nil, err
+	}
 	nn := GenNamespacedDefinitionName(trName)
 	// Fetch the corresponding traitDefinition CR
 	traitDefinition := &v1alpha2.TraitDefinition{}
@@ -142,10 +189,13 @@ func FetchTraitDefinition(ctx context.Context, r client.Reader,
 }
 
 // FetchWorkloadDefinition fetch corresponding workloadDefinition given a workload
-func FetchWorkloadDefinition(ctx context.Context, r client.Reader,
+func FetchWorkloadDefinition(ctx context.Context, r client.Reader, dm discoverymapper.DiscoveryMapper,
 	workload *unstructured.Unstructured) (*v1alpha2.WorkloadDefinition, error) {
 	// The name of the workloadDefinition CR is the CRD name of the component
-	wldName := GetDefinitionName(workload)
+	wldName, err := GetDefinitionName(dm, workload, oam.WorkloadTypeLabel)
+	if err != nil {
+		return nil, err
+	}
 	nn := GenNamespacedDefinitionName(wldName)
 	// Fetch the corresponding workloadDefinition CR
 	workloadDefinition := &v1alpha2.WorkloadDefinition{}
@@ -165,10 +215,14 @@ func GenNamespacedDefinitionName(dn string) types.NamespacedName {
 
 // FetchWorkloadChildResources fetch corresponding child resources given a workload
 func FetchWorkloadChildResources(ctx context.Context, mLog logr.Logger, r client.Reader,
-	workload *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+	dm discoverymapper.DiscoveryMapper, workload *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
 	// Fetch the corresponding workloadDefinition CR
-	workloadDefinition, err := FetchWorkloadDefinition(ctx, r, workload)
+	workloadDefinition, err := FetchWorkloadDefinition(ctx, r, dm, workload)
 	if err != nil {
+		// No definition will won't block app from running
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return fetchChildResources(ctx, mLog, r, workload, workloadDefinition.Spec.ChildResourceKinds)
@@ -223,6 +277,12 @@ type labelAnnotationObject interface {
 	SetAnnotations(annotations map[string]string)
 }
 
+// PassLabel passes through labels from the parent to the child object
+func PassLabel(parentObj oam.Object, childObj labelAnnotationObject) {
+	// pass app-config labels
+	childObj.SetLabels(MergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+}
+
 // PassLabelAndAnnotation passes through labels and annotation objectMeta from the parent to the child object
 func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject) {
 	// pass app-config labels
@@ -234,35 +294,41 @@ func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject
 // GetDefinitionName return the Definition name of any resources
 // the format of the definition of a resource is <kind plurals>.<group>
 // Now the definition name of a resource could also be defined as `definition.oam.dev/name` in `metadata.annotations`
-func GetDefinitionName(u *unstructured.Unstructured) string {
-	if labels := u.GetLabels(); labels != nil {
-		if resourceType, ok := labels[oam.LabelOAMResourceType]; ok && resourceType == "WORKLOAD" {
-			if definitionName, ok := labels[oam.WorkloadTypeLabel]; ok {
-				return definitionName
+// typeLabel specified which Definition it is, if specified, will directly get definition from label.
+func GetDefinitionName(dm discoverymapper.DiscoveryMapper, u *unstructured.Unstructured, typeLabel string) (string, error) {
+	if typeLabel != "" {
+		if labels := u.GetLabels(); labels != nil {
+			if definitionName, ok := labels[typeLabel]; ok {
+				return definitionName, nil
 			}
 		}
 	}
-	group, _ := APIVersion2GroupVersion(u.GetAPIVersion())
-	resources := []string{Kind2Resource(u.GetKind())}
-	if group != "" {
-		resources = append(resources, group)
+	groupVersion, err := schema.ParseGroupVersion(u.GetAPIVersion())
+	if err != nil {
+		return "", err
 	}
-	return strings.Join(resources, ".")
+	mapping, err := dm.RESTMapping(schema.GroupKind{Group: groupVersion.Group, Kind: u.GetKind()}, groupVersion.Version)
+	if err != nil {
+		return "", err
+	}
+	return mapping.Resource.Resource + "." + groupVersion.Group, nil
 }
 
-// APIVersion2GroupVersion turn an apiVersion string into group and version
-func APIVersion2GroupVersion(str string) (string, string) {
-	strs := strings.Split(str, "/")
-	if len(strs) == 2 {
-		return strs[0], strs[1]
+// GetGVKFromDefinition help get Group Version Kind from DefinitionReference
+func GetGVKFromDefinition(dm discoverymapper.DiscoveryMapper, definitionRef v1alpha2.DefinitionReference) (schema.GroupVersionKind, error) {
+	var gvk schema.GroupVersionKind
+	groupResource := schema.ParseGroupResource(definitionRef.Name)
+	gvr := schema.GroupVersionResource{Group: groupResource.Group, Resource: groupResource.Resource, Version: definitionRef.Version}
+	kinds, err := dm.KindsFor(gvr)
+	if err != nil {
+		return gvk, err
 	}
-	// core type
-	return "", strs[0]
-}
-
-// Kind2Resource convert Kind to Resources
-func Kind2Resource(str string) string {
-	return plur.NewClient().Plural(strings.ToLower(str))
+	if len(kinds) < 1 {
+		return gvk, &meta.NoResourceMatchError{
+			PartialResource: gvr,
+		}
+	}
+	return kinds[0], nil
 }
 
 // Object2Unstructured convert an object to an unstructured struct
@@ -362,7 +428,7 @@ func AddLabels(o *unstructured.Unstructured, labels map[string]string) {
 	o.SetLabels(MergeMap(o.GetLabels(), labels))
 }
 
-//MergeMap merges two could be nil maps
+// MergeMap merges two could be nil maps
 func MergeMap(src, dst map[string]string) map[string]string {
 	if len(src) == 0 {
 		return dst

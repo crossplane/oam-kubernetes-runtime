@@ -15,10 +15,10 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
-func TestCheckStandardContainerziedHealth(t *testing.T) {
+func TestCheckPodSpecWorkloadHealth(t *testing.T) {
 	mockClient := test.NewMockClient()
 	scRef := runtimev1alpha1.TypedReference{}
-	scRef.SetGroupVersionKind(standardContainerziedGVK)
+	scRef.SetGroupVersionKind(podSpecWorkloadGVK)
 
 	deployRef := runtimev1alpha1.TypedReference{}
 	deployRef.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind(kindDeployment))
@@ -29,7 +29,7 @@ func TestCheckStandardContainerziedHealth(t *testing.T) {
 	svcRefData, _ := util.Object2Map(svcRef)
 
 	scUnstructured := unstructured.Unstructured{}
-	scUnstructured.SetGroupVersionKind(standardContainerziedGVK)
+	scUnstructured.SetGroupVersionKind(podSpecWorkloadGVK)
 	unstructured.SetNestedSlice(scUnstructured.Object, []interface{}{deployRefData, svcRefData}, "status", "resources")
 
 	tests := []struct {
@@ -92,7 +92,7 @@ func TestCheckStandardContainerziedHealth(t *testing.T) {
 			},
 		},
 		{
-			caseName: "unhealthy for ContainerizedWorkload not found",
+			caseName: "unhealthy for PodSpecWorkload not found",
 			wlRef:    scRef,
 			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				return errMockErr
@@ -123,7 +123,7 @@ func TestCheckStandardContainerziedHealth(t *testing.T) {
 	for _, tc := range tests {
 		func(t *testing.T) {
 			mockClient.MockGet = tc.mockGetFn
-			result := CheckStandardContainerziedHealth(ctx, mockClient, tc.wlRef, namespace)
+			result := CheckPodSpecWorkloadHealth(ctx, mockClient, tc.wlRef, namespace)
 			if tc.expect == nil {
 				assert.Nil(t, result, tc.caseName)
 			} else {
