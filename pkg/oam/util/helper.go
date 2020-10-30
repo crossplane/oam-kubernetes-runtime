@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -38,7 +39,8 @@ var (
 
 const (
 	// TraitPrefixKey is prefix of trait name
-	TraitPrefixKey = "trait"
+	TraitPrefixKey         = "trait"
+	DefinitionNamespaceEnv = "DEFINITION_NAMESPACE"
 )
 
 const (
@@ -116,8 +118,7 @@ func FetchScopeDefinition(ctx context.Context, r client.Reader,
 	scope *unstructured.Unstructured) (*v1alpha2.ScopeDefinition, error) {
 	// The name of the scopeDefinition CR is the CRD name of the scope
 	spName := GetDefinitionName(scope)
-	// the scopeDefinition crd is cluster scoped
-	nn := types.NamespacedName{Name: spName}
+	nn := GenNamespacedDefinitionName(spName)
 	// Fetch the corresponding scopeDefinition CR
 	scopeDefinition := &v1alpha2.ScopeDefinition{}
 	if err := r.Get(ctx, nn, scopeDefinition); err != nil {
@@ -131,8 +132,7 @@ func FetchTraitDefinition(ctx context.Context, r client.Reader,
 	trait *unstructured.Unstructured) (*v1alpha2.TraitDefinition, error) {
 	// The name of the traitDefinition CR is the CRD name of the trait
 	trName := GetDefinitionName(trait)
-	// the traitDefinition crd is cluster scoped
-	nn := types.NamespacedName{Name: trName}
+	nn := GenNamespacedDefinitionName(trName)
 	// Fetch the corresponding traitDefinition CR
 	traitDefinition := &v1alpha2.TraitDefinition{}
 	if err := r.Get(ctx, nn, traitDefinition); err != nil {
@@ -146,14 +146,21 @@ func FetchWorkloadDefinition(ctx context.Context, r client.Reader,
 	workload *unstructured.Unstructured) (*v1alpha2.WorkloadDefinition, error) {
 	// The name of the workloadDefinition CR is the CRD name of the component
 	wldName := GetDefinitionName(workload)
-	// the workloadDefinition crd is cluster scoped
-	nn := types.NamespacedName{Name: wldName}
+	nn := GenNamespacedDefinitionName(wldName)
 	// Fetch the corresponding workloadDefinition CR
 	workloadDefinition := &v1alpha2.WorkloadDefinition{}
 	if err := r.Get(ctx, nn, workloadDefinition); err != nil {
 		return nil, err
 	}
 	return workloadDefinition, nil
+}
+
+// GenNamespacedDefinitionName generate definition name with customized namespace
+func GenNamespacedDefinitionName(dn string) types.NamespacedName {
+	if dns := os.Getenv(DefinitionNamespaceEnv); dns != "" {
+		return types.NamespacedName{Name: dn, Namespace: dns}
+	}
+	return types.NamespacedName{Name: dn}
 }
 
 // FetchWorkloadChildResources fetch corresponding child resources given a workload
