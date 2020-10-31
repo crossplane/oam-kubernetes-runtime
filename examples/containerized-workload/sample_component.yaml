@@ -16,6 +16,13 @@ spec:
           env:
             - name: TEST_ENV
               value: test
+          config: 
+            - path: /test/configfile/config
+              value: test
+            - path: /test/secretconfig
+              fromSecret: 
+                name: mysecret
+                key: password
   parameters:
     - name: instance-name
       fieldPaths:

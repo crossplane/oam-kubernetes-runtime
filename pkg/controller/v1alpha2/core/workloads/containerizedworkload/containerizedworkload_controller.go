@@ -44,6 +44,7 @@ const (
 	errRenderWorkload  = "cannot render workload"
 	errRenderService   = "cannot render service"
 	errApplyDeployment = "cannot apply the deployment"
+	errApplyConfigMap  = "cannot apply the configmap"
 	errApplyService    = "cannot apply the service"
 )
 
@@ -71,6 +72,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=core.oam.dev,resources=containerizedworkloads/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.log.WithValues("containerizedworkload", req.NamespacedName)
@@ -110,6 +112,25 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		fmt.Sprintf("Workload `%s` successfully server side patched a deployment `%s`",
 			workload.Name, deploy.Name)))
 
+	configMapApplyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(deploy.GetUID())}
+	configmaps, err := r.renderConfigMaps(ctx, &workload, deploy)
+	if err != nil {
+		log.Error(err, "Failed to render configmaps")
+		r.record.Event(eventObj, event.Warning(errRenderWorkload, err))
+		return util.ReconcileWaitResult,
+			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
+	}
+	for _, cm := range configmaps {
+		if err := r.Patch(ctx, cm, client.Apply, configMapApplyOpts...); err != nil {
+			log.Error(err, "Failed to apply a configmap")
+			r.record.Event(eventObj, event.Warning(errApplyConfigMap, err))
+			return util.ReconcileWaitResult,
+				util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errApplyConfigMap)))
+		}
+		r.record.Event(eventObj, event.Normal("ConfigMap created",
+			fmt.Sprintf("Workload `%s` successfully server side patched a configmap `%s`",
+				workload.Name, cm.Name)))
+	}
 	// create a service for the workload
 	// TODO(rz): remove this after we have service trait
 	service, err := r.renderService(ctx, &workload, deploy)

@@ -2,6 +2,7 @@ package controllers_test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -93,6 +94,7 @@ var _ = Describe("ContainerizedWorkload", func() {
 			},
 		}
 		// create a workload CR
+		configFileValue := "testValue"
 		wl = v1alpha2.ContainerizedWorkload{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
@@ -107,6 +109,12 @@ var _ = Describe("ContainerizedWorkload", func() {
 							{
 								Name: "wordpress",
 								Port: 80,
+							},
+						},
+						ConfigFiles: []v1alpha2.ContainerConfigFile{
+							{
+								Path:  "/test/path/config",
+								Value: &configFileValue,
 							},
 						},
 					},
@@ -237,6 +245,19 @@ var _ = Describe("ContainerizedWorkload", func() {
 			HaveKey(oam.LabelAppComponentRevision),
 			HaveKey(oam.LabelAppName),
 			HaveKey(oam.LabelOAMResourceType)))
+
+		By("Checking ConfigMap is created")
+		cmObjectKey := client.ObjectKey{
+			Namespace: namespace,
+			Name:      fmt.Sprintf("%s-%s-3972676475", workloadInstanceName, "wordpress"),
+		}
+		configMap := &corev1.ConfigMap{}
+		logf.Log.Info("Checking on configMap", "Key", cmObjectKey)
+		Eventually(
+			func() error {
+				return k8sClient.Get(ctx, cmObjectKey, configMap)
+			},
+			time.Second*15, time.Millisecond*500).Should(BeNil())
 
 		By("Checking deployment is created")
 		objectKey := client.ObjectKey{
