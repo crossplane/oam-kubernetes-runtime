@@ -73,9 +73,7 @@ spec:
                           type: object
                         fieldRef:
                           description: 'Selects a field of the pod: supports metadata.name,
-                            metadata.namespace, metadata.labels, metadata.annotations,
-                            spec.nodeName, spec.serviceAccountName, status.hostIP,
-                            status.podIP, status.podIPs.'
+                            metadata.namespace, metadata.uid.'
                           properties:
                             apiVersion:
                               description: Version of the schema the FieldPath is
@@ -168,9 +166,7 @@ spec:
                           type: object
                         fieldRef:
                           description: 'Selects a field of the pod: supports metadata.name,
-                            metadata.namespace, metadata.labels, metadata.annotations,
-                            spec.nodeName, spec.serviceAccountName, status.hostIP,
-                            status.podIP, status.podIPs.'
+                            metadata.namespace, metadata.uid.'
                           properties:
                             apiVersion:
                               description: Version of the schema the FieldPath is
