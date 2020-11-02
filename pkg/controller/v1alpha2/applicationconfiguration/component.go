@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	util "github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
@@ -49,7 +50,7 @@ func (c *ComponentHandler) Update(evt event.UpdateEvent, q workqueue.RateLimitin
 		// No revision created, return
 		return
 	}
-	//Note(wonderflow): MetaOld => MetaNew, requeue once is enough
+	// Note(wonderflow): MetaOld => MetaNew, requeue once is enough
 	for _, req := range c.getRelatedAppConfig(evt.MetaNew) {
 		q.Add(req)
 	}
@@ -133,7 +134,8 @@ func newTrue() *bool {
 
 func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtime.Object) bool {
 	curComp := obj.(*v1alpha2.Component)
-	diff, curRevision := c.IsRevisionDiff(mt, curComp)
+	comp := curComp.DeepCopy()
+	diff, curRevision := c.IsRevisionDiff(mt, comp)
 	if !diff {
 		// No difference, no need to create new revision.
 		return false
@@ -141,7 +143,7 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	nextRevision := curRevision + 1
 	revisionName := ConstructRevisionName(mt.GetName(), nextRevision)
 
-	curComp.Status.LatestRevision = &v1alpha2.Revision{
+	comp.Status.LatestRevision = &v1alpha2.Revision{
 		Name:     revisionName,
 		Revision: nextRevision,
 	}
@@ -149,22 +151,22 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	revision := appsv1.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      revisionName,
-			Namespace: curComp.Namespace,
+			Namespace: comp.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: v1alpha2.SchemeGroupVersion.String(),
 					Kind:       v1alpha2.ComponentKind,
-					Name:       curComp.Name,
-					UID:        curComp.UID,
+					Name:       comp.Name,
+					UID:        comp.UID,
 					Controller: newTrue(),
 				},
 			},
 			Labels: map[string]string{
-				ControllerRevisionComponentLabel: curComp.Name,
+				ControllerRevisionComponentLabel: comp.Name,
 			},
 		},
 		Revision: nextRevision,
-		Data:     runtime.RawExtension{Object: curComp},
+		Data:     runtime.RawExtension{Object: comp},
 	}
 
 	err := c.Client.Create(context.TODO(), &revision)
@@ -173,18 +175,18 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 		return false
 	}
 
-	if curComp.Status.ObservedGeneration != curComp.Generation {
-		curComp.Status.ObservedGeneration = curComp.Generation
+	if comp.Status.ObservedGeneration != comp.Generation {
+		comp.Status.ObservedGeneration = comp.Generation
 	}
 
-	err = c.Client.Status().Update(context.Background(), curComp)
+	err = c.Client.Status().Update(context.Background(), comp)
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("update component status latestRevision %s err %v", revisionName, err), "componentName", mt.GetName())
 		return false
 	}
 	c.Logger.Info(fmt.Sprintf("ControllerRevision %s created", revisionName))
 	if int64(c.RevisionLimit) < nextRevision {
-		if err := c.cleanupControllerRevision(curComp); err != nil {
+		if err := c.cleanupControllerRevision(comp); err != nil {
 			c.Logger.Info(fmt.Sprintf("failed to clean up revisions of Component %v.", err))
 		}
 	}

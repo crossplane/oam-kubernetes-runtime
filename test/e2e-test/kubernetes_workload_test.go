@@ -43,7 +43,7 @@ var _ = Describe("Test kubernetes native workloads", func() {
 			func() error {
 				return k8sClient.Get(ctx, objectKey, res)
 			},
-			time.Second*30, time.Millisecond*500).Should(&util.NotFoundMatcher{})
+			time.Second*120, time.Millisecond*500).Should(&util.NotFoundMatcher{})
 		// recreate it
 		Eventually(
 			func() error {

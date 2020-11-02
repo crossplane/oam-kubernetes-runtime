@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
 )
 
 func TestCheckComponentVersionEnabled(t *testing.T) {
@@ -98,11 +99,12 @@ func TestCheckComponentVersionEnabled(t *testing.T) {
 			result: false,
 		},
 	}
+	mapper := mock.NewMockDiscoveryMapper()
 
 	for _, tv := range tests {
 		func(t *testing.T) {
 			mockClient.MockGet = tv.mockGetFun
-			result, _ := checkComponentVersionEnabled(ctx, mockClient, &tv.acc)
+			result, _ := checkComponentVersionEnabled(ctx, mockClient, mapper, &tv.acc)
 			assert.Equal(t, tv.result, result, fmt.Sprintf("Test case: %q", tv.caseName))
 		}(t)
 	}

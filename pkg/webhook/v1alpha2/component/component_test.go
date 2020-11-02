@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -177,6 +179,9 @@ var _ = Describe("Component Admission controller Test", func() {
 				injc := handler.(inject.Client)
 				injc.InjectClient(test.client)
 				mutatingHandler := handler.(*MutatingHandler)
+				dm := mock.NewMockDiscoveryMapper()
+				dm.MockKindsFor = mock.NewMockKindsFor("Foo", "v1")
+				mutatingHandler.Mapper = dm
 				err := mutatingHandler.Mutate(&component)
 				if len(test.errMsg) == 0 {
 					Expect(err).Should(BeNil())

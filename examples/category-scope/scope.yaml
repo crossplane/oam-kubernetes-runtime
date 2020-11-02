@@ -18,6 +18,10 @@ spec:
         configMapKeyRef:
           name: game-demo
           key: ui_properties_file_name
+    - key: category.field
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
   labels:
     - key: run.environment
       value: production

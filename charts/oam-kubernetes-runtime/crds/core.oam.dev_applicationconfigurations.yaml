@@ -406,7 +406,7 @@ spec:
                     that are still running
                   properties:
                     revision:
-                      description: component revision of this workload
+                      description: Revision of this workload
                       type: string
                     workloadRef:
                       description: Reference to running workload.
@@ -496,6 +496,10 @@ spec:
                         description: A WorkloadTrait represents a trait associated
                           with a workload and its status
                         properties:
+                          message:
+                            description: Message will allow controller to leave some
+                              additional information for this trait
+                            type: string
                           status:
                             description: Status is a place holder for a customized
                               controller to fill if it needs a single place to summarize
@@ -547,8 +551,6 @@ spec:
                       type: object
                   type: object
                 type: array
-            required:
-            - historyWorkloads
             type: object
         type: object
     served: true

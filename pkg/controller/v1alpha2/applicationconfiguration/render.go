@@ -28,6 +28,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,6 +37,7 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
@@ -80,8 +82,11 @@ func (fn ComponentRenderFn) Render(ctx context.Context, ac *v1alpha2.Application
 	return fn(ctx, ac)
 }
 
+var _ ComponentRenderer = &components{}
+
 type components struct {
 	client   client.Reader
+	dm       discoverymapper.DiscoveryMapper
 	params   ParameterResolver
 	workload ResourceRenderer
 	trait    ResourceRenderer
@@ -151,21 +156,39 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	traits := make([]*Trait, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
 	compInfoLabels[oam.LabelOAMResourceType] = oam.ResourceTypeTrait
+
 	for _, ct := range acc.Traits {
 		t, traitDef, err := r.renderTrait(ctx, ct, ac, acc.ComponentName, ref, dag)
 		if err != nil {
 			return nil, err
 		}
 		util.AddLabels(t, compInfoLabels)
+
 		// pass through labels and annotation from app-config to trait
 		util.PassLabelAndAnnotation(ac, t)
-		traits = append(traits, &Trait{Object: *t})
+		traits = append(traits, &Trait{Object: *t, Definition: *traitDef})
 		traitDefs = append(traitDefs, *traitDef)
 	}
 	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 		return nil, err
 	}
-
+	// create the ref after the workload name is set
+	workloadRef := runtimev1alpha1.TypedReference{
+		APIVersion: w.GetAPIVersion(),
+		Kind:       w.GetKind(),
+		Name:       w.GetName(),
+	}
+	//  We only patch a TypedReference object to the trait if it asks for it
+	for i := range acc.Traits {
+		traitDef := traitDefs[i]
+		trait := traits[i]
+		workloadRefPath := traitDef.Spec.WorkloadRefPath
+		if len(workloadRefPath) != 0 {
+			if err := fieldpath.Pave(trait.Object.UnstructuredContent()).SetValue(workloadRefPath, workloadRef); err != nil {
+				return nil, errors.Wrapf(err, errFmtSetWorkloadRef, trait.Object.GetName(), w.GetName())
+			}
+		}
+	}
 	scopes := make([]unstructured.Unstructured, 0, len(acc.Scopes))
 	for _, cs := range acc.Scopes {
 
@@ -204,8 +227,11 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 
 	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
 
-	traitDef, err := util.FetchTraitDefinition(ctx, r.client, t)
+	traitDef, err := util.FetchTraitDefinition(ctx, r.client, r.dm, t)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return t, util.GetDummyTraitDefinition(t), nil
+		}
 		return nil, nil, errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
 	}
 

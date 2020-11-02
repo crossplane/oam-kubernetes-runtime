@@ -152,8 +152,7 @@ type ScopeVar struct {
 
 // ScopeSource represents a source for the value of an ScopeVar.
 type ScopeSource struct {
-	// Selects a field of the pod: supports metadata.name, metadata.namespace, metadata.labels, metadata.annotations,
-	// spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+	// Selects a field of the pod: supports metadata.name, metadata.namespace, metadata.uid.
 	// +optional
 	FieldRef *corev1.ObjectFieldSelector `json:"fieldRef,omitempty"`
 	// Selects a resource of the container: only resources limits and requests

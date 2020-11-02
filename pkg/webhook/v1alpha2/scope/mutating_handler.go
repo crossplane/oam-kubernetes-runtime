@@ -27,9 +27,8 @@ import (
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -42,8 +41,7 @@ import (
 )
 
 const (
-	// TypeField is the special field indicate the type of the workloadDefinition
-	TypeField    = "type"
+	// DefaultScope is the default label for workload
 	DefaultScope = "scope.oam.dev"
 )
 
@@ -89,7 +87,7 @@ func (h *MutatingHandler) Handle(ctx context.Context, req admission.Request) adm
 	return resp
 }
 
-// Mutate sets all the default value for the Component
+// Mutate sets all the default value for the Workload
 func (h *MutatingHandler) Mutate(obj *unstructured.Unstructured) error {
 
 	scopeName := getCategoryScope(obj)
@@ -100,8 +98,8 @@ func (h *MutatingHandler) Mutate(obj *unstructured.Unstructured) error {
 		return err
 	}
 
-	newLabels := mergerMap(obj.GetLabels(), h.ParseScopeVars(scopeDefinition.Spec.Labels, namespace))
-	newAnnotations := mergerMap(obj.GetAnnotations(), h.ParseScopeVars(scopeDefinition.Spec.Annotation, namespace))
+	newLabels := mergerMap(obj.GetLabels(), h.ParseScopeVars(scopeDefinition.Spec.Labels, namespace, obj))
+	newAnnotations := mergerMap(obj.GetAnnotations(), h.ParseScopeVars(scopeDefinition.Spec.Annotation, namespace, obj))
 
 	obj.SetLabels(newLabels)
 	obj.SetAnnotations(newAnnotations)
@@ -109,8 +107,8 @@ func (h *MutatingHandler) Mutate(obj *unstructured.Unstructured) error {
 	return nil
 }
 
-// ParseScopeVars parse scope vars
-func (h *MutatingHandler) ParseScopeVars(scopes []v1alpha2.ScopeVar, namespace string) map[string]string {
+// ParseScopeVars returns the value referenced by the supplied ScopeVar given the other supplied information.
+func (h *MutatingHandler) ParseScopeVars(scopes []v1alpha2.ScopeVar, namespace string, obj *unstructured.Unstructured) map[string]string {
 	labels := make(map[string]string)
 	for _, scopeVar := range scopes {
 
@@ -124,9 +122,7 @@ func (h *MutatingHandler) ParseScopeVars(scopes []v1alpha2.ScopeVar, namespace s
 			continue
 		}
 
-		mutatelog.Info("valueFrom", "value", scopeVar.ValueFrom)
-
-		value, err := GetScopeVarRefValue(h.Client, namespace, scopeVar.ValueFrom)
+		value, err := GetScopeVarRefValue(h.Client, namespace, scopeVar.ValueFrom, obj)
 		if err != nil {
 			mutatelog.Error(err, "skip parse valueFrom", "key", scopeVar.Key, "value", value)
 			continue
@@ -192,14 +188,41 @@ func getConfigMapRefValue(client client.Client, namespace string, configMapSelec
 	return "", fmt.Errorf("key %s not found in config map %s", configMapSelector.Key, configMapSelector.Name)
 }
 
+// getFieldRef returns the value of the supplied path in the given object
+func getFieldRef(obj *unstructured.Unstructured, from *v1alpha2.ScopeSource) (string, error) {
+	return extractFieldPathAsString(obj, from.FieldRef.FieldPath)
+}
+
+// extractFieldPathAsString extracts the field from the given object
+// and returns it as a string.  The object must be a pointer to an
+// API type.
+func extractFieldPathAsString(obj *unstructured.Unstructured, fieldPath string) (string, error) {
+
+	switch fieldPath {
+	case "metadata.name":
+		return obj.GetName(), nil
+	case "metadata.namespace":
+		return obj.GetNamespace(), nil
+	case "metadata.uid":
+		return string(obj.GetUID()), nil
+	}
+
+	return "", fmt.Errorf("unsupported fieldPath: %v", fieldPath)
+}
+
 // GetScopeVarRefValue returns the value referenced by the supplied ScopeSource given the other supplied information.
-func GetScopeVarRefValue(kc client.Client, ns string, from *v1alpha2.ScopeSource) (string, error) {
+func GetScopeVarRefValue(kc client.Client, ns string, from *v1alpha2.ScopeSource, obj *unstructured.Unstructured) (string, error) {
+
 	if from.SecretKeyRef != nil {
 		return getSecretRefValue(kc, ns, from.SecretKeyRef)
 	}
 
 	if from.ConfigMapKeyRef != nil {
 		return getConfigMapRefValue(kc, ns, from.ConfigMapKeyRef)
+	}
+
+	if from.FieldRef != nil {
+		return getFieldRef(obj, from)
 	}
 
 	return "", fmt.Errorf("invalid valueFrom")

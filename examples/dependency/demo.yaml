@@ -1,3 +1,17 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dependency-clusterrole
+  labels:
+    rbac.oam.dev/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - example.com
+    resources:
+      - 'foo'
+    verbs:
+      - '*'
+---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component
 metadata:
@@ -8,15 +22,16 @@ spec:
     kind: Foo
     metadata:
       name: source
+    status: {}
     # Uncomment the following and apply again will make dependency satisfied.
     # status:
     #   key: test
-    status:
-      key:
-        - name: a
-          value: aa
-        - name: b
-          value: bb
+    # status:
+    #   key:
+    #     - name: a
+    #       value: aa
+    #     - name: b
+    #       value: bb
 ---
 apiVersion: core.oam.dev/v1alpha2
 kind: Component

@@ -55,7 +55,6 @@ func dmWithLabel(label map[string]string) deploymentModifier {
 func dmWithAnnotation(annotation map[string]string) deploymentModifier {
 	return func(cw *appsv1.Deployment) {
 		cw.Annotations = annotation
-		cw.Spec.Template.Annotations = annotation
 	}
 }
 

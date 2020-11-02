@@ -178,7 +178,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1alpha2.HealthScope) (ScopeHealthCondition, []*WorkloadHealthCondition) {
 	log := r.log.WithValues("get scope health status", healthScope.GetName())
 	scopeCondition := ScopeHealthCondition{
-		HealthStatus: StatusHealthy, //if no workload referenced, scope is healthy by default
+		HealthStatus: StatusHealthy, // if no workload referenced, scope is healthy by default
 	}
 	scopeWLRefs := healthScope.Spec.WorkloadReferences
 	if len(scopeWLRefs) == 0 {
@@ -234,7 +234,7 @@ func (r *Reconciler) GetScopeHealthStatus(ctx context.Context, healthScope *v1al
 	workloadHealthConditions := []*WorkloadHealthCondition{}
 	for wlC := range workloadHealthConditionsC {
 		workloadHealthConditions = append(workloadHealthConditions, wlC)
-		switch wlC.HealthStatus {
+		switch wlC.HealthStatus { //nolint:exhaustive
 		case StatusHealthy:
 			healthyCount++
 		case StatusUnhealthy:

@@ -9,10 +9,15 @@ import (
 )
 
 // Add will be called in main and register all validation handlers
-func Add(mgr manager.Manager) {
-	applicationconfiguration.RegisterValidatingHandler(mgr)
+func Add(mgr manager.Manager) error {
+	if err := applicationconfiguration.RegisterValidatingHandler(mgr); err != nil {
+		return err
+	}
 	applicationconfiguration.RegisterMutatingHandler(mgr)
-	component.RegisterMutatingHandler(mgr)
+	if err := component.RegisterMutatingHandler(mgr); err != nil {
+		return err
+	}
 	component.RegisterValidatingHandler(mgr)
 	scope.RegisterMutatingHandler(mgr)
+	return nil
 }
