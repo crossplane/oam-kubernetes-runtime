@@ -56,6 +56,7 @@ const (
 	errFmtSetParam         = "cannot set parameter %q"
 	errFmtUnsupportedParam = "unsupported parameter %q"
 	errFmtRequiredParam    = "required parameter %q not specified"
+	errFmtCompRevision     = "cannot get latest revision for component %q while revision is enabled"
 	errSetValueForField    = "can not set value %q for fieldPath %q"
 )
 
@@ -257,6 +258,9 @@ func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructur
 	}
 	pv := fieldpath.Pave(w.UnstructuredContent())
 	if isRevisionEnabled(traitDefs) {
+		if c.Status.LatestRevision == nil {
+			return fmt.Errorf(errFmtCompRevision, c.Name)
+		}
 		// if revisionEnabled, use revisionName as the workload name
 		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision.Name); err != nil {
 			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
