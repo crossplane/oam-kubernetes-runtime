@@ -143,6 +143,10 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	nextRevision := curRevision + 1
 	revisionName := ConstructRevisionName(mt.GetName(), nextRevision)
 
+	if comp.Status.ObservedGeneration != comp.Generation {
+		comp.Status.ObservedGeneration = comp.Generation
+	}
+
 	comp.Status.LatestRevision = &v1alpha2.Revision{
 		Name:     revisionName,
 		Revision: nextRevision,
@@ -173,10 +177,6 @@ func (c *ComponentHandler) createControllerRevision(mt metav1.Object, obj runtim
 	if err != nil {
 		c.Logger.Info(fmt.Sprintf("error create controllerRevision %v", err), "componentName", mt.GetName())
 		return false
-	}
-
-	if comp.Status.ObservedGeneration != comp.Generation {
-		comp.Status.ObservedGeneration = comp.Generation
 	}
 
 	err = c.Client.Status().Update(context.Background(), comp)
