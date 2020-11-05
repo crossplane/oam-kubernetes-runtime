@@ -1,0 +1,16 @@
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - componentName: example-component
+      parameterValues:
+        - name: image
+          value: wordpress:php7.2
+      scopes:
+        - scopeRef:
+          apiVersion: core.oam.dev/v1alpha2
+          kind: CategoryScope
+          name: scope1

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -143,6 +144,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		oam.LabelAppComponentRevision: componentRevisionName,
 		oam.LabelOAMResourceType:      oam.ResourceTypeWorkload,
 	}
+
 	util.AddLabels(w, compInfoLabels)
 
 	// pass through labels and annotation from app-config to workload
@@ -190,6 +192,17 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	}
 	scopes := make([]unstructured.Unstructured, 0, len(acc.Scopes))
 	for _, cs := range acc.Scopes {
+
+		if cs.ScopeReference.Kind == "CategoryScope" &&
+			cs.ScopeReference.APIVersion == "core.oam.dev/v1alpha2" {
+
+			label := strings.Join([]string{cs.ScopeReference.Name, "categoryscopes.core.oam.dev"}, ".")
+			compInfoLabels["scope.oam.dev"] = label
+			util.AddLabels(w, compInfoLabels)
+			continue
+
+		}
+
 		scopeObject, err := r.renderScope(ctx, cs, ac.GetNamespace())
 		if err != nil {
 			return nil, err

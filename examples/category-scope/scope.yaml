@@ -1,0 +1,37 @@
+apiVersion: core.oam.dev/v1alpha2
+kind: CategoryScope
+metadata:
+  name: scope1
+spec:
+  annotation:
+    - key: tenant.uid
+      value: "123"
+    - key: alibabacloud.vpc
+      value: "vpc-2ze"
+    - key: category.key
+      valueFrom:
+        secretKeyRef:
+          name: my-category
+          key: categoryname
+    - key: category.cm
+      valueFrom:
+        configMapKeyRef:
+          name: game-demo
+          key: ui_properties_file_name
+    - key: category.field
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+  labels:
+    - key: run.environment
+      value: production
+    - key: category.key
+      valueFrom:
+        secretKeyRef:
+          name: my-category
+          key: categoryname
+    - key: category.cm
+      valueFrom:
+        configMapKeyRef:
+          name: game-demo
+          key: ui_properties_file_name

@@ -39,7 +39,7 @@ func main() {
 	var useWebhook bool
 	var controllerArgs controller.Args
 
-	flag.BoolVar(&useWebhook, "use-webhook", false, "Enable Admission Webhook")
+	flag.BoolVar(&useWebhook, "use-webhook", true, "Enable Admission Webhook")
 	flag.StringVar(&certDir, "webhook-cert-dir", "/k8s-webhook-server/serving-certs", "Admission webhook cert/key dir.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "admission webhook listen address")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")

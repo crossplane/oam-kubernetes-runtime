@@ -3,6 +3,7 @@ package v1alpha2
 import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/webhook/v1alpha2/applicationconfiguration"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/webhook/v1alpha2/component"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/webhook/v1alpha2/scope"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -17,5 +18,6 @@ func Add(mgr manager.Manager) error {
 		return err
 	}
 	component.RegisterValidatingHandler(mgr)
+	scope.RegisterMutatingHandler(mgr)
 	return nil
 }

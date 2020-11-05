@@ -91,3 +91,23 @@ func (hs *HealthScope) GetWorkloadReferences() []runtimev1alpha1.TypedReference 
 func (hs *HealthScope) AddWorkloadReference(r runtimev1alpha1.TypedReference) {
 	hs.Spec.WorkloadReferences = append(hs.Spec.WorkloadReferences, r)
 }
+
+// GetCondition of this HealthScope.
+func (cs *CategoryScope) GetCondition(ct runtimev1alpha1.ConditionType) runtimev1alpha1.Condition {
+	return runtimev1alpha1.Condition{}
+}
+
+// SetConditions of this HealthScope.
+func (cs *CategoryScope) SetConditions(c ...runtimev1alpha1.Condition) {
+
+}
+
+// GetWorkloadReferences to get all workload references for scope.
+func (cs *CategoryScope) GetWorkloadReferences() []runtimev1alpha1.TypedReference {
+	return nil
+}
+
+// AddWorkloadReference to add a workload reference to this scope.
+func (cs *CategoryScope) AddWorkloadReference(r runtimev1alpha1.TypedReference) {
+
+}
