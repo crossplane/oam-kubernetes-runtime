@@ -19,6 +19,9 @@ package containerizedworkload
 import (
 	"context"
 	"errors"
+	"fmt"
+	"hash/fnv"
+	"path"
 	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -36,6 +39,8 @@ var (
 	deploymentAPIVersion = appsv1.SchemeGroupVersion.String()
 	serviceKind          = reflect.TypeOf(corev1.Service{}).Name()
 	serviceAPIVersion    = corev1.SchemeGroupVersion.String()
+	configMapKind        = reflect.TypeOf(corev1.ConfigMap{}).Name()
+	configMapAPIVersion  = corev1.SchemeGroupVersion.String()
 )
 
 // Reconcile error strings.
@@ -253,6 +258,12 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 			}
 		}
 
+		for _, c := range container.ConfigFiles {
+			v, vm := translateConfigFileToVolume(c, w.GetName(), container.Name)
+			kubernetesContainer.VolumeMounts = append(kubernetesContainer.VolumeMounts, vm)
+			d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes, v)
+		}
+
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, kubernetesContainer)
 	}
 
@@ -262,6 +273,100 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 	util.PassLabel(w, &d.Spec.Template)
 
 	return []oam.Object{d}, nil
+}
+
+func translateConfigFileToVolume(cf v1alpha2.ContainerConfigFile, wlName, containerName string) (v corev1.Volume, vm corev1.VolumeMount) {
+	mountPath, _ := path.Split(cf.Path)
+	// translate into ConfigMap Volume
+	if cf.Value != nil {
+		name, _ := generateConfigMapName(cf, wlName, containerName)
+		v = corev1.Volume{
+			Name: name,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				},
+			},
+		}
+		vm = corev1.VolumeMount{
+			MountPath: mountPath,
+			Name:      name,
+		}
+		return v, vm
+	}
+
+	// translate into Secret Volume
+	secretName := cf.FromSecret.Name
+	itemKey := cf.FromSecret.Key
+	v = corev1.Volume{
+		Name: secretName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: secretName,
+				Items: []corev1.KeyToPath{
+					{
+						Key: itemKey,
+						// OAM v1alpha2 SecretKeySelector doen't provide Path field
+						// just use itemKey as relative Path
+						Path: itemKey,
+					},
+				},
+			},
+		},
+	}
+	vm = corev1.VolumeMount{
+		MountPath: cf.Path,
+		Name:      secretName,
+	}
+	return v, vm
+}
+
+func generateConfigMapName(cf v1alpha2.ContainerConfigFile, wlName, containerName string) (string, error) {
+	h := fnv.New32a()
+	_, err := h.Write([]byte(cf.Path))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s-%s-%d", wlName, containerName, h.Sum32()), nil
+}
+
+// TranslateConfigMaps translate non-secret ContainerConfigFile into ConfigMaps
+func TranslateConfigMaps(ctx context.Context, w oam.Object) ([]*corev1.ConfigMap, error) {
+	cw, ok := w.(*v1alpha2.ContainerizedWorkload)
+	if !ok {
+		return nil, errors.New(errNotContainerizedWorkload)
+	}
+
+	newConfigMaps := []*corev1.ConfigMap{}
+	for _, c := range cw.Spec.Containers {
+		for _, cf := range c.ConfigFiles {
+			if cf.Value == nil {
+				continue
+			}
+			_, key := path.Split(cf.Path)
+			cmName, err := generateConfigMapName(cf, cw.GetName(), c.Name)
+			if err != nil {
+				return nil, err
+			}
+			cm := &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       configMapKind,
+					APIVersion: configMapAPIVersion,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cmName,
+					Namespace: cw.GetNamespace(),
+				},
+				Data: map[string]string{
+					key: *cf.Value,
+				},
+			}
+			// pass through label and annotation from the workload to the configmap
+			util.PassLabelAndAnnotation(w, cm)
+			newConfigMaps = append(newConfigMaps, cm)
+		}
+	}
+	return newConfigMaps, nil
 }
 
 // ServiceInjector adds a Service object for the first Port on the first
