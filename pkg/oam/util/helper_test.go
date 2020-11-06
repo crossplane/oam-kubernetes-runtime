@@ -911,7 +911,7 @@ func TestPatchCondition(t *testing.T) {
 				r: &test.MockClient{
 					MockStatusPatch: test.NewMockStatusPatchFn(nil),
 				},
-				workload: &fake.Claim{},
+				workload: &fake.Target{},
 				condition: []v1alpha1.Condition{
 					{},
 				},
@@ -925,7 +925,7 @@ func TestPatchCondition(t *testing.T) {
 				r: &test.MockClient{
 					MockStatusPatch: test.NewMockStatusPatchFn(patchErr),
 				},
-				workload: &fake.Claim{},
+				workload: &fake.Target{},
 				condition: []v1alpha1.Condition{
 					{},
 				},

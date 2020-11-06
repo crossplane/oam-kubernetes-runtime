@@ -435,6 +435,20 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		logf.Log.Info("Checking on resource that inputs data", "Key", inFooKey)
 		Expect(k8sClient.Get(ctx, inFooKey, inFoo)).Should(BeNil())
 
+		Eventually(func() error {
+			err := k8sClient.Get(ctx, outFooKey, outFoo)
+			if err != nil {
+				// Try 3 (= 1s/300ms) times
+				reconciler.Reconcile(req)
+			}
+			return err
+		}, time.Second, 300*time.Millisecond).Should(BeNil())
+		err = unstructured.SetNestedField(outFoo.Object, "test", "status", "key")
+		Expect(err).Should(BeNil())
+		err = unstructured.SetNestedField(outFoo.Object, "hash-v1", "status", "app-hash")
+		Expect(err).Should(BeNil())
+		Expect(k8sClient.Update(ctx, outFoo)).Should(Succeed())
+
 		By("Update AppConfig with new version")
 		newAppConfig.Labels["app-hash"] = "hash-v2"
 		Expect(k8sClient.Update(ctx, newAppConfig)).Should(BeNil())
