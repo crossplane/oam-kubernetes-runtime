@@ -182,9 +182,11 @@ func NewReconciler(m ctrl.Manager, dm discoverymapper.DiscoveryMapper, o ...Reco
 			trait:    ResourceRenderFn(renderTrait),
 		},
 		workloads: &workloads{
-			client:    resource.NewAPIPatchingApplicator(m.GetClient()),
-			rawClient: m.GetClient(),
-			dm:        dm,
+			// NOTE(roywang) PatchingApplicator@v0.10.0 only use "application/merge-patch+json" type patch
+			patchingClient: resource.NewAPIPatchingApplicator(m.GetClient()),
+			updatingClient: resource.NewAPIUpdatingApplicator(m.GetClient()),
+			rawClient:      m.GetClient(),
+			dm:             dm,
 		},
 		gc:        GarbageCollectorFn(eligible),
 		log:       logging.NewNopLogger(),

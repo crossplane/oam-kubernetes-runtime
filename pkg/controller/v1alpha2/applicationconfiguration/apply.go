@@ -75,9 +75,12 @@ func (fn WorkloadApplyFns) Finalize(ctx context.Context, ac *v1alpha2.Applicatio
 }
 
 type workloads struct {
-	client    resource.Applicator
-	rawClient client.Client
-	dm        discoverymapper.DiscoveryMapper
+	// use patching-apply for creating/updating Workload
+	patchingClient resource.Applicator
+	// use updateing-apply for creating/updating Trait
+	updatingClient resource.Applicator
+	rawClient      client.Client
+	dm             discoverymapper.DiscoveryMapper
 }
 
 func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
@@ -85,7 +88,7 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 	var namespace = w[0].Workload.GetNamespace()
 	for _, wl := range w {
 		if !wl.HasDep {
-			err := a.client.Apply(ctx, wl.Workload, ao...)
+			err := a.patchingClient.Apply(ctx, wl.Workload, ao...)
 			if err != nil {
 				return errors.Wrapf(err, errFmtApplyWorkload, wl.Workload.GetName())
 			}
@@ -95,7 +98,7 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 				continue
 			}
 			t := trait.Object
-			if err := a.client.Apply(ctx, &trait.Object, ao...); err != nil {
+			if err := a.updatingClient.Apply(ctx, &trait.Object, ao...); err != nil {
 				return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
 			}
 		}
