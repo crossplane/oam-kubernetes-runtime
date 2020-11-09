@@ -388,6 +388,9 @@ var _ = Describe("Versioning mechanism of components", func() {
 					if err != nil {
 						return ""
 					}
+					if len(appconfig.Status.Workloads) == 0 {
+						return ""
+					}
 					return appconfig.Status.Workloads[0].ComponentRevisionName
 				},
 				time.Second*60, time.Millisecond*500).Should(BeEquivalentTo(revisionNameV2))

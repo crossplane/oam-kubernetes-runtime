@@ -1,0 +1,99 @@
+{{- if .Values.useWebhook -}}
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}
+  labels:
+    {{- include "oam-kubernetes-runtime.selectorLabels" . | nindent 4 }}
+webhooks:
+  - name: "validate.applicationconfigurations.core.oam.dev"
+    rules:
+      - apiGroups:   ["core.oam.dev"]
+        apiVersions: ["v1alpha2"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["applicationconfigurations"]
+        scope:       "Namespaced"
+    clientConfig:
+      service:
+        namespace: {{.Release.Namespace}}
+        name: {{ template "oam-kubernetes-runtime.name" . }}-webhook
+        path: /validating-core-oam-dev-v1alpha2-applicationconfigurations
+      caBundle: "{{.Values.certificate.caBundle}}"
+    admissionReviewVersions: ["v1beta1"]
+    failurePolicy: Fail
+    timeoutSeconds: 5
+  - name: "validate.component.core.oam.dev"
+    clientConfig:
+      service:
+        name: {{ template "oam-kubernetes-runtime.name" . }}-webhook
+        namespace: {{.Release.Namespace}}
+        path: /validating-core-oam-dev-v1alpha2-components
+      caBundle: "{{.Values.certificate.caBundle}}"
+    rules:
+      - apiGroups:   ["core.oam.dev"]
+        apiVersions: ["v1alpha2"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["components"]
+        scope:       "Namespaced"
+    admissionReviewVersions: ["v1beta1"]
+    failurePolicy: Fail
+    timeoutSeconds: 5
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "oam-kubernetes-runtime.fullname" . }}
+  labels:
+  {{- include "oam-kubernetes-runtime.selectorLabels" . | nindent 4 }}
+webhooks:
+  - name: "mutate.applicationconfigurations.core.oam.dev"
+    clientConfig:
+      service:
+        name: {{ template "oam-kubernetes-runtime.name" . }}-webhook
+        namespace: {{.Release.Namespace}}
+        path: /mutating-core-oam-dev-v1alpha2-applicationconfigurations
+      caBundle: "{{.Values.certificate.caBundle}}"
+    rules:
+      - apiGroups:   ["core.oam.dev"]
+        apiVersions: ["v1alpha2"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["applicationconfigurations"]
+        scope:       "Namespaced"
+    admissionReviewVersions: ["v1beta1"]
+    failurePolicy: Fail
+    timeoutSeconds: 5
+  - name: "mutate.component.core.oam.dev"
+    clientConfig:
+      service:
+        name: {{ template "oam-kubernetes-runtime.name" . }}-webhook
+        namespace: {{.Release.Namespace}}
+        path: /mutating-core-oam-dev-v1alpha2-components
+      caBundle: "{{.Values.certificate.caBundle}}"
+    rules:
+      - apiGroups:   ["core.oam.dev"]
+        apiVersions: ["v1alpha2"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["components"]
+        scope:       "Namespaced"
+    admissionReviewVersions: ["v1beta1"]
+    failurePolicy: Fail
+    timeoutSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "oam-kubernetes-runtime.name" . }}-webhook
+  labels:
+    {{- include "oam-kubernetes-runtime.selectorLabels" . | nindent 4 }}
+spec:
+  type: {{ .Values.webhookService.type }}
+  ports:
+    - port: 443
+      targetPort: {{ .Values.webhookService.port }}
+      protocol: TCP
+      name: https
+  selector:
+    {{ include "oam-kubernetes-runtime.selectorLabels" . | nindent 6 }}
+
+{{- end -}}
