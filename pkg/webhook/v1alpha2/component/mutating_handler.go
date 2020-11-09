@@ -123,7 +123,7 @@ func (h *MutatingHandler) Mutate(obj *v1alpha2.Component) error {
 		mutatelog.Info("Set the component workload GVK", "workload api version", workload.GetAPIVersion(), "workload Kind", workload.GetKind())
 		// copy namespace/label/annotation to the workload and add workloadType label
 		workload.SetNamespace(obj.GetNamespace())
-		workload.SetLabels(util.MergeMap(obj.GetLabels(), map[string]string{oam.WorkloadTypeLabel: workloadType}))
+		workload.SetLabels(util.MergeMapOverrideWithDst(obj.GetLabels(), map[string]string{oam.WorkloadTypeLabel: workloadType}))
 		workload.SetAnnotations(obj.GetAnnotations())
 		// copy back the object
 		rawBye, err := json.Marshal(workload.Object)

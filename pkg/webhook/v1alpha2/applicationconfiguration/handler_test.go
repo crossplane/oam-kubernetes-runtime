@@ -122,7 +122,7 @@ var _ = Describe("ApplicationConfiguration Admission controller Test", func() {
 			// set up the result
 			mutatedTrait := baseTrait.DeepCopy()
 			mutatedTrait.SetNamespace(appConfig.GetNamespace())
-			mutatedTrait.SetLabels(util.MergeMap(label, map[string]string{oam.TraitTypeLabel: traitTypeName}))
+			mutatedTrait.SetLabels(util.MergeMapOverrideWithDst(label, map[string]string{oam.TraitTypeLabel: traitTypeName}))
 			tests := map[string]struct {
 				client client.Client
 				trait  interface{}

@@ -280,15 +280,15 @@ type labelAnnotationObject interface {
 // PassLabel passes through labels from the parent to the child object
 func PassLabel(parentObj oam.Object, childObj labelAnnotationObject) {
 	// pass app-config labels
-	childObj.SetLabels(MergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+	childObj.SetLabels(MergeMapOverrideWithDst(parentObj.GetLabels(), childObj.GetLabels()))
 }
 
 // PassLabelAndAnnotation passes through labels and annotation objectMeta from the parent to the child object
 func PassLabelAndAnnotation(parentObj oam.Object, childObj labelAnnotationObject) {
 	// pass app-config labels
-	childObj.SetLabels(MergeMap(parentObj.GetLabels(), childObj.GetLabels()))
+	childObj.SetLabels(MergeMapOverrideWithDst(parentObj.GetLabels(), childObj.GetLabels()))
 	// pass app-config annotation
-	childObj.SetAnnotations(MergeMap(parentObj.GetAnnotations(), childObj.GetAnnotations()))
+	childObj.SetAnnotations(MergeMapOverrideWithDst(parentObj.GetAnnotations(), childObj.GetAnnotations()))
 }
 
 // GetDefinitionName return the Definition name of any resources
@@ -423,24 +423,24 @@ func UnpackRevisionData(rev *appsv1.ControllerRevision) (*v1alpha2.Component, er
 	return &comp, err
 }
 
-// AddLabels will merge labels with existing labels
+// AddLabels will merge labels with existing labels. If any conflict keys, use new value to override existing value.
 func AddLabels(o *unstructured.Unstructured, labels map[string]string) {
-	o.SetLabels(MergeMap(o.GetLabels(), labels))
+	o.SetLabels(MergeMapOverrideWithDst(o.GetLabels(), labels))
 }
 
-// MergeMap merges two could be nil maps
-func MergeMap(src, dst map[string]string) map[string]string {
-	if len(src) == 0 {
-		return dst
+// MergeMapOverrideWithDst merges two could be nil maps. If any conflicts, override src with dst.
+func MergeMapOverrideWithDst(src, dst map[string]string) map[string]string {
+	if src == nil && dst == nil {
+		return nil
 	}
-	// make sure dst is initialized
-	if dst == nil {
-		dst = map[string]string{}
+	r := make(map[string]string)
+	for k, v := range dst {
+		r[k] = v
 	}
 	for k, v := range src {
-		if _, exist := dst[k]; !exist {
-			dst[k] = v
+		if _, exist := r[k]; !exist {
+			r[k] = v
 		}
 	}
-	return dst
+	return r
 }
