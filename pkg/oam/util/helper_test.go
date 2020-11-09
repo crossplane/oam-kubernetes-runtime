@@ -1161,10 +1161,14 @@ func TestPassThroughObjMeta(t *testing.T) {
 }
 
 func TestAddLabels(t *testing.T) {
+	basicLabels := map[string]string{
+		"basic.label.key": "basic",
+	}
 	obj1 := new(unstructured.Unstructured)
 	wantObj1 := new(unstructured.Unstructured)
 	wantObj1.SetLabels(map[string]string{
-		"newKey": "newValue",
+		"basic.label.key": "basic",
+		"newKey":          "newValue",
 	})
 	obj2 := new(unstructured.Unstructured)
 	wantObj2 := new(unstructured.Unstructured)
@@ -1172,8 +1176,9 @@ func TestAddLabels(t *testing.T) {
 		"key": "value",
 	})
 	wantObj2.SetLabels(map[string]string{
-		"key":    "value",
-		"newKey": "newValue",
+		"basic.label.key": "basic",
+		"key":             "value",
+		"newKey2":         "newValue2",
 	})
 
 	cases := map[string]struct {
@@ -1191,7 +1196,7 @@ func TestAddLabels(t *testing.T) {
 		"add labels to workload with labels": {
 			obj2,
 			map[string]string{
-				"newKey": "newValue",
+				"newKey2": "newValue2",
 			},
 			wantObj2,
 		},
@@ -1201,9 +1206,56 @@ func TestAddLabels(t *testing.T) {
 		t.Log("Running test case: " + name)
 		obj := tc.obj
 		wantObj := tc.want
+		util.AddLabels(obj, basicLabels)
 		util.AddLabels(obj, tc.newLabels)
 		assert.Equal(t, wantObj.GetLabels(), obj.GetLabels())
 	}
+}
+
+func TestMergeMapOverrideWithDst(t *testing.T) {
+	const (
+		basicKey   = "basicKey"
+		dstKey     = "dstKey"
+		srcKey     = "srcKey"
+		basicValue = "basicValue"
+		dstValue   = "dstValue"
+		srcValue   = "srcValue"
+	)
+	basicDst := map[string]string{basicKey: basicValue}
+
+	cases := map[string]struct {
+		src  map[string]string
+		dst  map[string]string
+		want map[string]string
+	}{
+		"src is nil, dst is not nil": {
+			src:  nil,
+			dst:  map[string]string{dstKey: dstValue},
+			want: map[string]string{basicKey: basicValue, dstKey: dstValue},
+		},
+		"src is not nil, dst is nil": {
+			src:  map[string]string{srcKey: srcValue},
+			dst:  nil,
+			want: map[string]string{basicKey: basicValue, srcKey: srcValue},
+		},
+		"both nil": {
+			src:  nil,
+			dst:  nil,
+			want: map[string]string{basicKey: basicValue},
+		},
+		"both not nil": {
+			src:  map[string]string{srcKey: srcValue},
+			dst:  map[string]string{dstKey: dstValue},
+			want: map[string]string{basicKey: basicValue, srcKey: srcValue, dstKey: dstValue},
+		},
+	}
+	for name, tc := range cases {
+		t.Log("Running test case: " + name)
+		result := util.MergeMapOverrideWithDst(tc.src, basicDst)
+		result = util.MergeMapOverrideWithDst(result, tc.dst)
+		assert.Equal(t, result, tc.want)
+	}
+
 }
 
 func TestGetDummy(t *testing.T) {

@@ -123,7 +123,7 @@ var _ = Describe("Component Admission controller Test", func() {
 			// set up the result
 			mutatedWorkload := baseWorkload.DeepCopy()
 			mutatedWorkload.SetNamespace(component.GetNamespace())
-			mutatedWorkload.SetLabels(util.MergeMap(label, map[string]string{oam.WorkloadTypeLabel: workloadTypeName}))
+			mutatedWorkload.SetLabels(util.MergeMapOverrideWithDst(label, map[string]string{oam.WorkloadTypeLabel: workloadTypeName}))
 			tests := map[string]struct {
 				client   client.Client
 				workload interface{}

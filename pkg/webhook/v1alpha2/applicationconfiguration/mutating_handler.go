@@ -141,7 +141,7 @@ func (h *MutatingHandler) mutateTrait(content map[string]interface{}, compName s
 	trait.SetKind(customResourceDefinition.Spec.Names.Kind)
 	mutatelog.Info("Set the trait GVK", "trait api version", trait.GetAPIVersion(), "trait Kind", trait.GetKind())
 	// add traitType label
-	trait.SetLabels(util.MergeMap(trait.GetLabels(), map[string]string{oam.TraitTypeLabel: traitType}))
+	trait.SetLabels(util.MergeMapOverrideWithDst(trait.GetLabels(), map[string]string{oam.TraitTypeLabel: traitType}))
 	// copy back the object
 	rawBye, err := json.Marshal(trait.Object)
 	if err != nil {
