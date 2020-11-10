@@ -368,15 +368,19 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 								FieldPath: "status.app-hash",
 							}}}}}}}}},
 		}
-		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
-		Expect(k8sClient.Create(ctx, &appConfig)).Should(BeNil())
-
-		By("Reconcile")
 		appconfigKey := client.ObjectKey{
 			Name:      appConfigName,
 			Namespace: namespace,
 		}
 		req := reconcile.Request{NamespacedName: appconfigKey}
+		logf.Log.Info("Creating application config", "Name", appConfig.Name, "Namespace", appConfig.Namespace)
+		By("Create appConfig & check successfully")
+		Expect(k8sClient.Create(ctx, &appConfig)).Should(Succeed())
+		Eventually(func() error {
+			return k8sClient.Get(ctx, appconfigKey, &appConfig)
+		}, time.Second, 300*time.Millisecond).Should(BeNil())
+
+		By("Reconcile")
 		Expect(func() error { _, err := reconciler.Reconcile(req); return err }()).Should(BeNil())
 
 		By("Checking that resource which accepts data isn't created yet")
@@ -447,12 +451,27 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		Expect(err).Should(BeNil())
 		err = unstructured.SetNestedField(outFoo.Object, "hash-v1", "status", "app-hash")
 		Expect(err).Should(BeNil())
+		By("Update outFoo & check successfully")
 		Expect(k8sClient.Update(ctx, outFoo)).Should(Succeed())
+		Eventually(func() bool {
+			if err := k8sClient.Get(ctx, outFooKey, outFoo); err != nil {
+				return false
+			}
+			s, _, _ := unstructured.NestedString(outFoo.Object, "status", "key")
+			return s == "test"
+		}, time.Second, 300*time.Millisecond).Should(BeTrue())
 
-		By("Update AppConfig with new version")
 		newAppConfig.Labels["app-hash"] = "hash-v2"
-		Expect(k8sClient.Update(ctx, newAppConfig)).Should(BeNil())
-		time.Sleep(time.Second)
+		By("Update newAppConfig & check successfully")
+		Expect(k8sClient.Update(ctx, newAppConfig)).Should(Succeed())
+		Eventually(func() bool {
+			if err := k8sClient.Get(ctx, appconfigKey, newAppConfig); err != nil {
+				logf.Log.Error(err, "failed get AppConfig")
+				return false
+			}
+			return newAppConfig.Labels["app-hash"] == "hash-v2"
+		}, time.Second, 300*time.Millisecond).Should(BeTrue())
+
 		By("Reconcile")
 		Expect(func() error { _, err := reconciler.Reconcile(req); return err }()).Should(BeNil())
 
@@ -487,7 +506,15 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 		Expect(k8sClient.Get(ctx, outFooKey, outFoo)).Should(BeNil()) // Get the latest before update
 		Expect(unstructured.SetNestedField(outFoo.Object, "test-new", "status", "key")).Should(BeNil())
 		Expect(unstructured.SetNestedField(outFoo.Object, "hash-v2", "status", "app-hash")).Should(BeNil())
+		By("Update outFoo & check successfully")
 		Expect(k8sClient.Update(ctx, outFoo)).Should(Succeed())
+		Eventually(func() bool {
+			if err := k8sClient.Get(ctx, outFooKey, outFoo); err != nil {
+				return false
+			}
+			s, _, _ := unstructured.NestedString(outFoo.Object, "status", "key")
+			return s == "test-new"
+		}, time.Second, 300*time.Millisecond).Should(BeTrue())
 
 		By("Reconcile")
 		Expect(func() error { _, err := reconciler.Reconcile(req); return err }()).Should(BeNil())
