@@ -32,7 +32,7 @@ LEGACY_HELM_CHART = oam-kubernetes-runtime-legacy
 HELM_CHARTS = $(HELM_CHART) $(LEGACY_HELM_CHART)
 LEGACY_HELM_CHART_DIR=$(ROOT_DIR)/legacy/charts
 HELM_CHART_LINT_ARGS_oam-kubernetes-runtime = --set serviceAccount.name=''
-HELM_CHART_LINT_ARGS_oam-kubernetes-runtime-legacy = --set serviceAccount.name='' --set image.tag='master'
+HELM_CHART_LINT_ARGS_oam-kubernetes-runtime-legacy = --set serviceAccount.name=''
 
 -include build/makelib/helm.mk
 
