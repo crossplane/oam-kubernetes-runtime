@@ -193,7 +193,11 @@ spec:
               removed: bar
               valueChanged: bar`
 		Expect(yaml.Unmarshal([]byte(appConfigYAML), &appConfig)).Should(BeNil())
+		By("Creat appConfig & check successfully")
 		Expect(k8sClient.Create(ctx, &appConfig)).Should(Succeed())
+		Eventually(func() error {
+			return k8sClient.Get(ctx, appConfigKey, &appConfig)
+		}, time.Second, 300*time.Millisecond).Should(BeNil())
 
 		By("Reconcile")
 		Expect(func() error { _, err := reconciler.Reconcile(req); return err }()).Should(BeNil())
@@ -226,19 +230,21 @@ spec:
               unchanged: bar
               valueChanged: foo
               added: bar`
-
-			Expect(k8sClient.Get(ctx, appConfigKey, &appConfig)).Should(Succeed())
 			appConfigUpdated := v1alpha2.ApplicationConfiguration{}
 			Expect(yaml.Unmarshal([]byte(appConfigYAMLUpdated), &appConfigUpdated)).Should(BeNil())
-			appConfigUpdated.SetResourceVersion(appConfig.GetResourceVersion())
 			appConfigUpdated.SetNamespace(namespace)
-			Expect(k8sClient.Update(ctx, &appConfigUpdated)).Should(Succeed())
+
+			By("Apply appConfig & check successfully")
+			Expect(k8sClient.Apply(ctx, &appConfigUpdated)).Should(Succeed())
+			Eventually(func() bool {
+				if err := k8sClient.Get(ctx, appConfigKey, &appConfig); err != nil {
+					return false
+				}
+				return appConfig.GetGeneration() == 2
+			}, time.Second, 300*time.Millisecond).Should(BeTrue())
 
 			By("Reconcile")
 			Expect(func() error { _, err := reconciler.Reconcile(req); return err }()).Should(BeNil())
-
-			By("Get updated AppConfig")
-			Expect(k8sClient.Get(ctx, appConfigKey, &appConfig)).Should(Succeed())
 
 			By("Get updated trait object")
 			var traitObj unstructured.Unstructured
