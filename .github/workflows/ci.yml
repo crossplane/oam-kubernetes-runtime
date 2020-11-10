@@ -75,6 +75,11 @@ jobs:
       - name: Vendor Dependencies
         run: make vendor vendor.check
 
+
+      - name: Build Legacy Helm Chart
+        run: make prepare-legacy-chart
+
+
       - name: Check Diff
         run: make check-diff
 
@@ -156,12 +161,17 @@ jobs:
       - name: Vendor Dependencies
         run: make vendor vendor.check
 
+      - name: Build Legacy Helm Chart
+        run: make prepare-legacy-chart
+
+
       - name: Build Helm Chart
         run: make -j2 build
         env:
           # We're using docker buildx, which doesn't actually load the images it
           # builds by default. Specifying --load does so.
           BUILD_ARGS: "--load"
+
 
       - name: Install ginkgo
         run:  |
@@ -213,6 +223,11 @@ jobs:
 
       - name: Vendor Dependencies
         run: make vendor vendor.check
+
+
+      - name: Build Legacy Helm Chart
+        run: make prepare-legacy-chart
+
 
       - name: Build Artifacts
         run: make -j2 build.all

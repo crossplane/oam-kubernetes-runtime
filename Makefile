@@ -27,8 +27,13 @@ S3_BUCKET ?= crossplane.releases/oam
 HELM_BASE_URL = https://charts.crossplane.io
 HELM_S3_BUCKET = crossplane.charts
 HELM_CHARTS_DIR=$(ROOT_DIR)/charts
-HELM_CHARTS = oam-kubernetes-runtime
+HELM_CHART = oam-kubernetes-runtime
+LEGACY_HELM_CHART = oam-kubernetes-runtime-legacy
+HELM_CHARTS = $(HELM_CHART) $(LEGACY_HELM_CHART)
+LEGACY_HELM_CHART_DIR=$(ROOT_DIR)/legacy/charts
 HELM_CHART_LINT_ARGS_oam-kubernetes-runtime = --set serviceAccount.name=''
+HELM_CHART_LINT_ARGS_oam-kubernetes-runtime-legacy = --set serviceAccount.name='' --set image.tag='master'
+
 -include build/makelib/helm.mk
 
 # ====================================================================================
@@ -158,3 +163,7 @@ e2e-cleanup:
 	kubectl delete namespace oam-system --wait
 
 e2e: e2e-setup e2e-test go-integration
+
+prepare-legacy-chart:
+	rsync -r $(LEGACY_HELM_CHART_DIR)/$(LEGACY_HELM_CHART) $(HELM_CHARTS_DIR)
+	rsync -r $(HELM_CHARTS_DIR)/$(HELM_CHART)/* $(HELM_CHARTS_DIR)/$(LEGACY_HELM_CHART) --exclude=Chart.yaml --exclude=crds
