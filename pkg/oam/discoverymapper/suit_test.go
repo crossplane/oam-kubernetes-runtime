@@ -139,7 +139,7 @@ var _ = Describe("Mapper discovery resources", func() {
 		Eventually(func() error {
 			kinds, err = dism.KindsFor(schema.GroupVersionResource{Group: "example.com", Version: "", Resource: "foos"})
 			return err
-		}, time.Second*2, time.Millisecond*300).Should(BeNil())
+		}, time.Second*10, time.Millisecond*300).Should(BeNil())
 		Expect(kinds).Should(Equal([]schema.GroupVersionKind{
 			{Group: "example.com", Version: "v1", Kind: "Foo"},
 			{Group: "example.com", Version: "v1beta1", Kind: "Foo"},
