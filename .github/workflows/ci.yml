@@ -75,6 +75,11 @@ jobs:
       - name: Vendor Dependencies
         run: make vendor vendor.check
 
+
+      - name: Build Legacy Helm Chart
+        run: make prepare-legacy-chart
+
+
       - name: Check Diff
         run: make check-diff
 
@@ -218,6 +223,11 @@ jobs:
 
       - name: Vendor Dependencies
         run: make vendor vendor.check
+
+
+      - name: Build Legacy Helm Chart
+        run: make prepare-legacy-chart
+
 
       - name: Build Artifacts
         run: make -j2 build.all

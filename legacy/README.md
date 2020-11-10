@@ -12,6 +12,6 @@ legacy k8s versions.
 
 ```
 $ kubectl create namespace oam-system
-$ helm repo add oam-legacy https://crossplane.github.io/oam-kubernetes-runtime/
-$ helm install oam --namespace oam-system oam-legacy/oam-kubernetes-runtime --set image.tag=$IMAGE-TAG
+$ helm repo add crossplane-master https://charts.crossplane.io/master/
+$ helm install oam --namespace oam-system crossplane-master/oam-kubernetes-runtime-legacy --set image.tag=$IMAGE-TAG --devel
 ```
