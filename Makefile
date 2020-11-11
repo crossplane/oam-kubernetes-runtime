@@ -69,6 +69,9 @@ IMAGE_DIR=$(ROOT_DIR)/images
 IMAGES = oam-kubernetes-runtime
 -include build/makelib/image.mk
 
+all: prepare-legacy-chart
+	@make -f build/makelib/common.mk $@
+
 # ====================================================================================
 # Targets
 
