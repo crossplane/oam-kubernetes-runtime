@@ -23,9 +23,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	apps "k8s.io/api/apps/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -34,10 +36,10 @@ import (
 	"github.com/pkg/errors"
 
 	corev1alpha2 "github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 )
 
 const (
-	// workloadName = "myWorkload"
 	namespace = "ns"
 )
 
@@ -478,6 +480,146 @@ func TestCheckUnknownWorkload(t *testing.T) {
 				assert.Nil(t, result, tc.caseName)
 			} else {
 				assert.Equal(t, tc.expect, result, tc.caseName)
+			}
+		}(t)
+	}
+}
+
+func TestCheckVersionEnabledComponent(t *testing.T) {
+	deployRef := runtimev1alpha1.TypedReference{}
+	deployRef.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind(kindDeployment))
+	deployRef.Name = "main-workload"
+	deployObj := apps.Deployment{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "main-workload",
+		},
+		Spec: apps.DeploymentSpec{
+			Replicas: &varInt1,
+		},
+		Status: apps.DeploymentStatus{
+			ReadyReplicas: 1, // healthy
+		}}
+
+	peerDeployObj := apps.Deployment{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "peer-workload",
+		},
+		Spec: apps.DeploymentSpec{
+			Replicas: &varInt1,
+		},
+		Status: apps.DeploymentStatus{
+			ReadyReplicas: 1, // healthy
+		}}
+
+	mockClient := test.NewMockClient()
+	tests := []struct {
+		caseName   string
+		mockGetFn  test.MockGetFn
+		mockListFn test.MockListFn
+		expect     *WorkloadHealthCondition
+	}{
+		{
+			caseName: "peer workload is healthy",
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.Deployment); ok {
+					if key.Name == "main-workload" {
+						deployObj.DeepCopyInto(o)
+					} else {
+						peerDeployObj.DeepCopyInto(o)
+					}
+				}
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := unstructured.Unstructured{}
+					u.SetLabels(map[string]string{
+						oam.LabelAppComponent: "test-comp",
+						oam.LabelAppName:      "test-app",
+					})
+					*o = u
+				}
+				return nil
+			},
+			mockListFn: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+				l, _ := list.(*unstructured.UnstructuredList)
+				u := unstructured.Unstructured{}
+				u.SetAPIVersion("apps/v1")
+				u.SetKind("Deployment")
+				u.SetName("peer-workload")
+				l.Items = []unstructured.Unstructured{u}
+				return nil
+			},
+			expect: &WorkloadHealthCondition{
+				HealthStatus: StatusHealthy,
+			},
+		},
+		{
+			caseName: "peer workload is unhealthy",
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.Deployment); ok {
+					if key.Name == "main-workload" {
+						deployObj.DeepCopyInto(o)
+					} else {
+						peerDeployObj.DeepCopyInto(o)
+						o.Status.ReadyReplicas = int32(0) // unhealthy
+					}
+				}
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := unstructured.Unstructured{}
+					u.SetLabels(map[string]string{
+						oam.LabelAppComponent: "test-comp",
+						oam.LabelAppName:      "test-app",
+					})
+					*o = u
+				}
+				return nil
+			},
+			mockListFn: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+				l, _ := list.(*unstructured.UnstructuredList)
+				u := unstructured.Unstructured{}
+				u.SetAPIVersion("apps/v1")
+				u.SetKind("Deployment")
+				u.SetName("peer-workload")
+				l.Items = []unstructured.Unstructured{u}
+				return nil
+			},
+			expect: &WorkloadHealthCondition{
+				HealthStatus: StatusUnhealthy,
+			},
+		},
+		{
+			caseName: "error occurs when get peer workload",
+			mockGetFn: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
+				if o, ok := obj.(*apps.Deployment); ok {
+					deployObj.DeepCopyInto(o)
+				}
+				if o, ok := obj.(*unstructured.Unstructured); ok {
+					u := unstructured.Unstructured{}
+					u.SetLabels(map[string]string{
+						oam.LabelAppComponent: "test-comp",
+						oam.LabelAppName:      "test-app",
+					})
+					*o = u
+				}
+				return nil
+			},
+			mockListFn: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+				return errMockErr
+			},
+			expect: &WorkloadHealthCondition{
+				HealthStatus: StatusUnhealthy,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		func(t *testing.T) {
+			mockClient.MockGet = tc.mockGetFn
+			mockClient.MockList = tc.mockListFn
+			checker := WorkloadHealthCheckFn(CheckDeploymentHealth)
+			result := checker.Check(ctx, mockClient, deployRef, namespace)
+			if tc.expect == nil {
+				assert.Nil(t, result, tc.caseName)
+			} else {
+				assert.Equal(t, tc.expect.HealthStatus, result.HealthStatus, tc.caseName)
 			}
 		}(t)
 	}

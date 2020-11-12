@@ -46,7 +46,6 @@ var _ = Describe("HealthScope Controller Reconcile Test", func() {
 	}
 	MockHealthyChecker := WorkloadHealthCheckFn(
 		func(context.Context, client.Client, v1alpha1.TypedReference, string) *WorkloadHealthCondition {
-
 			return &WorkloadHealthCondition{HealthStatus: StatusHealthy}
 		})
 	MockUnhealthyChecker := WorkloadHealthCheckFn(
@@ -93,8 +92,9 @@ var _ = Describe("HealthScope Controller Reconcile Test", func() {
 		reconciler.checkers = append(reconciler.checkers, MockHealthyChecker)
 		reconciler.client = &test.MockClient{
 			MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
-				o, _ := obj.(*v1alpha2.HealthScope)
-				*o = hs
+				if o, ok := obj.(*v1alpha2.HealthScope); ok {
+					*o = hs
+				}
 				return nil
 			},
 			MockStatusUpdate: func(_ context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
@@ -109,8 +109,9 @@ var _ = Describe("HealthScope Controller Reconcile Test", func() {
 		reconciler.checkers = append(reconciler.checkers, MockHealthyChecker)
 		reconciler.client = &test.MockClient{
 			MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
-				o, _ := obj.(*v1alpha2.HealthScope)
-				*o = hs
+				if o, ok := obj.(*v1alpha2.HealthScope); ok {
+					*o = hs
+				}
 				return nil
 			},
 			MockStatusUpdate: func(_ context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
@@ -125,8 +126,9 @@ var _ = Describe("HealthScope Controller Reconcile Test", func() {
 		reconciler.checkers = append(reconciler.checkers, MockUnhealthyChecker)
 		reconciler.client = &test.MockClient{
 			MockGet: func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
-				o, _ := obj.(*v1alpha2.HealthScope)
-				*o = hs
+				if o, ok := obj.(*v1alpha2.HealthScope); ok {
+					*o = hs
+				}
 				return nil
 			},
 			MockStatusUpdate: func(_ context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
@@ -153,7 +155,9 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 
 	var cwRef, deployRef, svcRef v1alpha1.TypedReference
 	cwRef.SetGroupVersionKind(corev1alpha2.SchemeGroupVersion.WithKind(kindContainerizedWorkload))
+	cwRef.Name = "cw"
 	deployRef.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindDeployment))
+	deployRef.Name = "deploy"
 	svcRef.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindService))
 
 	cw := corev1alpha2.ContainerizedWorkload{}
@@ -168,6 +172,7 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 			ReadyReplicas: 1, // healthy
 		},
 	}
+	hDeploy.SetName("deploy")
 	hDeploy.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind(kindDeployment))
 
 	uhGeneralRef := v1alpha1.TypedReference{
@@ -253,6 +258,9 @@ var _ = Describe("Test GetScopeHealthStatus", func() {
 						*o = hDeploy
 					case *unstructured.Unstructured:
 						// return err when get svc of cw, then check fails
+						if key.Name == "cw" || key.Name == "deploy" {
+							return nil
+						}
 						return errMockErr
 					}
 					return nil

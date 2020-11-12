@@ -39,10 +39,11 @@ import (
 )
 
 const (
-	infoFmtUnknownWorkload = "APIVersion %v Kind %v workload is unknown for HealthScope "
-	infoFmtReady           = "Ready: %d/%d "
-	infoFmtNoChildRes      = "cannot get child resource references of workload %v"
-	errHealthCheck         = "error occurs in health check "
+	infoFmtUnknownWorkload    = "APIVersion %v Kind %v workload is unknown for HealthScope "
+	infoFmtReady              = "Ready: %d/%d "
+	infoFmtNoChildRes         = "cannot get child resource references of workload %v"
+	errHealthCheck            = "error occurs in health check "
+	errGetVersioningWorkloads = "error occurs when get versioning peer workloads refs"
 
 	defaultTimeout = 10 * time.Second
 )
@@ -85,7 +86,59 @@ type WorkloadHealthCheckFn func(context.Context, client.Client, runtimev1alpha1.
 
 // Check the health status of specified resource
 func (fn WorkloadHealthCheckFn) Check(ctx context.Context, c client.Client, tr runtimev1alpha1.TypedReference, ns string) *WorkloadHealthCondition {
-	return fn(ctx, c, tr, ns)
+	r := fn(ctx, c, tr, ns)
+	if r == nil {
+		return r
+	}
+	// check all workloads of a version-enabled component
+	peerRefs, err := getVersioningPeerWorkloadRefs(ctx, c, tr, ns)
+	if err != nil {
+		r.HealthStatus = StatusUnhealthy
+		r.Diagnosis = fmt.Sprintf("%s %s:%s",
+			r.Diagnosis,
+			errGetVersioningWorkloads,
+			err.Error())
+		return r
+	}
+
+	if len(peerRefs) > 0 {
+		peerHCs := []*WorkloadHealthCondition{}
+		for _, peerRef := range peerRefs {
+			peerHCs = append(peerHCs, fn(ctx, c, peerRef, ns))
+		}
+
+		// re-format diagnosis/workloadStatus to show multiple workloads'
+		// sample diagnosis format: "app-v1:Ready:3/3 app-v2:Ready:1/3 app-v3:Ready:3/3"
+		if r.HealthStatus == StatusUnknown {
+			r.WorkloadStatus = fmt.Sprintf("%s:%s", r.TargetWorkload.Name, r.WorkloadStatus)
+			for _, peerHC := range peerHCs {
+				if peerHC == nil {
+					continue
+				}
+				r.WorkloadStatus = fmt.Sprintf("%s %s:%s",
+					r.WorkloadStatus,
+					peerHC.TargetWorkload.Name,
+					peerHC.WorkloadStatus)
+			}
+		} else {
+			r.Diagnosis = fmt.Sprintf("%s:%s", r.TargetWorkload.Name, r.Diagnosis)
+			for _, peerHC := range peerHCs {
+				if peerHC == nil {
+					continue
+				}
+				if peerHC.HealthStatus == StatusUnhealthy {
+					// if ANY peer workload is unhealthy
+					// then the overall condition is unhealthy
+					r.HealthStatus = StatusUnhealthy
+				}
+				r.Diagnosis = fmt.Sprintf("%s %s:%s",
+					r.Diagnosis,
+					peerHC.TargetWorkload.Name,
+					peerHC.Diagnosis)
+			}
+		}
+	}
+	return r
 }
 
 // CheckContainerziedWorkloadHealth check health condition of ContainerizedWorkload
@@ -289,4 +342,55 @@ func getComponentNameFromLabel(o metav1.Object) string {
 		compName = ""
 	}
 	return compName
+}
+
+func getAppConfigNameFromLabel(o metav1.Object) string {
+	if o == nil {
+		return ""
+	}
+	appName, exist := o.GetLabels()[oam.LabelAppName]
+	if !exist {
+		appName = ""
+	}
+	return appName
+}
+
+func getVersioningPeerWorkloadRefs(ctx context.Context, c client.Reader, wlRef runtimev1alpha1.TypedReference, ns string) ([]runtimev1alpha1.TypedReference, error) {
+	o := &unstructured.Unstructured{}
+	o.SetGroupVersionKind(wlRef.GroupVersionKind())
+	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: wlRef.Name}, o); err != nil {
+		return nil, err
+	}
+
+	compName := getComponentNameFromLabel(o)
+	appName := getAppConfigNameFromLabel(o)
+	if compName == "" || appName == "" {
+		// if missing these lables, cannot get peer workloads
+		return nil, nil
+	}
+
+	peerRefs := []runtimev1alpha1.TypedReference{}
+	l := &unstructured.UnstructuredList{}
+	l.SetGroupVersionKind(wlRef.GroupVersionKind())
+
+	opts := []client.ListOption{
+		client.InNamespace(ns),
+		client.MatchingLabels{
+			oam.LabelAppComponent: compName,
+			oam.LabelAppName:      appName},
+	}
+	if err := c.List(ctx, l, opts...); err != nil {
+		return nil, err
+	}
+
+	for _, obj := range l.Items {
+		if obj.GetName() == o.GetName() {
+			continue
+		}
+		tmpRef := runtimev1alpha1.TypedReference{}
+		tmpRef.SetGroupVersionKind(obj.GroupVersionKind())
+		tmpRef.Name = obj.GetName()
+		peerRefs = append(peerRefs, tmpRef)
+	}
+	return peerRefs, nil
 }
