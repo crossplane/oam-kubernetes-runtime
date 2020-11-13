@@ -420,8 +420,8 @@ func (p PeerHealthConditions) MergePeerWorkloadsConditions(basic *WorkloadHealth
 	} else {
 		basic.Diagnosis = fmt.Sprintf("%s:%s", peerHCs[0].TargetWorkload.Name, peerHCs[0].Diagnosis)
 		for i, peerHC := range peerHCs[1:] {
-			if i > 1 && peerHC.Diagnosis == fmt.Sprintf(infoFmtReady, 0, 0) {
-				// skip timeworn ones requiring zero replica
+			if i > 0 && peerHC.Diagnosis == fmt.Sprintf(infoFmtReady, 0, 0) {
+				// skip timeworn ones
 				continue
 			}
 			basic.Diagnosis = fmt.Sprintf("%s %s:%s",
