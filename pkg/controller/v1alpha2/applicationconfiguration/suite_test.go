@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	controllerscheme "sigs.k8s.io/controller-runtime/pkg/scheme"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
@@ -199,3 +200,10 @@ var _ = AfterSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 	close(mgrclose)
 })
+
+func reconcileRetry(r reconcile.Reconciler, req reconcile.Request) {
+	Eventually(func() error {
+		_, err := r.Reconcile(req)
+		return err
+	}, 3*time.Second, time.Second).Should(BeNil())
+}
