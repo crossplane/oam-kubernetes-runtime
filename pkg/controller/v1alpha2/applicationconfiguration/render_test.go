@@ -898,12 +898,13 @@ func TestGetDefinitionName(t *testing.T) {
 
 func TestSetWorkloadInstanceName(t *testing.T) {
 	tests := map[string]struct {
-		traitDefs []v1alpha2.TraitDefinition
-		u         *unstructured.Unstructured
-		c         *v1alpha2.Component
-		exp       *unstructured.Unstructured
-		expErr    error
-		reason    string
+		traitDefs       []v1alpha2.TraitDefinition
+		u               *unstructured.Unstructured
+		c               *v1alpha2.Component
+		exp             *unstructured.Unstructured
+		expErr          error
+		currentWorkload *unstructured.Unstructured
+		reason          string
 	}{
 		"with a name, no change": {
 			u: &unstructured.Unstructured{Object: map[string]interface{}{
@@ -919,7 +920,29 @@ func TestSetWorkloadInstanceName(t *testing.T) {
 			}},
 			reason: "workloadName should not change if already set",
 		},
-		"revisionEnabled true, set revisionName": {
+		"revisionEnabled true, and revision differs to the existing one, use new revisionName": {
+			traitDefs: []v1alpha2.TraitDefinition{
+				{
+					Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true},
+				},
+			},
+			u: &unstructured.Unstructured{Object: map[string]interface{}{}},
+			c: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-2"}}},
+			currentWorkload: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"labels": map[string]string{
+						"app.oam.dev/revision": "rev-v1",
+					},
+				},
+			}},
+			exp: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": "rev-2",
+				},
+			}},
+			reason: "workloadName should align with new revisionName",
+		},
+		"revisionEnabled true, and revision is same with the existing one, keep the old name": {
 			traitDefs: []v1alpha2.TraitDefinition{
 				{
 					Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true},
@@ -927,6 +950,13 @@ func TestSetWorkloadInstanceName(t *testing.T) {
 			},
 			u: &unstructured.Unstructured{Object: map[string]interface{}{}},
 			c: &v1alpha2.Component{ObjectMeta: metav1.ObjectMeta{Name: "comp"}, Status: v1alpha2.ComponentStatus{LatestRevision: &v1alpha2.Revision{Name: "rev-1"}}},
+			currentWorkload: &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"labels": map[string]string{
+						"app.oam.dev/revision": "rev-v1",
+					},
+				},
+			}},
 			exp: &unstructured.Unstructured{Object: map[string]interface{}{
 				"metadata": map[string]interface{}{
 					"name": "rev-1",
@@ -972,9 +1002,9 @@ func TestSetWorkloadInstanceName(t *testing.T) {
 	for name, ti := range tests {
 		t.Run(name, func(t *testing.T) {
 			if ti.expErr != nil {
-				assert.Equal(t, ti.expErr.Error(), SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c).Error())
+				assert.Equal(t, ti.expErr.Error(), SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c, ti.currentWorkload).Error())
 			} else {
-				err := SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c)
+				err := SetWorkloadInstanceName(ti.traitDefs, ti.u, ti.c, ti.currentWorkload)
 				assert.NoError(t, err)
 				assert.Equal(t, ti.exp, ti.u, ti.reason)
 			}

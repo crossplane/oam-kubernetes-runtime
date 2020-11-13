@@ -18,6 +18,7 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -490,3 +491,123 @@ func readYaml(path string, object runtime.Object) error {
 	}
 	return yaml.Unmarshal(data, object)
 }
+
+var _ = Describe("Component revision", func() {
+	ctx := context.Background()
+	apiVersion := "core.oam.dev/v1alpha2"
+	namespace := "default"
+	componentName := "revision-component"
+	appConfigName := "revision-app"
+	workload := v1.Deployment{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+		Spec: v1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "nginx",
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "nginx",
+							Image: "nginx:1.9.4"},
+					},
+				},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "nginx"}},
+			},
+		},
+	}
+	component := v1alpha2.Component{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: apiVersion,
+			Kind:       "Component",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: componentName, Namespace: namespace},
+		Spec: v1alpha2.ComponentSpec{
+			Workload: runtime.RawExtension{Object: workload.DeepCopyObject()},
+		},
+	}
+
+	TraitDefinition := v1alpha2.TraitDefinition{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: apiVersion,
+			Kind:       "TraitDefinition",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "manualscalertraits2.core.oam.dev",
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.TraitDefinitionSpec{
+			RevisionEnabled: true,
+			Reference: v1alpha2.DefinitionReference{
+				Name: "manualscalertraits.core.oam.dev",
+			},
+			WorkloadRefPath: "spec.workloadRef",
+		},
+	}
+
+	appConfig := v1alpha2.ApplicationConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: apiVersion,
+			Kind:       "ApplicationConfiguration",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: appConfigName, Namespace: namespace},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{{
+				ComponentName: componentName},
+			},
+		},
+	}
+
+	workloadObjKey := client.ObjectKey{Name: componentName, Namespace: namespace}
+	appConfigObjKey := client.ObjectKey{Name: appConfigName, Namespace: namespace}
+
+	trait := v1alpha2.ManualScalerTrait{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: apiVersion,
+			Kind:       "ManualScalerTrait",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: appConfigName, Namespace: namespace},
+		Spec: v1alpha2.ManualScalerTraitSpec{
+			ReplicaCount: 2,
+		},
+	}
+
+	Context("Attach a revision-enable trait the first time, workload should not be recreated", func() {
+		It("should create Component and ApplicationConfiguration", func() {
+			By("submit ApplicationConfiguration")
+			Expect(k8sClient.Create(ctx, &component)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &appConfig)).Should(Succeed())
+
+			By("check workload")
+			var deploy v1.Deployment
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, workloadObjKey, &deploy)
+				},
+				time.Second*15, time.Millisecond*500).Should(BeNil())
+
+			By("apply new ApplicationConfiguration with a revision enabled trait")
+			Expect(k8sClient.Create(ctx, &TraitDefinition)).Should(Succeed())
+			Expect(k8sClient.Get(ctx, appConfigObjKey, &appConfig)).Should(Succeed())
+			appConfig.Spec.Components[0].Traits = []v1alpha2.ComponentTrait{{Trait: runtime.RawExtension{Object: trait.DeepCopyObject()}}}
+			Expect(k8sClient.Update(ctx, &appConfig)).Should(Succeed())
+
+			By("check current workload exists")
+			time.Sleep(3 * time.Second)
+			var currentDeploy v1.Deployment
+			Expect(k8sClient.Get(ctx, workloadObjKey, &currentDeploy)).Should(BeNil())
+
+			By("check version 1 workload doesn't exist")
+			var v1Deploy v1.Deployment
+			workloadObjKey := client.ObjectKey{Name: componentName + "-v1", Namespace: namespace}
+			Expect(k8sClient.Get(ctx, workloadObjKey, &v1Deploy)).Should(SatisfyAny(&util.NotFoundMatcher{}))
+		})
+	})
+
+	AfterEach(func() {
+		k8sClient.Delete(ctx, &appConfig)
+		k8sClient.Delete(ctx, &component)
+	})
+})
