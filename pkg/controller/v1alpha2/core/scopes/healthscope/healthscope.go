@@ -21,6 +21,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -40,7 +43,7 @@ import (
 
 const (
 	infoFmtUnknownWorkload    = "APIVersion %v Kind %v workload is unknown for HealthScope "
-	infoFmtReady              = "Ready: %d/%d "
+	infoFmtReady              = "Ready:%d/%d "
 	infoFmtNoChildRes         = "cannot get child resource references of workload %v"
 	errHealthCheck            = "error occurs in health check "
 	errGetVersioningWorkloads = "error occurs when get versioning peer workloads refs"
@@ -102,41 +105,13 @@ func (fn WorkloadHealthCheckFn) Check(ctx context.Context, c client.Client, tr r
 	}
 
 	if len(peerRefs) > 0 {
-		peerHCs := []*WorkloadHealthCondition{}
+		var peerHCs PeerHealthConditions
 		for _, peerRef := range peerRefs {
-			peerHCs = append(peerHCs, fn(ctx, c, peerRef, ns))
-		}
-
-		// re-format diagnosis/workloadStatus to show multiple workloads'
-		// sample diagnosis format: "app-v1:Ready:3/3 app-v2:Ready:1/3 app-v3:Ready:3/3"
-		if r.HealthStatus == StatusUnknown {
-			r.WorkloadStatus = fmt.Sprintf("%s:%s", r.TargetWorkload.Name, r.WorkloadStatus)
-			for _, peerHC := range peerHCs {
-				if peerHC == nil {
-					continue
-				}
-				r.WorkloadStatus = fmt.Sprintf("%s %s:%s",
-					r.WorkloadStatus,
-					peerHC.TargetWorkload.Name,
-					peerHC.WorkloadStatus)
-			}
-		} else {
-			r.Diagnosis = fmt.Sprintf("%s:%s", r.TargetWorkload.Name, r.Diagnosis)
-			for _, peerHC := range peerHCs {
-				if peerHC == nil {
-					continue
-				}
-				if peerHC.HealthStatus == StatusUnhealthy {
-					// if ANY peer workload is unhealthy
-					// then the overall condition is unhealthy
-					r.HealthStatus = StatusUnhealthy
-				}
-				r.Diagnosis = fmt.Sprintf("%s %s:%s",
-					r.Diagnosis,
-					peerHC.TargetWorkload.Name,
-					peerHC.Diagnosis)
+			if peerHC := fn(ctx, c, peerRef, ns); peerHC != nil {
+				peerHCs = append(peerHCs, *peerHC.DeepCopy())
 			}
 		}
+		peerHCs.MergePeerWorkloadsConditions(r)
 	}
 	return r
 }
@@ -393,4 +368,66 @@ func getVersioningPeerWorkloadRefs(ctx context.Context, c client.Reader, wlRef r
 		peerRefs = append(peerRefs, tmpRef)
 	}
 	return peerRefs, nil
+}
+
+// PeerHealthConditions refers to a slice of health condition of worloads
+// belonging to one version-enabled component
+type PeerHealthConditions []WorkloadHealthCondition
+
+func (p PeerHealthConditions) Len() int { return len(p) }
+func (p PeerHealthConditions) Less(i, j int) bool {
+	// sort by revision number in descending order
+	return extractRevision(p[i].TargetWorkload.Name) > extractRevision(p[j].TargetWorkload.Name)
+}
+func (p PeerHealthConditions) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+
+// exract revision number from revision name in format: <comp-name>-v<revision number>
+// any non-qualified format should return 0
+func extractRevision(c string) int {
+	i, _ := strconv.ParseInt(c[strings.LastIndex(c, "v")+1:], 10, 0)
+	return int(i)
+}
+
+// MergePeerWorkloadsConditions merge health conditions of all peer workloads into basic
+func (p PeerHealthConditions) MergePeerWorkloadsConditions(basic *WorkloadHealthCondition) {
+	if basic == nil || len(p) == 0 {
+		return
+	}
+	// copy to keep idempotent
+	peerHCs := make(PeerHealthConditions, len(p))
+	copy(peerHCs, p)
+	peerHCs = append(peerHCs, *basic.DeepCopy())
+
+	// sort by revision number in descending order
+	sort.Sort(peerHCs)
+
+	for _, peerHC := range peerHCs {
+		if peerHC.HealthStatus == StatusUnhealthy {
+			// if ANY peer workload is unhealthy
+			// then the overall condition is unhealthy
+			basic.HealthStatus = StatusUnhealthy
+		}
+	}
+	// re-format diagnosis/workloadStatus to show multiple workloads'
+	if basic.HealthStatus == StatusUnknown {
+		basic.WorkloadStatus = fmt.Sprintf("%s:%s", peerHCs[0].TargetWorkload.Name, peerHCs[0].WorkloadStatus)
+		for _, peerHC := range peerHCs[1:] {
+			basic.WorkloadStatus = fmt.Sprintf("%s %s:%s",
+				basic.WorkloadStatus,
+				peerHC.TargetWorkload.Name,
+				peerHC.WorkloadStatus)
+		}
+	} else {
+		basic.Diagnosis = fmt.Sprintf("%s:%s", peerHCs[0].TargetWorkload.Name, peerHCs[0].Diagnosis)
+		for i, peerHC := range peerHCs[1:] {
+			if i > 1 && peerHC.Diagnosis == fmt.Sprintf(infoFmtReady, 0, 0) {
+				// skip timeworn ones requiring zero replica
+				continue
+			}
+			basic.Diagnosis = fmt.Sprintf("%s %s:%s",
+				basic.Diagnosis,
+				peerHC.TargetWorkload.Name,
+				peerHC.Diagnosis)
+		}
+	}
 }

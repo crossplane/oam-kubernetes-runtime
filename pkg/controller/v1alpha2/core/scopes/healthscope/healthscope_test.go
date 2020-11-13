@@ -19,8 +19,10 @@ package healthscope
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -623,4 +625,44 @@ func TestCheckVersionEnabledComponent(t *testing.T) {
 			}
 		}(t)
 	}
+}
+
+func TestPeerHealthConditionsSort(t *testing.T) {
+	tests := []struct {
+		caseName string
+		d        []string
+		w        []string
+	}{
+		{
+			caseName: "all has qualified revision name",
+			d:        []string{"comp-v1", "comp-v2", "comp-v12"},
+			w:        []string{"comp-v12", "comp-v2", "comp-v1"},
+		},
+		{
+			caseName: "part has qualified revision name",
+			d:        []string{"comp-v1", "comp", "comp-v2", "comp-v12"},
+			w:        []string{"comp-v12", "comp-v2", "comp-v1", "comp"},
+		},
+	}
+	for _, tc := range tests {
+		func(t *testing.T) {
+			data := make(PeerHealthConditions, len(tc.d))
+			want := make(PeerHealthConditions, len(tc.w))
+			for i, v := range tc.d {
+				data[i] = WorkloadHealthCondition{
+					TargetWorkload: runtimev1alpha1.TypedReference{Name: v},
+				}
+			}
+			for i, v := range tc.w {
+				want[i] = WorkloadHealthCondition{
+					TargetWorkload: runtimev1alpha1.TypedReference{Name: v},
+				}
+			}
+			sort.Sort(data)
+			if diff := cmp.Diff(data, want); diff != "" {
+				t.Errorf("didn't get expected sorted result %s", diff)
+			}
+		}(t)
+	}
+
 }

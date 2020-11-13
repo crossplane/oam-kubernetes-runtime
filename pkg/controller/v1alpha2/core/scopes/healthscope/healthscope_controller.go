@@ -38,7 +38,7 @@ import (
 
 const (
 	reconcileTimeout = 1 * time.Minute
-	longWait         = 1 * time.Minute
+	longWait         = 10 * time.Second
 )
 
 // Reconcile error strings.
