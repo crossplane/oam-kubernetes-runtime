@@ -1,38 +1,23 @@
 # OAM Kubernetes Runtime
 
-[![License](https://img.shields.io/github/license/crossplane/oam-kubernetes-runtime?style=flat-square)](https://img.shields.io/github/license/crossplane/oam-kubernetes-runtime?style=flat-square)
-[![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/mod/github.com/crossplane/oam-kubernetes-runtime)
-[![docker pulls](https://img.shields.io/docker/pulls/crossplane/oam-kubernetes-runtime?style=flat-square)](https://img.shields.io/docker/pulls/crossplane/oam-kubernetes-runtime?style=flat-square)
 [![Gitter](https://badges.gitter.im/oam-dev/community.svg)](https://gitter.im/oam-dev/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![TODOs](https://badgen.net/https/api.tickgit.com/badgen/github.com/crossplane/oam-kubernetes-runtime)](https://www.tickgit.com/browse?repo=github.com/crossplane/oam-kubernetes-runtime)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/oam_dev.svg?style=social&logo=twitter)](https://twitter.com/intent/follow?screen_name=oam_dev)
 
-The official Kubernetes plug-in for Open Application Model (OAM).
+The plug-in for implementing Open Application Model (OAM) control plane with Kubernetes. 
 
-OAM Kubernetes Runtime implements [OAM specification](https://github.com/oam-dev/spec) to expose application centric API for any Kubernetes, specifically:
-- Components - what workload to run?
-- Traits - how to operate the workload?
-- ApplicationConfiguration - apply traits to component
-- Definitions - discover CRD/k8s API resource as workload/trait
-
-This plug-in is designed as building block for creating OAM compliant platform with Kubernetes, rather than being used directly by developers or end-users.
-
-## OAM Specification support
-
-|   OAM Runtime Release    |         Supported Spec Release          |          Comments          |
-| :---------------------------- | :--------------------------------: |  :--------------------------------: |
-| [Latest release](https://github.com/crossplane/oam-kubernetes-runtime/releases) | [OAM Spec v0.2.1](https://github.com/oam-dev/spec/blob/v0.2.1/SPEC_LATEST_STABLE.md)  | |
-
-## Architecture
-
-![Architecture](assets/arch.png)
+> :rotating_light: NOTE: this project is designed as low level dependency for building end-to-end implementation of OAM (i.e. [KubeVela](https://github.com/oam-dev/kubevela)). Do not play with it unless you know what you are doing. :rotating_light:
 
 ## Prerequisites
 
 - Kubernetes v1.16+
 - Helm 3
 
-## Install OAM Kubernetes Runtime
+|   OAM Runtime Release    |         Supported Spec Release          |          Comments          |
+| :---------------------------- | :--------------------------------: |  :--------------------------------: |
+| [Latest release](https://github.com/crossplane/oam-kubernetes-runtime/releases) | [OAM Spec v0.2.1](https://github.com/oam-dev/spec/blob/v0.2.1/SPEC_LATEST_STABLE.md)  | |
+
+## Installation
 
 1. Create namespace for OAM runtime controller
 
@@ -48,13 +33,8 @@ helm repo add crossplane-master https://charts.crossplane.io/master/
 
 3. Install OAM Kubernetes Runtime
 
-You can directly install it without webhook by:
 
-```
-helm install oam --namespace oam-system crossplane-master/oam-kubernetes-runtime --devel
-```
-
-Or you can install with webhook enabled by following steps:
+Install with webhook enabled by following steps:
 
   - Step 1: Admission Webhook need you to prepare certificates and ca for production use.
     **For none-production use**, you could generate them by running the shell script provided in repo.
@@ -90,9 +70,24 @@ Or you can install with webhook enabled by following steps:
     helm install core-runtime -n oam-system ./charts/oam-kubernetes-runtime --set useWebhook=true --set certificate.caBundle=$caValue 
     ```
 
-## Get started
+For quick developing purpose only:
 
-* We have some examples in our repo, clone and get started with it.
+<details>
+
+You can install this lib without webhook by:
+
+```
+helm install oam --namespace oam-system crossplane-master/oam-kubernetes-runtime --devel
+```
+
+But be aware that in this case, you will lose critical validations and injections required by OAM control plane. Only do this when you know what you are doing.
+
+</details>
+
+
+### Verify the Installation
+
+* We have some examples in the repo for you to verify the OAM control plane is working:
 
   ```shell script
   git clone git@github.com:crossplane/oam-kubernetes-runtime.git	
@@ -174,13 +169,8 @@ kubectl delete -f examples/containerized-workload
 kubectl delete namespace oam-system --wait
 ```
 
-## Community, discussion, contribution
-You can reach the maintainers of this project at:
-* Slack channel: [crossplane#oam](https://crossplane.slack.com/#oam)
-
 ## Want to help?
 Check out [DEVELOPMENT.md](./DEVELOPMENT.md) to see how to develop with OAM Kubernetes runtime
-
 
 ## Licenses
 The OAM Kubernetes runtime is released under the [Apache 2.0 license](LICENSE).
