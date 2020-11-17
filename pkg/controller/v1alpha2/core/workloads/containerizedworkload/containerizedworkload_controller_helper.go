@@ -63,7 +63,7 @@ func (r *Reconciler) renderService(ctx context.Context,
 	}
 	// the service injector lib doesn't set the namespace and serviceType
 	service.Namespace = workload.Namespace
-	service.Spec.Type = corev1.ServiceTypeNodePort
+	service.Spec.Type = corev1.ServiceTypeClusterIP
 	// k8s server-side patch complains if the protocol is not set
 	for i := 0; i < len(service.Spec.Ports); i++ {
 		service.Spec.Ports[i].Protocol = corev1.ProtocolTCP
