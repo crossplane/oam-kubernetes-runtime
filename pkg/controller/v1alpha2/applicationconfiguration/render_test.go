@@ -848,8 +848,8 @@ func TestRenderTraitWithoutMetadataName(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := &components{tc.fields.client, mock.NewMockDiscoveryMapper(), tc.fields.params, tc.fields.workload, tc.fields.trait}
 			got, _, _ := r.Render(tc.args.ctx, tc.args.ac)
-			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].Object.GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy()) {
-				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT"+
+			if len(got) == 0 || len(got[0].Traits) == 0 || got[0].Traits[0].Object.GetName() != util.GenTraitName(componentName, ac.Spec.Components[0].Traits[0].DeepCopy(), "") {
+				t.Errorf("\n%s\nr.Render(...): -want error, +got error:\n%s\n", tc.reason, "Trait name is NOT "+
 					"automatically set.")
 			}
 		})
@@ -1068,6 +1068,75 @@ func TestRenderTraitName(t *testing.T) {
 
 	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data)
 	assert.Equal(t, traitName, "component-trait-11111111")
+}
+
+func TestRenderTraitNameWithoutReferenceName(t *testing.T) {
+	var scheme = runtime.NewScheme()
+	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
+	assert.NoError(t, core.AddToScheme(scheme))
+	namespace := "ns"
+	acName := "coolappconfig"
+	acUID := types.UID("definitely-a-uuid")
+	componentName := "component"
+
+	mts := v1alpha2.ManualScalerTrait{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+		},
+		Spec: v1alpha2.ManualScalerTraitSpec{
+			ReplicaCount: 3,
+		},
+	}
+
+	gvks, _, _ := scheme.ObjectKinds(&mts)
+	mts.APIVersion = gvks[0].GroupVersion().String()
+	mts.Kind = gvks[0].Kind
+	raw, _ := json.Marshal(mts)
+
+	ac := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      acName,
+			UID:       acUID,
+		},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.ComponentTrait{
+						{
+							Trait: runtime.RawExtension{
+								Object: &mts,
+								Raw:    raw,
+							},
+						},
+					},
+				},
+			},
+		},
+		Status: v1alpha2.ApplicationConfigurationStatus{
+			Workloads: []v1alpha2.WorkloadStatus{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.WorkloadTrait{
+						{
+							Reference: v1alpha1.TypedReference{
+								APIVersion: gvks[0].GroupVersion().String(),
+								Kind:       gvks[0].Kind,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mapResult, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ac.Spec.Components[0].Traits[0].Trait.Object)
+	assert.NoError(t, err)
+	data := unstructured.Unstructured{Object: mapResult}
+
+	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data)
+	assert.Contains(t, traitName, "component-manualscalertrait")
 }
 
 func TestMatchValue(t *testing.T) {

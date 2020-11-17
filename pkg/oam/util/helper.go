@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -354,8 +355,13 @@ func Object2Map(obj interface{}) (map[string]interface{}, error) {
 }
 
 // GenTraitName generate trait name
-func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait) string {
-	return fmt.Sprintf("%s-%s-%s", componentName, TraitPrefixKey, ComputeHash(ct))
+func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait, kind string) string {
+	var traitMiddleName = TraitPrefixKey
+	if kind != "" {
+		traitMiddleName = strings.ToLower(kind)
+	}
+	return fmt.Sprintf("%s-%s-%s", componentName, traitMiddleName, ComputeHash(ct))
+
 }
 
 // ComputeHash returns a hash value calculated from pod template and

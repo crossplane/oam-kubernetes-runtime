@@ -805,8 +805,26 @@ func TestGenTraitName(t *testing.T) {
 			ReplicaCount: 3,
 		},
 	}
+	trait := v1alpha2.ManualScalerTrait{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "extend.oam.dev/v1alpha2",
+			Kind:       "ManualScalerTrait",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns",
+			Name:      "sample-manualscaler-trait",
+		},
+		Spec: v1alpha2.ManualScalerTraitSpec{
+			ReplicaCount: 3,
+		},
+	}
+	traitTemplate := &v1alpha2.ComponentTrait{
+		Trait: runtime.RawExtension{
+			Object: &trait,
+		},
+	}
 
-	test := []struct {
+	tests := []struct {
 		name     string
 		template *v1alpha2.ComponentTrait
 		exp      string
@@ -825,10 +843,18 @@ func TestGenTraitName(t *testing.T) {
 			},
 			exp: "simple-trait-5ddc8b7556",
 		},
+		{
+			name:     "trait-with-kind",
+			template: traitTemplate,
+			exp:      "trait-with-kind-manualscalertrait-" + util.ComputeHash(traitTemplate),
+		},
 	}
-	for _, test := range test {
-
-		got := util.GenTraitName(test.name, test.template)
+	for _, test := range tests {
+		var kind string
+		if test.template.Trait.Object != nil {
+			kind = test.template.Trait.Object.DeepCopyObject().GetObjectKind().GroupVersionKind().Kind
+		}
+		got := util.GenTraitName(test.name, test.template, kind)
 		t.Log(fmt.Sprint("Running test: ", test.name))
 		assert.Equal(t, test.exp, got)
 	}

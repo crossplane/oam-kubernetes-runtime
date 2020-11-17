@@ -654,7 +654,7 @@ func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
 	}
 
 	if len(traitName) == 0 {
-		traitName = util.GenTraitName(componentName, ct.DeepCopy())
+		traitName = util.GenTraitName(componentName, ct.DeepCopy(), kind)
 	}
 
 	return traitName
