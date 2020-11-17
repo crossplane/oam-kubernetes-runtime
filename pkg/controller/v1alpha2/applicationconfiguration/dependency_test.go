@@ -484,10 +484,10 @@ var _ = Describe("Resource Dependency in an ApplicationConfiguration", func() {
 						"spec.key",
 					}}}},
 		}
-		Expect(func() v1alpha2.DependencyStatus {
+		Eventually(func() v1alpha2.DependencyStatus {
 			k8sClient.Get(ctx, appconfigKey, newAppConfig)
 			return newAppConfig.Status.Dependency
-		}()).Should(Equal(depStatus))
+		}, time.Second, 300*time.Millisecond).Should(Equal(depStatus))
 
 		By("Update trait resource to meet the requirement")
 		Expect(k8sClient.Get(ctx, outFooKey, outFoo)).Should(BeNil()) // Get the latest before update

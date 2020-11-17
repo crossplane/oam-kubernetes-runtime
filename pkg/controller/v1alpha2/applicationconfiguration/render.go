@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
@@ -146,6 +147,11 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	}
 	util.AddLabels(w, compInfoLabels)
 
+	compInfoAnnotations := map[string]string{
+		oam.AnnotationAppGeneration: strconv.Itoa(int(ac.Generation)),
+	}
+	util.AddAnnotations(w, compInfoAnnotations)
+
 	// pass through labels and annotation from app-config to workload
 	util.PassLabelAndAnnotation(ac, w)
 
@@ -163,6 +169,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 			return nil, err
 		}
 		util.AddLabels(t, compInfoLabels)
+		util.AddAnnotations(t, compInfoAnnotations)
 
 		// pass through labels and annotation from app-config to trait
 		util.PassLabelAndAnnotation(ac, t)

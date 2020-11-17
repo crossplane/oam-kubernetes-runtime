@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -97,21 +98,23 @@ func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
 		}).
 		Complete(NewReconciler(mgr, dm,
 			WithLogger(l.WithValues("controller", name)),
-			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
+			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
+			WithApplyOnceOnly(args.ApplyOnceOnly)))
 }
 
 // An OAMApplicationReconciler reconciles OAM ApplicationConfigurations by rendering and
 // instantiating their Components and Traits.
 type OAMApplicationReconciler struct {
-	client     client.Client
-	components ComponentRenderer
-	workloads  WorkloadApplicator
-	gc         GarbageCollector
-	scheme     *runtime.Scheme
-	log        logging.Logger
-	record     event.Recorder
-	preHooks   map[string]ControllerHooks
-	postHooks  map[string]ControllerHooks
+	client        client.Client
+	components    ComponentRenderer
+	workloads     WorkloadApplicator
+	gc            GarbageCollector
+	scheme        *runtime.Scheme
+	log           logging.Logger
+	record        event.Recorder
+	preHooks      map[string]ControllerHooks
+	postHooks     map[string]ControllerHooks
+	applyOnceOnly bool
 }
 
 // A ReconcilerOption configures a Reconciler.
@@ -165,6 +168,14 @@ func WithPrehook(name string, hook ControllerHooks) ReconcilerOption {
 func WithPosthook(name string, hook ControllerHooks) ReconcilerOption {
 	return func(r *OAMApplicationReconciler) {
 		r.postHooks[name] = hook
+	}
+}
+
+// WithApplyOnceOnly indicates whether workloads and traits should be
+// affected if no spec change is made in the ApplicationConfiguration.
+func WithApplyOnceOnly(applyOnceOnly bool) ReconcilerOption {
+	return func(r *OAMApplicationReconciler) {
+		r.applyOnceOnly = applyOnceOnly
 	}
 }
 
@@ -279,7 +290,11 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	log.Debug("Successfully rendered components", "workloads", len(workloads))
 	r.record.Event(ac, event.Normal(reasonRenderComponents, "Successfully rendered components", "workloads", strconv.Itoa(len(workloads))))
 
-	if err := r.workloads.Apply(ctx, ac.Status.Workloads, workloads, resource.MustBeControllableBy(ac.GetUID())); err != nil {
+	applyOpts := []resource.ApplyOption{resource.MustBeControllableBy(ac.GetUID())}
+	if r.applyOnceOnly {
+		applyOpts = append(applyOpts, applyOnceOnly())
+	}
+	if err := r.workloads.Apply(ctx, ac.Status.Workloads, workloads, applyOpts...); err != nil {
 		log.Debug("Cannot apply components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotApplyComponents, err))
 		ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errApplyComponents)))
@@ -543,4 +558,45 @@ func eligible(namespace string, ws []v1alpha2.WorkloadStatus, w []Workload) []un
 	}
 
 	return eligible
+}
+
+// GenerationUnchanged indicates the resource being applied has no generation changed
+// comparing to the existing one.
+type GenerationUnchanged struct{}
+
+func (e *GenerationUnchanged) Error() string {
+	return fmt.Sprint("apply-only-once enabled,",
+		"and detect generation in the annotation unchanged, will not apply.",
+		"Please ignore this error in other logic.")
+}
+
+func applyOnceOnly() resource.ApplyOption {
+	return func(ctx context.Context, current, desired runtime.Object) error {
+		// ApplyOption only works for update/patch operation and will be ignored
+		// if the object doesn't exist before.
+		c, _ := current.(metav1.Object)
+		d, _ := desired.(metav1.Object)
+		if c == nil || d == nil {
+			return errors.Errorf("invalid object being applied: %q ",
+				desired.GetObjectKind().GroupVersionKind())
+		}
+		cLabels, dLabels := c.GetLabels(), d.GetLabels()
+		if dLabels[oam.LabelOAMResourceType] == oam.ResourceTypeWorkload ||
+			dLabels[oam.LabelOAMResourceType] == oam.ResourceTypeTrait {
+			// check whether spec changes occur on the workload or trait,
+			// according to annotations and lables
+			if c.GetAnnotations()[oam.AnnotationAppGeneration] !=
+				d.GetAnnotations()[oam.AnnotationAppGeneration] {
+				return nil
+			}
+			if cLabels[oam.LabelAppComponentRevision] != dLabels[oam.LabelAppComponentRevision] ||
+				cLabels[oam.LabelAppComponent] != dLabels[oam.LabelAppComponent] ||
+				cLabels[oam.LabelAppName] != dLabels[oam.LabelAppName] {
+				return nil
+			}
+			// return an error to abort current apply
+			return &GenerationUnchanged{}
+		}
+		return nil
+	}
 }

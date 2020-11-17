@@ -151,6 +151,7 @@ spec:
           args:
             - "--metrics-addr=:8080"
             - "--enable-leader-election"
+            - "--apply-once-only={{ .Values.applyOnceOnly }}"
             {{ if .Values.useWebhook }}
             - "--use-webhook=true"
             - "--webhook-port={{ .Values.webhookService.port }}"

@@ -52,6 +52,8 @@ func main() {
 	flag.BoolVar(&logCompress, "log-compress", true, "Enable compression on the rotated logs.")
 	flag.IntVar(&controllerArgs.RevisionLimit, "revision-limit", 50,
 		"RevisionLimit is the maximum number of revisions that will be maintained. The default value is 50.")
+	flag.BoolVar(&controllerArgs.ApplyOnceOnly, "apply-once-only", false,
+		"For the purpose of some production environment that workload or trait should not be affected if no spec change")
 	flag.Parse()
 
 	// setup logging
@@ -100,6 +102,9 @@ func main() {
 		os.Exit(1)
 	}
 	oamLog.Info("starting the controller manager")
+	if controllerArgs.ApplyOnceOnly {
+		oamLog.Info("applyOnceOnly is enabled that means workload or trait only apply once if no spec change even they are changed by others")
+	}
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		oamLog.Error(err, "problem running manager")
 		os.Exit(1)

@@ -40,3 +40,8 @@ const (
 	// ResourceTypeWorkload mark this K8s Custom Resource is an OAM workload
 	ResourceTypeWorkload = "WORKLOAD"
 )
+
+const (
+	// AnnotationAppGeneration records the generation of AppConfig
+	AnnotationAppGeneration = "app.oam.dev/generation"
+)

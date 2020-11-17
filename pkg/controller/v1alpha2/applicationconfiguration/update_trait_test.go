@@ -200,7 +200,7 @@ spec:
 		}, time.Second, 300*time.Millisecond).Should(BeNil())
 
 		By("Reconcile")
-		Expect(func() error { _, err := reconciler.Reconcile(req); return err }()).Should(BeNil())
+		reconcileRetry(reconciler, req)
 	})
 
 	AfterEach(func() {
@@ -244,14 +244,30 @@ spec:
 			}, time.Second, 300*time.Millisecond).Should(BeTrue())
 
 			By("Reconcile")
-			Expect(func() error { _, err := reconciler.Reconcile(req); return err }()).Should(BeNil())
+			reconcileRetry(reconciler, req)
+			Eventually(func() string {
+				if err := k8sClient.Get(ctx, appConfigKey, &appConfig); err != nil {
+					return ""
+				}
+				if appConfig.Status.Workloads == nil {
+					reconcileRetry(reconciler, req)
+					return ""
+				}
+				return appConfig.Status.Workloads[0].Traits[0].Reference.Name
+			}, 3*time.Second, time.Second).ShouldNot(BeEmpty())
 
 			By("Get updated trait object")
+			traitName := appConfig.Status.Workloads[0].Traits[0].Reference.Name
 			var traitObj unstructured.Unstructured
 			traitObj.SetAPIVersion("example.com/v1")
 			traitObj.SetKind("Bar")
-			tName := appConfig.Status.Workloads[0].Traits[0].Reference.Name
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: tName}, &traitObj)).Should(Succeed())
+			Eventually(func() bool {
+				if err := k8sClient.Get(ctx,
+					client.ObjectKey{Namespace: namespace, Name: traitName}, &traitObj); err != nil {
+					return false
+				}
+				return traitObj.GetGeneration() == 2
+			}, 3*time.Second, time.Second).Should(BeTrue())
 
 			By("Check labels are removed")
 			_, found, _ := unstructured.NestedString(traitObj.UnstructuredContent(), "metadata", "labels", "test.label")

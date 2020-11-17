@@ -124,6 +124,14 @@ var _ = Describe("Mapper discovery resources", func() {
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), &crd)).Should(BeNil())
+		updatedCrdObj := crdv1.CustomResourceDefinition{}
+		Eventually(func() bool {
+			if err := k8sClient.Get(context.Background(),
+				client.ObjectKey{Name: "foos.example.com"}, &updatedCrdObj); err != nil {
+				return false
+			}
+			return len(updatedCrdObj.Spec.Versions) == 2
+		}, 3*time.Second, time.Second).Should(BeTrue())
 
 		Eventually(func() error {
 			mapping, err = dism.RESTMapping(schema.GroupKind{Group: "example.com", Kind: "Foo"}, "v1")

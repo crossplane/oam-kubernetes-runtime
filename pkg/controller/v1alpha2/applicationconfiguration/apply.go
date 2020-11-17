@@ -90,7 +90,11 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 		if !wl.HasDep {
 			err := a.patchingClient.Apply(ctx, wl.Workload, ao...)
 			if err != nil {
-				return errors.Wrapf(err, errFmtApplyWorkload, wl.Workload.GetName())
+				if _, ok := err.(*GenerationUnchanged); !ok {
+					// GenerationUnchanged only aborts applying current workload
+					// but not blocks the whole reconciliation through returning an error
+					return errors.Wrapf(err, errFmtApplyWorkload, wl.Workload.GetName())
+				}
 			}
 		}
 		for _, trait := range wl.Traits {
@@ -99,7 +103,11 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 			}
 			t := trait.Object
 			if err := a.updatingClient.Apply(ctx, &trait.Object, ao...); err != nil {
-				return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
+				if _, ok := err.(*GenerationUnchanged); !ok {
+					// GenerationUnchanged only aborts applying current trait
+					// but not blocks the whole reconciliation through returning an error
+					return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
+				}
 			}
 		}
 		workloadRef := runtimev1alpha1.TypedReference{
