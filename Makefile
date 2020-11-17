@@ -94,7 +94,7 @@ cobertura:
 		$(GOCOVER_COBERTURA) > $(GO_TEST_OUTPUT)/cobertura-coverage.xml
 
 # Ensure a PR is ready for review.
-reviewable: prepare-legacy-chart generate lint
+reviewable: prepare-legacy-chart generate gofmt lint
 	@go mod tidy
 
 # Ensure branch is clean.
@@ -173,3 +173,29 @@ e2e: e2e-setup e2e-test go-integration
 prepare-legacy-chart:
 	rsync -r $(LEGACY_HELM_CHART_DIR)/$(LEGACY_HELM_CHART) $(HELM_CHARTS_DIR)
 	rsync -r $(HELM_CHARTS_DIR)/$(HELM_CHART)/* $(HELM_CHARTS_DIR)/$(LEGACY_HELM_CHART) --exclude=Chart.yaml --exclude=crds
+
+# Run go fmt against code
+.PHONY: gofmt
+gofmt: toolgoimports
+	go fmt ./...
+	$(GOIMPORTS) -local github.com/crossplane/oam-kubernetes-runtime -w $(GO_SUBDIRS)
+
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+export GOBIN
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+.PHONY: toolgoimports
+toolgoimports:
+ifeq (, $(shell which goimports))
+	@{ \
+	set -e ;\
+	GO111MODULE=off go get -u golang.org/x/tools/cmd/goimports ;\
+	}
+GOIMPORTS=$(GOBIN)/goimports
+else
+GOIMPORTS=$(shell which goimports)
+endif
