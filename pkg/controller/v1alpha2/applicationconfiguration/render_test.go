@@ -51,7 +51,7 @@ func TestRenderComponents(t *testing.T) {
 	errBoom := errors.New("boom")
 
 	namespace := "ns"
-	acName := "coolappconfig"
+	acName := "coolappconfig1"
 	acUID := types.UID("definitely-a-uuid")
 	componentName := "coolcomponent"
 	workloadName := "coolworkload"
@@ -759,7 +759,7 @@ func TestResolveParams(t *testing.T) {
 
 func TestRenderTraitWithoutMetadataName(t *testing.T) {
 	namespace := "ns"
-	acName := "coolappconfig"
+	acName := "coolappconfig2"
 	acUID := types.UID("definitely-a-uuid")
 	componentName := "coolcomponent"
 	workloadName := "coolworkload"
@@ -1005,9 +1005,9 @@ func TestRenderTraitName(t *testing.T) {
 	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
 	assert.NoError(t, core.AddToScheme(scheme))
 	namespace := "ns"
-	acName := "coolappconfig"
+	acName := "coolappconfig3"
 	acUID := types.UID("definitely-a-uuid")
-	componentName := "component"
+	componentName := "component3"
 
 	mts := v1alpha2.ManualScalerTrait{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1053,7 +1053,7 @@ func TestRenderTraitName(t *testing.T) {
 							Reference: v1alpha1.TypedReference{
 								APIVersion: gvks[0].GroupVersion().String(),
 								Kind:       gvks[0].Kind,
-								Name:       "component-trait-11111111",
+								Name:       "component3-trait-11111111",
 							},
 						},
 					},
@@ -1066,8 +1066,8 @@ func TestRenderTraitName(t *testing.T) {
 	assert.NoError(t, err)
 	data := unstructured.Unstructured{Object: mapResult}
 
-	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data)
-	assert.Equal(t, traitName, "component-trait-11111111")
+	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data, &v1alpha2.TraitDefinition{})
+	assert.Equal(t, traitName, "component3-trait-11111111")
 }
 
 func TestRenderTraitNameWithoutReferenceName(t *testing.T) {
@@ -1075,9 +1075,9 @@ func TestRenderTraitNameWithoutReferenceName(t *testing.T) {
 	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
 	assert.NoError(t, core.AddToScheme(scheme))
 	namespace := "ns"
-	acName := "coolappconfig"
+	acName := "coolappconfig4"
 	acUID := types.UID("definitely-a-uuid")
-	componentName := "component"
+	componentName := "component4"
 
 	mts := v1alpha2.ManualScalerTrait{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1131,12 +1131,103 @@ func TestRenderTraitNameWithoutReferenceName(t *testing.T) {
 		},
 	}
 
+	traitDef := v1alpha2.TraitDefinition{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "core.oam.dev/v1alpha2",
+			Kind:       "ManualScalerTrait",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "manualscalertraits.core.oam.dev",
+		},
+	}
+
 	mapResult, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ac.Spec.Components[0].Traits[0].Trait.Object)
 	assert.NoError(t, err)
 	data := unstructured.Unstructured{Object: mapResult}
 
-	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data)
-	assert.Contains(t, traitName, "component-manualscalertrait")
+	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data, &traitDef)
+	assert.Contains(t, traitName, "component4-manualscalertraits")
+}
+
+func TestRenderTraitNameWithShortNameTraitDefinition(t *testing.T) {
+	var scheme = runtime.NewScheme()
+	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
+	assert.NoError(t, core.AddToScheme(scheme))
+	namespace := "ns"
+	acName := "coolappconfig5"
+	acUID := types.UID("definitely-a-uuid")
+	componentName := "component5"
+
+	mts := v1alpha2.ManualScalerTrait{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Labels: map[string]string{
+				oam.TraitTypeLabel: "scale",
+			},
+		},
+		Spec: v1alpha2.ManualScalerTraitSpec{
+			ReplicaCount: 3,
+		},
+	}
+
+	gvks, _, _ := scheme.ObjectKinds(&mts)
+	mts.APIVersion = gvks[0].GroupVersion().String()
+	mts.Kind = gvks[0].Kind
+	raw, _ := json.Marshal(mts)
+
+	ac := &v1alpha2.ApplicationConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      acName,
+			UID:       acUID,
+		},
+		Spec: v1alpha2.ApplicationConfigurationSpec{
+			Components: []v1alpha2.ApplicationConfigurationComponent{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.ComponentTrait{
+						{
+							Trait: runtime.RawExtension{
+								Object: &mts,
+								Raw:    raw,
+							},
+						},
+					},
+				},
+			},
+		},
+		Status: v1alpha2.ApplicationConfigurationStatus{
+			Workloads: []v1alpha2.WorkloadStatus{
+				{
+					ComponentName: componentName,
+					Traits: []v1alpha2.WorkloadTrait{
+						{
+							Reference: v1alpha1.TypedReference{
+								APIVersion: gvks[0].GroupVersion().String(),
+								Kind:       gvks[0].Kind,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	traitDef := v1alpha2.TraitDefinition{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "core.oam.dev/v1alpha2",
+			Kind:       "ManualScalerTrait",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "scale",
+		},
+	}
+	mapResult, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ac.Spec.Components[0].Traits[0].Trait.Object)
+	assert.NoError(t, err)
+	data := unstructured.Unstructured{Object: mapResult}
+
+	traitName := getTraitName(ac, componentName, &ac.Spec.Components[0].Traits[0], &data, &traitDef)
+	assert.Contains(t, traitName, "component5-scale")
 }
 
 func TestMatchValue(t *testing.T) {

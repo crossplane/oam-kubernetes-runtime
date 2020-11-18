@@ -355,10 +355,10 @@ func Object2Map(obj interface{}) (map[string]interface{}, error) {
 }
 
 // GenTraitName generate trait name
-func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait, kind string) string {
+func GenTraitName(componentName string, ct *v1alpha2.ComponentTrait, traitType string) string {
 	var traitMiddleName = TraitPrefixKey
-	if kind != "" {
-		traitMiddleName = strings.ToLower(kind)
+	if traitType != "" {
+		traitMiddleName = strings.ToLower(traitType)
 	}
 	return fmt.Sprintf("%s-%s-%s", componentName, traitMiddleName, ComputeHash(ct))
 

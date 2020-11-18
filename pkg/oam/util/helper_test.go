@@ -825,14 +825,16 @@ func TestGenTraitName(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		template *v1alpha2.ComponentTrait
-		exp      string
+		name           string
+		template       *v1alpha2.ComponentTrait
+		definitionName string
+		exp            string
 	}{
 		{
-			name:     "simple",
-			template: &v1alpha2.ComponentTrait{},
-			exp:      "simple-trait-67b8949f8d",
+			name:           "simple",
+			template:       &v1alpha2.ComponentTrait{},
+			definitionName: "",
+			exp:            "simple-trait-67b8949f8d",
 		},
 		{
 			name: "simple",
@@ -841,20 +843,18 @@ func TestGenTraitName(t *testing.T) {
 					Object: &mts,
 				},
 			},
-			exp: "simple-trait-5ddc8b7556",
+			definitionName: "",
+			exp:            "simple-trait-5ddc8b7556",
 		},
 		{
-			name:     "trait-with-kind",
-			template: traitTemplate,
-			exp:      "trait-with-kind-manualscalertrait-" + util.ComputeHash(traitTemplate),
+			name:           "simple-definition",
+			template:       traitTemplate,
+			definitionName: "autoscale",
+			exp:            "simple-definition-autoscale-" + util.ComputeHash(traitTemplate),
 		},
 	}
 	for _, test := range tests {
-		var kind string
-		if test.template.Trait.Object != nil {
-			kind = test.template.Trait.Object.DeepCopyObject().GetObjectKind().GroupVersionKind().Kind
-		}
-		got := util.GenTraitName(test.name, test.template, kind)
+		got := util.GenTraitName(test.name, test.template, test.definitionName)
 		t.Log(fmt.Sprint("Running test: ", test.name))
 		assert.Equal(t, test.exp, got)
 	}

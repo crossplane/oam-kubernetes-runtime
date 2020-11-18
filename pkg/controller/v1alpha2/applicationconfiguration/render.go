@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -210,11 +211,6 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
 	}
-
-	traitName := getTraitName(ac, componentName, &ct, t)
-
-	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
-
 	traitDef, err := util.FetchTraitDefinition(ctx, r.client, r.dm, t)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -222,6 +218,9 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 		}
 		return nil, nil, errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
 	}
+	traitName := getTraitName(ac, componentName, &ct, t, traitDef)
+
+	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
 
 	addDataOutputsToDAG(dag, ct.DataOutputs, t)
 
@@ -628,7 +627,7 @@ func checkConditions(conds []v1alpha2.ConditionRequirement, paved *fieldpath.Pav
 
 // GetTraitName return trait name
 func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
-	ct *v1alpha2.ComponentTrait, t *unstructured.Unstructured) string {
+	ct *v1alpha2.ComponentTrait, t *unstructured.Unstructured, traitDef *v1alpha2.TraitDefinition) string {
 	var (
 		traitName  string
 		apiVersion string
@@ -642,6 +641,11 @@ func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
 	apiVersion = t.GetAPIVersion()
 	kind = t.GetKind()
 
+	traitType := traitDef.Name
+	if strings.Contains(traitType, ".") {
+		traitType = strings.Split(traitType, ".")[0]
+	}
+
 	for _, w := range ac.Status.Workloads {
 		if w.ComponentName != componentName {
 			continue
@@ -654,7 +658,7 @@ func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
 	}
 
 	if len(traitName) == 0 {
-		traitName = util.GenTraitName(componentName, ct.DeepCopy(), kind)
+		traitName = util.GenTraitName(componentName, ct.DeepCopy(), traitType)
 	}
 
 	return traitName
