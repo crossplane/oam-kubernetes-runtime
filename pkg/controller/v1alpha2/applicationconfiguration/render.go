@@ -157,8 +157,15 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
 	compInfoLabels[oam.LabelOAMResourceType] = oam.ResourceTypeTrait
 
+	componentName := acc.ComponentName
+	appliedTraits, err := r.getAppliedTraits(ac, componentName)
+	if err != nil {
+		return nil, err
+	}
+	var preAppliedTraits, compatibleTraits []unstructured.Unstructured
 	for _, ct := range acc.Traits {
-		t, traitDef, err := r.renderTrait(ctx, ct, ac, acc.ComponentName, ref, dag)
+		compatibleTraits = append(appliedTraits, preAppliedTraits...)
+		t, traitDef, err := r.renderTrait(ctx, ct, ac, componentName, ref, dag, compatibleTraits)
 		if err != nil {
 			return nil, err
 		}
@@ -168,6 +175,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		util.PassLabelAndAnnotation(ac, t)
 		traits = append(traits, &Trait{Object: *t, Definition: *traitDef})
 		traitDefs = append(traitDefs, *traitDef)
+		preAppliedTraits = append(preAppliedTraits, *t)
 	}
 	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 		return nil, err
@@ -206,7 +214,8 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 }
 
 func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait, ac *v1alpha2.ApplicationConfiguration,
-	componentName string, ref *metav1.OwnerReference, dag *dag) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
+	componentName string, ref *metav1.OwnerReference, dag *dag, compatibleTraits []unstructured.Unstructured) (*unstructured.Unstructured, *v1alpha2.TraitDefinition, error) {
+
 	t, err := r.trait.Render(ct.Trait.Raw)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, errFmtRenderTrait, componentName)
@@ -222,6 +231,21 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 
 	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
 
+	for _, conflict := range traitDef.Spec.ConflictsWith {
+		for _, compatibleTrait := range compatibleTraits {
+			compatibleTraitDef, err := util.FetchTraitDefinition(ctx, r.client, r.dm, &compatibleTrait)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return t, util.GetDummyTraitDefinition(t), nil
+				}
+				return nil, nil, errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
+			}
+			if conflict == compatibleTraitDef.Name {
+				err := errors.New("TraitConflictError")
+				return nil, nil, errors.Wrapf(err, errFmtConflictsTrait, t.GetAPIVersion(), t.GetKind(), t.GetName(), conflict)
+			}
+		}
+	}
 	addDataOutputsToDAG(dag, ct.DataOutputs, t)
 
 	return t, traitDef, nil
@@ -662,4 +686,40 @@ func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
 	}
 
 	return traitName
+}
+
+// getAppliedTraits gets all the traits which is already applied to a specified component
+func (r *components) getAppliedTraits(ac *v1alpha2.ApplicationConfiguration, componentName string) ([]unstructured.Unstructured, error) {
+	var traits []v1alpha2.ComponentTrait
+	//var appliedTraits []unstructured.Unstructured
+	var appliedTraits = make([]unstructured.Unstructured, 0)
+	deployedComponents := make([]string, 0)
+	for _, w := range ac.Status.Workloads {
+		deployedComponents = append(deployedComponents, w.ComponentName)
+	}
+	for _, c := range ac.Spec.Components {
+		if c.ComponentName != componentName || !contains(deployedComponents, c.ComponentName) {
+			continue
+		}
+		traits = c.Traits
+		break
+	}
+	for _, t := range traits {
+		unstructuredTrait, err := r.trait.Render(t.Trait.Raw)
+		if err != nil {
+			return nil, err
+		}
+		appliedTraits = append(appliedTraits, *unstructuredTrait)
+	}
+	return appliedTraits, nil
+}
+
+// contains whether a slice contains an item
+func contains(slice []string, elem string) bool {
+	for _, s := range slice {
+		if s == elem {
+			return true
+		}
+	}
+	return false
 }

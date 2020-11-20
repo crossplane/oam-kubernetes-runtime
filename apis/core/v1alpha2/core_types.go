@@ -114,6 +114,12 @@ type TraitDefinitionSpec struct {
 	// +optional
 	AppliesToWorkloads []string `json:"appliesToWorkloads,omitempty"`
 
+	// ConflictsWith specifies the list of traits which could not apply to the
+	// same workloads with this trait. Traits that omit this field can work with
+	// any other traits.
+	// +optional
+	ConflictsWith []string `json:"conflictsWith,omitempty"`
+
 	// Extension is used for extension needs by OAM platform builders
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields

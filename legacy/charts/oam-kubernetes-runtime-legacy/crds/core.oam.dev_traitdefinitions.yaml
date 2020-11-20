@@ -43,6 +43,11 @@ spec:
               items:
                 type: string
               type: array
+            conflictsWith:
+              description: ConflictsWith specifies the list of traits which could not apply to the same workloads with this trait. Traits that omit this field can work with any other traits.
+              items:
+                type: string
+              type: array
             definitionRef:
               description: Reference to the CustomResourceDefinition that defines this trait kind.
               properties:

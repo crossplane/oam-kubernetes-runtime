@@ -45,6 +45,7 @@ const (
 	errFmtGetScopeWorkloadRefsPath = "cannot get workloadRefsPath for scope to be dereferenced %q %q %q"
 	errFmtApplyTrait               = "cannot apply trait %q %q %q"
 	errFmtApplyScope               = "cannot apply scope %q %q %q"
+	errFmtConflictsTrait           = "cannot apply trait %q %q %q whose conflictsWith is %q"
 
 	workloadScopeFinalizer = "scope.finalizer.core.oam.dev"
 )
