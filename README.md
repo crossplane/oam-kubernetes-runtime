@@ -164,7 +164,7 @@ But be aware that in this case, you will lose critical validations and injection
 
 ## Cleanup
 ```console
-helm uninstall core-runtime -n oam-system
+helm uninstall oam -n oam-system
 kubectl delete -f examples/containerized-workload
 kubectl delete namespace oam-system --wait
 ```
