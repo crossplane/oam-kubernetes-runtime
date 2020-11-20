@@ -158,13 +158,13 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	compInfoLabels[oam.LabelOAMResourceType] = oam.ResourceTypeTrait
 
 	componentName := acc.ComponentName
-	appliedTraits, err := r.getAppliedTraits(ac, componentName)
+	compatibleTraits, err := r.getAppliedTraits(ac, componentName)
 	if err != nil {
 		return nil, err
 	}
-	var preAppliedTraits, compatibleTraits []unstructured.Unstructured
+	var preAppliedTraits = make([]unstructured.Unstructured, 0)
 	for _, ct := range acc.Traits {
-		compatibleTraits = append(appliedTraits, preAppliedTraits...)
+		compatibleTraits = append(compatibleTraits, preAppliedTraits...)
 		t, traitDef, err := r.renderTrait(ctx, ct, ac, componentName, ref, dag, compatibleTraits)
 		if err != nil {
 			return nil, err
@@ -232,8 +232,8 @@ func (r *components) renderTrait(ctx context.Context, ct v1alpha2.ComponentTrait
 	setTraitProperties(t, traitName, ac.GetNamespace(), ref)
 
 	for _, conflict := range traitDef.Spec.ConflictsWith {
-		for _, compatibleTrait := range compatibleTraits {
-			compatibleTraitDef, err := util.FetchTraitDefinition(ctx, r.client, r.dm, &compatibleTrait)
+		for j := range compatibleTraits {
+			compatibleTraitDef, err := util.FetchTraitDefinition(ctx, r.client, r.dm, &compatibleTraits[j])
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					return t, util.GetDummyTraitDefinition(t), nil
@@ -691,7 +691,6 @@ func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
 // getAppliedTraits gets all the traits which is already applied to a specified component
 func (r *components) getAppliedTraits(ac *v1alpha2.ApplicationConfiguration, componentName string) ([]unstructured.Unstructured, error) {
 	var traits []v1alpha2.ComponentTrait
-	//var appliedTraits []unstructured.Unstructured
 	var appliedTraits = make([]unstructured.Unstructured, 0)
 	deployedComponents := make([]string, 0)
 	for _, w := range ac.Status.Workloads {
