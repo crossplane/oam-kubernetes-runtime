@@ -1019,8 +1019,9 @@ func TestRenderTraitName(t *testing.T) {
 	}
 
 	gvks, _, _ := scheme.ObjectKinds(&mts)
-	mts.APIVersion = gvks[0].GroupVersion().String()
-	mts.Kind = gvks[0].Kind
+	gvk := gvks[0]
+	mts.APIVersion = gvk.GroupVersion().String()
+	mts.Kind = gvk.Kind
 	raw, _ := json.Marshal(mts)
 
 	ac := &v1alpha2.ApplicationConfiguration{
@@ -1051,8 +1052,8 @@ func TestRenderTraitName(t *testing.T) {
 					Traits: []v1alpha2.WorkloadTrait{
 						{
 							Reference: v1alpha1.TypedReference{
-								APIVersion: gvks[0].GroupVersion().String(),
-								Kind:       gvks[0].Kind,
+								APIVersion: gvk.GroupVersion().String(),
+								Kind:       gvk.Kind,
 								Name:       "component3-trait-11111111",
 							},
 						},
@@ -1089,8 +1090,9 @@ func TestRenderTraitNameWithoutReferenceName(t *testing.T) {
 	}
 
 	gvks, _, _ := scheme.ObjectKinds(&mts)
-	mts.APIVersion = gvks[0].GroupVersion().String()
-	mts.Kind = gvks[0].Kind
+	gvk := gvks[0]
+	mts.APIVersion = gvk.GroupVersion().String()
+	mts.Kind = gvk.Kind
 	raw, _ := json.Marshal(mts)
 
 	ac := &v1alpha2.ApplicationConfiguration{
@@ -1121,8 +1123,8 @@ func TestRenderTraitNameWithoutReferenceName(t *testing.T) {
 					Traits: []v1alpha2.WorkloadTrait{
 						{
 							Reference: v1alpha1.TypedReference{
-								APIVersion: gvks[0].GroupVersion().String(),
-								Kind:       gvks[0].Kind,
+								APIVersion: gvk.GroupVersion().String(),
+								Kind:       gvk.Kind,
 							},
 						},
 					},
@@ -1171,8 +1173,9 @@ func TestRenderTraitNameWithShortNameTraitDefinition(t *testing.T) {
 	}
 
 	gvks, _, _ := scheme.ObjectKinds(&mts)
-	mts.APIVersion = gvks[0].GroupVersion().String()
-	mts.Kind = gvks[0].Kind
+	gvk := gvks[0]
+	mts.APIVersion = gvk.GroupVersion().String()
+	mts.Kind = gvk.Kind
 	raw, _ := json.Marshal(mts)
 
 	ac := &v1alpha2.ApplicationConfiguration{
@@ -1203,8 +1206,8 @@ func TestRenderTraitNameWithShortNameTraitDefinition(t *testing.T) {
 					Traits: []v1alpha2.WorkloadTrait{
 						{
 							Reference: v1alpha1.TypedReference{
-								APIVersion: gvks[0].GroupVersion().String(),
-								Kind:       gvks[0].Kind,
+								APIVersion: gvk.GroupVersion().String(),
+								Kind:       gvk.Kind,
 							},
 						},
 					},
