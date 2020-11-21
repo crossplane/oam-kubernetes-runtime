@@ -805,16 +805,36 @@ func TestGenTraitName(t *testing.T) {
 			ReplicaCount: 3,
 		},
 	}
+	trait := v1alpha2.ManualScalerTrait{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "extend.oam.dev/v1alpha2",
+			Kind:       "ManualScalerTrait",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns",
+			Name:      "sample-manualscaler-trait",
+		},
+		Spec: v1alpha2.ManualScalerTraitSpec{
+			ReplicaCount: 3,
+		},
+	}
+	traitTemplate := &v1alpha2.ComponentTrait{
+		Trait: runtime.RawExtension{
+			Object: &trait,
+		},
+	}
 
-	test := []struct {
-		name     string
-		template *v1alpha2.ComponentTrait
-		exp      string
+	tests := []struct {
+		name           string
+		template       *v1alpha2.ComponentTrait
+		definitionName string
+		exp            string
 	}{
 		{
-			name:     "simple",
-			template: &v1alpha2.ComponentTrait{},
-			exp:      "simple-trait-67b8949f8d",
+			name:           "simple",
+			template:       &v1alpha2.ComponentTrait{},
+			definitionName: "",
+			exp:            "simple-trait-67b8949f8d",
 		},
 		{
 			name: "simple",
@@ -823,12 +843,18 @@ func TestGenTraitName(t *testing.T) {
 					Object: &mts,
 				},
 			},
-			exp: "simple-trait-5ddc8b7556",
+			definitionName: "",
+			exp:            "simple-trait-5ddc8b7556",
+		},
+		{
+			name:           "simple-definition",
+			template:       traitTemplate,
+			definitionName: "autoscale",
+			exp:            "simple-definition-autoscale-" + util.ComputeHash(traitTemplate),
 		},
 	}
-	for _, test := range test {
-
-		got := util.GenTraitName(test.name, test.template)
+	for _, test := range tests {
+		got := util.GenTraitName(test.name, test.template, test.definitionName)
 		t.Log(fmt.Sprint("Running test: ", test.name))
 		assert.Equal(t, test.exp, got)
 	}
