@@ -2,17 +2,16 @@ package applicationconfiguration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,17 +22,30 @@ import (
 )
 
 const (
-	reasonFmtWorkloadNameNotEmpty = "Versioning-enabled component's workload name MUST NOT be assigned. Expect workload name %q to be empty."
+	errFmtWorkloadNameNotEmpty = "versioning-enabled component's workload name MUST NOT be assigned, expect workload name %q to be empty."
 
-	errFmtCheckWorkloadName = "Error occurs when checking workload name. %q"
+	errFmtRevisionName = "componentName %q and revisionName %q are mutually exclusive, you can only specify one of them"
 
-	errFmtUnmarshalWorkload = "Error occurs when unmarshal workload of component %q error: %q"
+	errFmtUnappliableTrait = "the trait %q cannot apply to workload %q of component %q (appliable: %q)"
 
 	// WorkloadNamePath indicates field path of workload name
 	WorkloadNamePath = "metadata.name"
 )
 
 var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationconfigurations")
+
+// AppConfigValidator provides functions to validate ApplicationConfiguration
+type AppConfigValidator interface {
+	Validate(context.Context, ValidatingAppConfig) []error
+}
+
+// AppConfigValidateFunc implements function to validate ApplicationConfiguration
+type AppConfigValidateFunc func(context.Context, ValidatingAppConfig) []error
+
+// Validate validates ApplicationConfiguration
+func (fn AppConfigValidateFunc) Validate(ctx context.Context, v ValidatingAppConfig) []error {
+	return fn(ctx, v)
+}
 
 // ValidatingHandler handles CloneSet
 type ValidatingHandler struct {
@@ -42,6 +54,8 @@ type ValidatingHandler struct {
 
 	// Decoder decodes objects
 	Decoder *admission.Decoder
+
+	Validators []AppConfigValidator
 }
 
 var _ admission.Handler = &ValidatingHandler{}
@@ -67,97 +81,123 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		if err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
-		if allErrs := ValidateTraitObject(obj); len(allErrs) > 0 {
-			klog.Info("create or update failed", "name", obj.Name, "errMsg", allErrs.ToAggregate().Error())
-			return admission.Denied(allErrs.ToAggregate().Error())
+		vAppConfig := &ValidatingAppConfig{}
+		if err := vAppConfig.PrepareForValidation(ctx, h.Client, h.Mapper, obj); err != nil {
+			klog.Info("failed init appConfig before validation ", " name: ", obj.Name, " errMsg: ", err.Error())
+			return admission.Denied(err.Error())
 		}
-		if pass, reason := checkRevisionName(obj); !pass {
-			return admission.ValidationResponse(false, reason)
+		for _, validator := range h.Validators {
+			if allErrs := validator.Validate(ctx, *vAppConfig); utilerrors.NewAggregate(allErrs) != nil {
+				// utilerrors.NewAggregate can remove nil from allErrs
+				klog.Info("validation failed ", " name: ", obj.Name, " errMsgi: ", utilerrors.NewAggregate(allErrs).Error())
+				return admission.Denied(utilerrors.NewAggregate(allErrs).Error())
+			}
 		}
-		if pass, reason := checkWorkloadNameForVersioning(ctx, h.Client, h.Mapper, obj); !pass {
-			return admission.ValidationResponse(false, reason)
-		}
-		// TODO(wonderflow): Add more validation logic here.
 	}
 	return admission.ValidationResponse(true, "")
 }
 
-// ValidateTraitObject validates the ApplicationConfiguration on creation/update
-func ValidateTraitObject(obj *v1alpha2.ApplicationConfiguration) field.ErrorList {
-	klog.Info("validate applicationConfiguration", "name", obj.Name)
+// ValidateTraitObjectFn validates the ApplicationConfiguration on creation/update
+func ValidateTraitObjectFn(_ context.Context, v ValidatingAppConfig) []error {
+	klog.Info("validate applicationConfiguration", "name", v.appConfig.Name)
 	var allErrs field.ErrorList
-	for cidx, comp := range obj.Spec.Components {
-		for idx, tr := range comp.Traits {
+	for cidx, comp := range v.validatingComps {
+		for idx, tr := range comp.validatingTraits {
 			fldPath := field.NewPath("spec").Child("components").Index(cidx).Child("traits").Index(idx).Child("trait")
-			var content map[string]interface{}
-			if err := json.Unmarshal(tr.Trait.Raw, &content); err != nil {
-				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
-					"the trait is malformed"))
-				return allErrs
-			}
+			content := tr.traitContent.Object
 			if content[TraitTypeField] != nil {
-				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.componentTrait.Trait.Raw),
 					"the trait contains 'name' info that should be mutated to GVK"))
 			}
 			if content[TraitSpecField] != nil {
-				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.Trait.Raw),
+				allErrs = append(allErrs, field.Invalid(fldPath, string(tr.componentTrait.Trait.Raw),
 					"the trait contains 'properties' info that should be mutated to spec"))
 			}
-			trait := unstructured.Unstructured{
-				Object: content,
-			}
-			if len(trait.GetAPIVersion()) == 0 || len(trait.GetKind()) == 0 {
+			if len(tr.traitContent.GetAPIVersion()) == 0 || len(tr.traitContent.GetKind()) == 0 {
 				allErrs = append(allErrs, field.Invalid(fldPath, content,
-					fmt.Sprintf("the trait data missing GVK, api = %s, kind = %s,", trait.GetAPIVersion(), trait.GetKind())))
+					fmt.Sprintf("the trait data missing GVK, api = %s, kind = %s,",
+						tr.traitContent.GetAPIVersion(), tr.traitContent.GetKind())))
 			}
 		}
 	}
+	if len(allErrs) > 0 {
+		return allErrs.ToAggregate().Errors()
+	}
+	return nil
+}
 
+// ValidateRevisionNameFn validates revisionName and componentName are assigned both.
+func ValidateRevisionNameFn(_ context.Context, v ValidatingAppConfig) []error {
+	klog.Info("validate revisionName in applicationConfiguration", "name", v.appConfig.Name)
+	var allErrs []error
+	for _, c := range v.validatingComps {
+		if c.appConfigComponent.ComponentName != "" && c.appConfigComponent.RevisionName != "" {
+			allErrs = append(allErrs, fmt.Errorf(errFmtRevisionName,
+				c.appConfigComponent.ComponentName, c.appConfigComponent.RevisionName))
+		}
+	}
 	return allErrs
 }
 
-func checkRevisionName(appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
-	for _, v := range appConfig.Spec.Components {
-		if v.ComponentName != "" && v.RevisionName != "" {
-			return false, "componentName and revisionName are mutually exclusive, you can only specify one of them"
+// ValidateWorkloadNameForVersioningFn validates workload name for version-enabled component
+func ValidateWorkloadNameForVersioningFn(_ context.Context, v ValidatingAppConfig) []error {
+	var allErrs []error
+	for _, c := range v.validatingComps {
+		isVersionEnabled := false
+		for _, t := range c.validatingTraits {
+			if t.traitDefinition.Spec.RevisionEnabled {
+				isVersionEnabled = true
+				break
+			}
+		}
+		if isVersionEnabled {
+			if ok, workloadName := checkParams(c.component.Spec.Parameters, c.appConfigComponent.ParameterValues); !ok {
+				allErrs = append(allErrs, fmt.Errorf(errFmtWorkloadNameNotEmpty, workloadName))
+			}
+			if workloadName := c.workloadContent.GetName(); workloadName != "" {
+				allErrs = append(allErrs, fmt.Errorf(errFmtWorkloadNameNotEmpty, workloadName))
+			}
 		}
 	}
-	return true, ""
+	return allErrs
 }
 
-// checkWorkloadNameForVersioning check whether versioning-enabled component workload name is empty
-func checkWorkloadNameForVersioning(ctx context.Context, client client.Reader, dm discoverymapper.DiscoveryMapper,
-	appConfig *v1alpha2.ApplicationConfiguration) (bool, string) {
-	for _, v := range appConfig.Spec.Components {
-		acc := v
-		vEnabled, err := checkComponentVersionEnabled(ctx, client, dm, &acc)
-		if err != nil {
-			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
-		}
-		if !vEnabled {
-			continue
-		}
-		c, _, err := util.GetComponent(ctx, client, acc, appConfig.GetNamespace())
-		if err != nil {
-			return false, fmt.Sprintf(errFmtCheckWorkloadName, err.Error())
-		}
-
-		if ok, workloadName := checkParams(c.Spec.Parameters, acc.ParameterValues); !ok {
-			return false, fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, workloadName)
-		}
-
-		w := &fieldpath.Paved{}
-		if err := json.Unmarshal(c.Spec.Workload.Raw, w); err != nil {
-			return false, fmt.Sprintf(errFmtUnmarshalWorkload, c.GetName(), err.Error())
-		}
-		workload := unstructured.Unstructured{Object: w.UnstructuredContent()}
-		workloadName := workload.GetName()
-
-		if len(workloadName) != 0 {
-			return false, fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, workloadName)
+// ValidateTraitAppliableToWorkloadFn validates whether a trait is allowed to apply to the workload.
+func ValidateTraitAppliableToWorkloadFn(_ context.Context, v ValidatingAppConfig) []error {
+	klog.Info("validate trait is appliable to workload", "name", v.appConfig.Name)
+	var allErrs []error
+	for _, c := range v.validatingComps {
+		workloadType := c.component.GetLabels()[oam.WorkloadTypeLabel]
+		workloadDefRefName := c.workloadDefinition.Spec.Reference.Name
+		// TODO(roywang) consider a CRD group could have multiple versions
+		// and maybe we need to specify the minimum version here in the future
+		workloadGroup := c.workloadDefinition.GetObjectKind().GroupVersionKind().Group
+	ValidateApplyTo:
+		for _, t := range c.validatingTraits {
+			if len(t.traitDefinition.Spec.AppliesToWorkloads) == 0 {
+				// AppliesToWorkloads is empty, the trait can be applied to ANY workload
+				continue
+			}
+			for _, applyTo := range t.traitDefinition.Spec.AppliesToWorkloads {
+				if applyTo == "*" {
+					// "*" means the trait can be applied to ANY workload
+					continue ValidateApplyTo
+				}
+				if strings.HasPrefix(applyTo, "*.") && workloadGroup == applyTo[2:] {
+					continue ValidateApplyTo
+				}
+				if workloadType == applyTo ||
+					workloadDefRefName == applyTo {
+					continue ValidateApplyTo
+				}
+			}
+			allErrs = append(allErrs, fmt.Errorf(errFmtUnappliableTrait,
+				t.traitDefinition.GetObjectKind().GroupVersionKind().String(),
+				c.workloadDefinition.GetObjectKind().GroupVersionKind().String(),
+				c.compName, t.traitDefinition.Spec.AppliesToWorkloads))
 		}
 	}
-	return true, ""
+	return allErrs
 }
 
 var _ inject.Client = &ValidatingHandler{}
@@ -185,6 +225,13 @@ func RegisterValidatingHandler(mgr manager.Manager) error {
 	}
 	server.Register("/validating-core-oam-dev-v1alpha2-applicationconfigurations", &webhook.Admission{Handler: &ValidatingHandler{
 		Mapper: mapper,
+		Validators: []AppConfigValidator{
+			AppConfigValidateFunc(ValidateTraitObjectFn),
+			AppConfigValidateFunc(ValidateRevisionNameFn),
+			AppConfigValidateFunc(ValidateWorkloadNameForVersioningFn),
+			AppConfigValidateFunc(ValidateTraitAppliableToWorkloadFn),
+			// TODO(wonderflow): Add more validation logic here.
+		},
 	}})
 	return nil
 }

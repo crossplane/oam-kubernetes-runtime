@@ -5,194 +5,170 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/core"
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/mock"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
 
-	"github.com/crossplane/crossplane-runtime/pkg/test"
-	json "github.com/json-iterator/go"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
-	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-func TestApplicationConfigurationValidation(t *testing.T) {
-	var handler admission.Handler = &ValidatingHandler{}
+var (
+	ctx = context.Background()
+)
 
-	cwRaw, _ := json.Marshal(v1alpha2.ContainerizedWorkload{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "",
-		},
-	})
-
-	mgr := &mock.Manager{
-		Client: &test.MockClient{
-			MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-				o, _ := obj.(*appsv1.ControllerRevision)
-				*o = appsv1.ControllerRevision{
-					Data: runtime.RawExtension{Object: &v1alpha2.Component{
-						Spec: v1alpha2.ComponentSpec{
-							Workload: runtime.RawExtension{
-								Raw: cwRaw,
-							},
-						}}}}
-				return nil
-			},
-		},
-	}
-	resource := metav1.GroupVersionResource{Group: "core.oam.dev", Version: "v1alpha2", Resource: "applicationconfigurations"}
-	injc := handler.(inject.Client)
-	injc.InjectClient(mgr.GetClient())
-	decoder := handler.(admission.DecoderInjector)
-	var scheme = runtime.NewScheme()
-	_ = core.AddToScheme(scheme)
-	dec, _ := admission.NewDecoder(scheme)
-	decoder.InjectDecoder(dec)
-
-	app1, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test-ns",
-		},
-		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-			{
-				RevisionName:  "r1",
-				ComponentName: "c1",
-			},
-		}}})
-	app2, _ := json.Marshal(v1alpha2.ApplicationConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test-ns",
-		},
-		Spec: v1alpha2.ApplicationConfigurationSpec{Components: []v1alpha2.ApplicationConfigurationComponent{
-			{
-				RevisionName: "r1",
-			},
-		}}})
-
+func TestValidateRevisionNameFn(t *testing.T) {
 	tests := []struct {
-		req    admission.Request
-		pass   bool
-		reason string
+		caseName            string
+		validatingAppConfig ValidatingAppConfig
+		want                []error
 	}{
 		{
-			req: admission.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
-					Resource: resource,
-					Object:   runtime.RawExtension{Raw: app1},
-				},
-			},
-			pass:   false,
-			reason: "componentName and revisionName are mutually exclusive, you can only specify one of them",
-		},
-		{
-			req: admission.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
-					Resource: resource,
-					Object:   runtime.RawExtension{Raw: app2},
-				},
-			},
-			pass: true,
-		},
-	}
-	for _, tv := range tests {
-		resp := handler.Handle(context.Background(), tv.req)
-		if tv.pass != resp.Allowed {
-			t.Errorf("expect %v but got %v from validation", tv.pass, resp.Allowed)
-		}
-		if tv.reason != "" {
-			if tv.reason != string(resp.Result.Reason) {
-				t.Errorf("\nvalidation should fail by reason: %v \ninstead of by reason: %v ", tv.reason, resp.Result.Reason)
-			}
-		}
-	}
-}
-
-func TestCheckWorkloadNameForVersioning(t *testing.T) {
-	ctx := context.Background()
-	mockClient := test.NewMockClient()
-
-	revisionName := "r"
-	componentName := "c"
-	workloadName := "WorkloadName"
-	paramName := "workloadName"
-	paramValue := workloadName
-
-	getErr := errors.New("get error")
-
-	cwRaw, _ := json.Marshal(v1alpha2.ContainerizedWorkload{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "",
-		},
-	})
-	cwRawWithWorkloadName, _ := json.Marshal(v1alpha2.ContainerizedWorkload{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: workloadName,
-		},
-	})
-
-	kind := "ManualScalerTrait"
-	version := "core.oam.dev"
-	tName := "ms"
-	msTraitRaw, _ := json.Marshal(v1alpha2.ManualScalerTrait{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       kind,
-			APIVersion: version,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: tName,
-		}})
-
-	mapper := mock.NewMockDiscoveryMapper()
-
-	tests := []struct {
-		caseName     string
-		appConfig    v1alpha2.ApplicationConfiguration
-		mockGetFunc  test.MockGetFn
-		expectResult bool
-		expectReason string
-	}{
-		{
-			caseName: "Test validation fails for workload name fixed in component",
-			appConfig: v1alpha2.ApplicationConfiguration{
-				Spec: v1alpha2.ApplicationConfigurationSpec{
-					Components: []v1alpha2.ApplicationConfigurationComponent{
-						{
-							RevisionName: revisionName,
+			caseName: "componentName and revisionName are both assigned",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						appConfigComponent: v1alpha2.ApplicationConfigurationComponent{
+							ComponentName: "example-comp",
+							RevisionName:  "example-comp-v1",
 						},
 					},
 				},
 			},
-			mockGetFunc: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-				o, _ := obj.(*appsv1.ControllerRevision)
-				*o = appsv1.ControllerRevision{
-					Data: runtime.RawExtension{Object: &v1alpha2.Component{
-						Spec: v1alpha2.ComponentSpec{
-							Workload: runtime.RawExtension{
-								Raw: cwRawWithWorkloadName,
-							},
-						}}}}
-				return nil
+			want: []error{
+				fmt.Errorf(errFmtRevisionName, "example-comp", "example-comp-v1"),
 			},
-			expectResult: false,
-			expectReason: fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, workloadName),
 		},
 		{
-			caseName: "Test validation fails for workload name assigned by parameter",
-			appConfig: v1alpha2.ApplicationConfiguration{
-				Spec: v1alpha2.ApplicationConfigurationSpec{
-					Components: []v1alpha2.ApplicationConfigurationComponent{
+			caseName: "componentName is assigned",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						appConfigComponent: v1alpha2.ApplicationConfigurationComponent{
+							ComponentName: "example-comp",
+						},
+					},
+				},
+			},
+			want: nil,
+		},
+		{
+			caseName: "revisionName is assigned",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						appConfigComponent: v1alpha2.ApplicationConfigurationComponent{
+							RevisionName: "example-comp-v1",
+						},
+					},
+				},
+			},
+			want: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		result := ValidateRevisionNameFn(ctx, tc.validatingAppConfig)
+		assert.Equal(t, tc.want, result, fmt.Sprintf("Test case: %q", tc.caseName))
+	}
+}
+
+func TestValidateTraitObjectFn(t *testing.T) {
+	traitWithName := unstructured.Unstructured{
+		Object: make(map[string]interface{}),
+	}
+	unstructured.SetNestedField(traitWithName.Object, "test", TraitTypeField)
+
+	traitWithProperties := unstructured.Unstructured{
+		Object: make(map[string]interface{}),
+	}
+	unstructured.SetNestedField(traitWithProperties.Object, "test", TraitSpecField)
+
+	traitWithoutGVK := unstructured.Unstructured{}
+	traitWithoutGVK.SetAPIVersion("")
+	traitWithoutGVK.SetKind("")
+
+	tests := []struct {
+		caseName     string
+		traitContent unstructured.Unstructured
+		want         string
+	}{
+		{
+			caseName:     "the trait contains 'name' info that should be mutated to GVK",
+			traitContent: traitWithName,
+			want:         "the trait contains 'name' info",
+		},
+		{
+			caseName:     "the trait contains 'properties' info that should be mutated to spec",
+			traitContent: traitWithProperties,
+			want:         "the trait contains 'properties' info",
+		},
+		{
+			caseName:     "the trait data missing GVK",
+			traitContent: traitWithoutGVK,
+			want:         "the trait data missing GVK",
+		},
+	}
+
+	for _, tc := range tests {
+		vAppConfig := ValidatingAppConfig{
+			validatingComps: []ValidatingComponent{
+				{
+					validatingTraits: []ValidatingTrait{
 						{
-							RevisionName: revisionName,
+							traitContent: tc.traitContent,
+						},
+					},
+				},
+			},
+		}
+		allErrs := ValidateTraitObjectFn(ctx, vAppConfig)
+		result := utilerrors.NewAggregate(allErrs).Error()
+		assert.Contains(t, result, tc.want, fmt.Sprintf("Test case: %q", tc.caseName))
+	}
+}
+
+func TestValidateWorkloadNameForVersioningFn(t *testing.T) {
+	workloadName := "wl-name"
+	wlWithName := unstructured.Unstructured{}
+	wlWithName.SetName(workloadName)
+	paramName := "workloadName"
+	paramValue := workloadName
+
+	tests := []struct {
+		caseName            string
+		validatingAppConfig ValidatingAppConfig
+		want                []error
+	}{
+		{
+			caseName: "validation fails for workload name fixed in component",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						compName:        "example-comp",
+						workloadContent: wlWithName,
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true},
+							}},
+						},
+					},
+				},
+			},
+			want: []error{
+				fmt.Errorf(errFmtWorkloadNameNotEmpty, workloadName),
+			},
+		},
+		{
+			caseName: "validation fails for workload name assigned by parameter",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						compName: "example-comp",
+						appConfigComponent: v1alpha2.ApplicationConfigurationComponent{
 							ParameterValues: []v1alpha2.ComponentParameterValue{
 								{
 									Name:  paramName,
@@ -200,187 +176,197 @@ func TestCheckWorkloadNameForVersioning(t *testing.T) {
 								},
 							},
 						},
-					},
-				},
-			},
-			mockGetFunc: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-				o, _ := obj.(*appsv1.ControllerRevision)
-				*o = appsv1.ControllerRevision{
-					Data: runtime.RawExtension{Object: &v1alpha2.Component{
-						Spec: v1alpha2.ComponentSpec{
-							Workload: runtime.RawExtension{
-								Raw: cwRaw,
-							},
-							Parameters: []v1alpha2.ComponentParameter{
-								{
-									Name:       paramName,
-									FieldPaths: []string{WorkloadNamePath},
-								},
-							},
-						}}}}
-				return nil
-			},
-			expectResult: false,
-			expectReason: fmt.Sprintf(reasonFmtWorkloadNameNotEmpty, workloadName),
-		},
-		{
-			caseName: "Test validation success",
-			appConfig: v1alpha2.ApplicationConfiguration{
-				Spec: v1alpha2.ApplicationConfigurationSpec{
-					Components: []v1alpha2.ApplicationConfigurationComponent{
-						{
-							ComponentName: componentName,
-							Traits: []v1alpha2.ComponentTrait{
-								{
-									Trait: runtime.RawExtension{
-										Raw: msTraitRaw,
+						component: v1alpha2.Component{
+							Spec: v1alpha2.ComponentSpec{
+								Parameters: []v1alpha2.ComponentParameter{
+									{
+										Name:       paramName,
+										FieldPaths: []string{WorkloadNamePath},
 									},
 								},
 							},
 						},
-						{
-							ComponentName: componentName,
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true},
+							}},
 						},
 					},
 				},
 			},
-			mockGetFunc: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-				if o, ok := obj.(*v1alpha2.TraitDefinition); ok {
-					*o = v1alpha2.TraitDefinition{
-						Spec: v1alpha2.TraitDefinitionSpec{
-							RevisionEnabled: true,
-						},
-					}
-				}
-				if o, ok := obj.(*v1alpha2.Component); ok {
-					*o = v1alpha2.Component{
-						Spec: v1alpha2.ComponentSpec{
-							Workload: runtime.RawExtension{
-								Raw: cwRaw,
-							},
-						},
-					}
-				}
-				return nil
+			want: []error{
+				fmt.Errorf(errFmtWorkloadNameNotEmpty, workloadName),
 			},
-			expectResult: true,
-			expectReason: "",
 		},
 		{
-			caseName: "Test checkVersionEnbled error occurs during validation",
-			appConfig: v1alpha2.ApplicationConfiguration{
-				Spec: v1alpha2.ApplicationConfigurationSpec{
-					Components: []v1alpha2.ApplicationConfigurationComponent{
-						{
-							ComponentName: componentName,
-							Traits: []v1alpha2.ComponentTrait{
-								{
-									Trait: runtime.RawExtension{
-										Raw: msTraitRaw,
-									},
-								},
-							},
+			caseName: "validation succeeds",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						compName: "example-comp",
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{RevisionEnabled: true},
+							}},
 						},
 					},
 				},
 			},
-			mockGetFunc: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-				if _, ok := obj.(*v1alpha2.TraitDefinition); ok {
-					return getErr
-				}
-				if o, ok := obj.(*v1alpha2.Component); ok {
-					*o = v1alpha2.Component{
-						Spec: v1alpha2.ComponentSpec{
-							Workload: runtime.RawExtension{
-								Raw: cwRaw,
-							},
-						},
-					}
-				}
-				return nil
-			},
-			expectResult: false,
-			expectReason: fmt.Sprintf(errFmtCheckWorkloadName, errors.Wrapf(getErr, errFmtGetTraitDefinition, version, kind, tName).Error()),
-		},
-		{
-			caseName: "Test getComponent error occurs during validation",
-			appConfig: v1alpha2.ApplicationConfiguration{
-				Spec: v1alpha2.ApplicationConfigurationSpec{
-					Components: []v1alpha2.ApplicationConfigurationComponent{
-						{
-							ComponentName: componentName,
-							Traits: []v1alpha2.ComponentTrait{
-								{
-									Trait: runtime.RawExtension{
-										Raw: msTraitRaw,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			mockGetFunc: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-				if o, ok := obj.(*v1alpha2.TraitDefinition); ok {
-					*o = v1alpha2.TraitDefinition{
-						Spec: v1alpha2.TraitDefinitionSpec{
-							RevisionEnabled: true,
-						},
-					}
-				}
-				if _, ok := obj.(*v1alpha2.Component); ok {
-					return getErr
-				}
-				return nil
-			},
-			expectResult: false,
-			expectReason: "Error occurs when checking workload name. \"cannot get component \\\"c\\\": get error\"",
-		},
-		{
-			caseName: "Test unmarshalWorkload error occurs during validation",
-			appConfig: v1alpha2.ApplicationConfiguration{
-				Spec: v1alpha2.ApplicationConfigurationSpec{
-					Components: []v1alpha2.ApplicationConfigurationComponent{
-						{
-							ComponentName: componentName,
-							Traits: []v1alpha2.ComponentTrait{
-								{
-									Trait: runtime.RawExtension{
-										Raw: msTraitRaw,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			mockGetFunc: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
-				if o, ok := obj.(*v1alpha2.TraitDefinition); ok {
-					*o = v1alpha2.TraitDefinition{
-						Spec: v1alpha2.TraitDefinitionSpec{
-							RevisionEnabled: true,
-						},
-					}
-				}
-				if o, ok := obj.(*v1alpha2.Component); ok {
-					*o = v1alpha2.Component{
-						Spec: v1alpha2.ComponentSpec{
-							Workload: runtime.RawExtension{},
-						},
-					}
-				}
-				return nil
-			},
-			expectResult: false,
-			expectReason: "Error occurs when unmarshal workload of component \"\" error: \"unexpected end of JSON input\"",
+			want: nil,
 		},
 	}
+
 	for _, tc := range tests {
-		func(t *testing.T) {
-			mockClient.MockGet = tc.mockGetFunc
-			result, reason := checkWorkloadNameForVersioning(ctx, mockClient, mapper, &tc.appConfig)
-			assert.Equal(t, tc.expectResult, result, fmt.Sprintf("Test case: %q", tc.caseName))
-			assert.Equal(t, tc.expectReason, reason, fmt.Sprintf("Test case: %q", tc.caseName))
-		}(t)
+		result := ValidateWorkloadNameForVersioningFn(ctx, tc.validatingAppConfig)
+		assert.Equal(t, tc.want, result, fmt.Sprintf("Test case: %q", tc.caseName))
+	}
+
+}
+
+func TestValidateTraitAppliableToWorkloadFn(t *testing.T) {
+	tests := []struct {
+		caseName            string
+		validatingAppConfig ValidatingAppConfig
+		want                []error
+	}{
+		{
+			caseName: "apply trait to any workload",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						workloadDefinition: v1alpha2.WorkloadDefinition{
+							Spec: v1alpha2.WorkloadDefinitionSpec{
+								Reference: v1alpha2.DefinitionReference{
+									Name: "TestWorkload",
+								},
+							},
+						},
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{
+									AppliesToWorkloads: []string{"*"},
+								},
+							}},
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{
+									AppliesToWorkloads: []string{},
+								},
+							}},
+						},
+					},
+				},
+			},
+			want: nil,
+		},
+		{
+			caseName: "apply trait to workload with specific type",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						component: v1alpha2.Component{ObjectMeta: v1.ObjectMeta{
+							Labels: map[string]string{oam.WorkloadTypeLabel: "TestWorkload"},
+						}},
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{
+									AppliesToWorkloads: []string{"TestWorkload"},
+								},
+							}},
+						},
+					},
+				},
+			},
+			want: nil,
+		},
+		{
+			caseName: "apply trait to workload with specific definition reference name",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						workloadDefinition: v1alpha2.WorkloadDefinition{
+							Spec: v1alpha2.WorkloadDefinitionSpec{
+								Reference: v1alpha2.DefinitionReference{
+									Name: "TestWorkload",
+								},
+							},
+						},
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{
+									AppliesToWorkloads: []string{"TestWorkload"},
+								},
+							}},
+						},
+					},
+				},
+			},
+			want: nil,
+		},
+		{
+			caseName: "apply trait to workload with specific group",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						workloadDefinition: v1alpha2.WorkloadDefinition{
+							TypeMeta: v1.TypeMeta{
+								APIVersion: "example.com/v1",
+								Kind:       "TestWorkload",
+							},
+						},
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								Spec: v1alpha2.TraitDefinitionSpec{
+									AppliesToWorkloads: []string{"*.example.com"},
+								},
+							}},
+						},
+					},
+				},
+			},
+			want: nil,
+		},
+		{
+			caseName: "apply trait to unappliable workload",
+			validatingAppConfig: ValidatingAppConfig{
+				validatingComps: []ValidatingComponent{
+					{
+						compName: "example-comp",
+						component: v1alpha2.Component{ObjectMeta: v1.ObjectMeta{
+							Labels: map[string]string{oam.WorkloadTypeLabel: "TestWorkload0"},
+						}},
+						workloadDefinition: v1alpha2.WorkloadDefinition{
+							TypeMeta: v1.TypeMeta{
+								APIVersion: "unknown.group/v1",
+								Kind:       "TestWorkload1",
+							},
+							Spec: v1alpha2.WorkloadDefinitionSpec{
+								Reference: v1alpha2.DefinitionReference{
+									Name: "TestWorkload2",
+								},
+							},
+						},
+						validatingTraits: []ValidatingTrait{
+							{traitDefinition: v1alpha2.TraitDefinition{
+								TypeMeta: v1.TypeMeta{
+									APIVersion: "example.com/v1",
+									Kind:       "TestTrait",
+								},
+								Spec: v1alpha2.TraitDefinitionSpec{
+									AppliesToWorkloads: []string{"example.com", "TestWorkload"},
+								},
+							}},
+						},
+					},
+				},
+			},
+			want: []error{fmt.Errorf(errFmtUnappliableTrait,
+				"example.com/v1, Kind=TestTrait", "unknown.group/v1, Kind=TestWorkload1", "example-comp",
+				[]string{"example.com", "TestWorkload"})},
+		},
+	}
+
+	for _, tc := range tests {
+		result := ValidateTraitAppliableToWorkloadFn(ctx, tc.validatingAppConfig)
+		assert.Equal(t, tc.want, result, fmt.Sprintf("Test case: %q", tc.caseName))
 	}
 }

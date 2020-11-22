@@ -194,113 +194,88 @@ var _ = Describe("ApplicationConfiguration Admission controller Test", func() {
 		var handler admission.Handler = &ValidatingHandler{Mapper: mapper}
 		decoderInjector := handler.(admission.DecoderInjector)
 		decoderInjector.InjectDecoder(decoder)
-		By("Creating valid trait")
-		validTrait := unstructured.Unstructured{}
-		validTrait.SetAPIVersion("validAPI")
-		validTrait.SetKind("validKind")
-		By("Creating invalid trait with type")
-		traitWithType := validTrait.DeepCopy()
-		typeContent := make(map[string]interface{})
-		typeContent[TraitTypeField] = "should not be here"
-		traitWithType.SetUnstructuredContent(typeContent)
-		By("Creating invalid trait without kind")
-		noKindTrait := validTrait.DeepCopy()
-		noKindTrait.SetKind("")
-		var traitTypeName = "test-trait"
-		traitDef := v1alpha2.TraitDefinition{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   traitTypeName,
-				Labels: label,
+
+		testWorkload := unstructured.Unstructured{}
+		testWorkload.SetAPIVersion("example.com/v1")
+		testWorkload.SetKind("TestWorkload")
+
+		testComponent := v1alpha2.Component{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "example.com/v1",
+				Kind:       "TestComponent",
 			},
-			Spec: v1alpha2.TraitDefinitionSpec{
-				Reference: v1alpha2.DefinitionReference{
-					Name: "foos.example.com",
+			Spec: v1alpha2.ComponentSpec{
+				Workload: runtime.RawExtension{
+					Raw: util.JSONMarshal(testWorkload.Object),
+				},
+			},
+			Status: v1alpha2.ComponentStatus{
+				LatestRevision: &v1alpha2.Revision{
+					Name: "example-comp-v1",
 				},
 			},
 		}
+
+		testWorkloadDef := v1alpha2.WorkloadDefinition{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "example.com/v1",
+				Kind:       "TestWorkload",
+			},
+		}
+		testTrait := unstructured.Unstructured{}
+		testTrait.SetAPIVersion("example.com/v1")
+		testTrait.SetKind("TestTrait")
+		appConfig.Spec.Components[0] = v1alpha2.ApplicationConfigurationComponent{
+			ComponentName: "example-comp",
+			Traits: []v1alpha2.ComponentTrait{
+				{
+					Trait: runtime.RawExtension{Raw: util.JSONMarshal(testTrait.Object)},
+				},
+			},
+		}
+		testTraitDef := v1alpha2.TraitDefinition{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "example.com/v1",
+				Kind:       "TestTrait",
+			},
+		}
+
 		clientInstance := &test.MockClient{
 			MockGet: func(ctx context.Context, key types.NamespacedName, obj runtime.Object) error {
 				switch o := obj.(type) {
+				case *v1alpha2.Component:
+					*o = testComponent
+				case *v1alpha2.WorkloadDefinition:
+					*o = testWorkloadDef
 				case *v1alpha2.TraitDefinition:
-					*o = traitDef
-				case *crdv1.CustomResourceDefinition:
-					Expect(key.Name).Should(Equal(traitDef.Spec.Reference.Name))
-					*o = crd
+					*o = testTraitDef
 				}
 				return nil
 			},
 		}
-		tests := map[string]struct {
-			trait     interface{}
-			client    client.Client
-			operation admissionv1beta1.Operation
-			pass      bool
-			reason    string
-		}{
-			"valid create case": {
-				trait:     validTrait.DeepCopyObject(),
-				operation: admissionv1beta1.Create,
-				pass:      true,
-				reason:    "",
-				client:    clientInstance,
-			},
-			"valid update case": {
-				trait:     validTrait.DeepCopyObject(),
-				operation: admissionv1beta1.Update,
-				pass:      true,
-				reason:    "",
-				client:    clientInstance,
-			},
-			"malformat appConfig": {
-				trait:     "bad format",
-				operation: admissionv1beta1.Create,
-				pass:      false,
-				reason:    "the trait is malformed",
-				client:    clientInstance,
-			},
-			"trait still has type": {
-				trait:     traitWithType.DeepCopyObject(),
-				operation: admissionv1beta1.Create,
-				pass:      false,
-				reason:    "the trait contains 'name' info",
-				client:    clientInstance,
-			},
-			"no kind trait appConfig": {
-				trait:     noKindTrait.DeepCopyObject(),
-				operation: admissionv1beta1.Update,
-				pass:      false,
-				reason:    "the trait data missing GVK",
-				client:    clientInstance,
-			},
-		}
-		for testCase, test := range tests {
-			By(fmt.Sprintf("start test : %s", testCase))
-			appConfig.Spec.Components[0].Traits[0].Trait = runtime.RawExtension{Raw: util.JSONMarshal(test.trait)}
-			req := admission.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
-					Operation: test.operation,
-					Resource:  reqResource,
-					Object:    runtime.RawExtension{Raw: util.JSONMarshal(appConfig)},
-				},
-			}
-			injc := handler.(inject.Client)
-			injc.InjectClient(test.client)
-			resp := handler.Handle(context.TODO(), req)
-			Expect(resp.Allowed).Should(Equal(test.pass))
-			if !test.pass {
-				Expect(string(resp.Result.Reason)).Should(ContainSubstring(test.reason))
-			}
-		}
-		By("Test bad admission request format")
+
 		req := admission.Request{
+			AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				Operation: admissionv1beta1.Create,
+				Resource:  reqResource,
+				Object:    runtime.RawExtension{Raw: util.JSONMarshal(appConfig)},
+			},
+		}
+		injc := handler.(inject.Client)
+		injc.InjectClient(clientInstance)
+		resp := handler.Handle(context.TODO(), req)
+		By(string(resp.Result.Reason))
+		Expect(resp.Allowed).Should(BeTrue())
+
+		By("Test bad admission request format")
+		req = admission.Request{
 			AdmissionRequest: admissionv1beta1.AdmissionRequest{
 				Operation: admissionv1beta1.Create,
 				Resource:  reqResource,
 				Object:    runtime.RawExtension{Raw: []byte("bad request")},
 			},
 		}
-		resp := handler.Handle(context.TODO(), req)
+		resp = handler.Handle(context.TODO(), req)
 		Expect(resp.Allowed).Should(BeFalse())
 	})
-
 })
