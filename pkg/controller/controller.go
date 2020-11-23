@@ -18,4 +18,8 @@ type Args struct {
 	// RevisionLimit is the maximum number of revisions that will be maintained.
 	// The default value is 50.
 	RevisionLimit int
+
+	// ApplyOnceOnly indicates whether workloads and traits should be
+	// affected if no spec change is made in the ApplicationConfiguration.
+	ApplyOnceOnly bool
 }

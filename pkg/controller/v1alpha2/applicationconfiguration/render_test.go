@@ -230,6 +230,9 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(workloadName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetAnnotations(map[string]string{
+								oam.AnnotationAppGeneration: "0",
+							})
 							w.SetLabels(map[string]string{
 								oam.LabelAppComponent:         componentName,
 								oam.LabelAppName:              acName,
@@ -244,6 +247,9 @@ func TestRenderComponents(t *testing.T) {
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								t.SetAnnotations(map[string]string{
+									oam.AnnotationAppGeneration: "0",
+								})
 								t.SetLabels(map[string]string{
 									oam.LabelAppComponent:         componentName,
 									oam.LabelAppName:              acName,
@@ -305,6 +311,9 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(componentName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetAnnotations(map[string]string{
+								oam.AnnotationAppGeneration: "0",
+							})
 							w.SetLabels(map[string]string{
 								oam.LabelAppComponent:         componentName,
 								oam.LabelAppName:              acName,
@@ -319,6 +328,9 @@ func TestRenderComponents(t *testing.T) {
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								t.SetAnnotations(map[string]string{
+									oam.AnnotationAppGeneration: "0",
+								})
 								t.SetLabels(map[string]string{
 									oam.LabelAppComponent:         componentName,
 									oam.LabelAppName:              acName,
@@ -371,6 +383,9 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(revisionName2)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetAnnotations(map[string]string{
+								oam.AnnotationAppGeneration: "0",
+							})
 							w.SetLabels(map[string]string{
 								oam.LabelAppComponent:         componentName,
 								oam.LabelAppName:              acName,
@@ -385,6 +400,9 @@ func TestRenderComponents(t *testing.T) {
 								t.SetNamespace(namespace)
 								t.SetName(traitName)
 								t.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								t.SetAnnotations(map[string]string{
+									oam.AnnotationAppGeneration: "0",
+								})
 								t.SetLabels(map[string]string{
 									oam.LabelAppComponent:         componentName,
 									oam.LabelAppName:              acName,
@@ -461,6 +479,9 @@ func TestRenderComponents(t *testing.T) {
 							w.SetNamespace(namespace)
 							w.SetName(componentName)
 							w.SetOwnerReferences([]metav1.OwnerReference{*ref})
+							w.SetAnnotations(map[string]string{
+								oam.AnnotationAppGeneration: "0",
+							})
 							w.SetLabels(map[string]string{
 								oam.LabelAppComponent:         componentName,
 								oam.LabelAppName:              acName,
@@ -475,6 +496,9 @@ func TestRenderComponents(t *testing.T) {
 								tr.SetNamespace(namespace)
 								tr.SetName(traitName)
 								tr.SetOwnerReferences([]metav1.OwnerReference{*ref})
+								tr.SetAnnotations(map[string]string{
+									oam.AnnotationAppGeneration: "0",
+								})
 								tr.SetLabels(map[string]string{
 									oam.LabelAppComponent:         componentName,
 									oam.LabelAppName:              acName,

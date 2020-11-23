@@ -434,6 +434,11 @@ func AddLabels(o *unstructured.Unstructured, labels map[string]string) {
 	o.SetLabels(MergeMapOverrideWithDst(o.GetLabels(), labels))
 }
 
+// AddAnnotations will merge annotations with existing ones. If any conflict keys, use new value to override existing value.
+func AddAnnotations(o *unstructured.Unstructured, annos map[string]string) {
+	o.SetAnnotations(MergeMapOverrideWithDst(o.GetAnnotations(), annos))
+}
+
 // MergeMapOverrideWithDst merges two could be nil maps. If any conflicts, override src with dst.
 func MergeMapOverrideWithDst(src, dst map[string]string) map[string]string {
 	if src == nil && dst == nil {
