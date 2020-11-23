@@ -645,7 +645,7 @@ func TestRenderTrait(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got, err := renderTrait(tc.args.data)
+			got, err := RenderTrait(tc.args.data)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nrenderTrait(...): -want error, +got error:\n%s\n", tc.reason, diff)
 			}

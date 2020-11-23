@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
-
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	"github.com/pkg/errors"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -20,6 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/applicationconfiguration"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/discoverymapper"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
 )
 
 const (
@@ -31,6 +33,12 @@ const (
 
 	// WorkloadNamePath indicates field path of workload name
 	WorkloadNamePath = "metadata.name"
+
+	// ErrConflictsWith marks as the identifier of Trait conflict error
+	ErrConflictsWith = "TraitConflictError"
+
+	// ErrFmtConflictsTrait formats the error message for Traits conflict
+	ErrFmtConflictsTrait = "cannot apply trait %q %q %q whose conflictsWith is %q"
 )
 
 var appConfigResource = v1alpha2.SchemeGroupVersion.WithResource("applicationconfigurations")
@@ -67,7 +75,7 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 		if err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
-		if allErrs := ValidateTraitObject(obj); len(allErrs) > 0 {
+		if allErrs := ValidateTraitObject(ctx, h.Client, h.Mapper, obj); len(allErrs) > 0 {
 			klog.Info("create or update failed", "name", obj.Name, "errMsg", allErrs.ToAggregate().Error())
 			return admission.Denied(allErrs.ToAggregate().Error())
 		}
@@ -83,10 +91,18 @@ func (h *ValidatingHandler) Handle(ctx context.Context, req admission.Request) a
 }
 
 // ValidateTraitObject validates the ApplicationConfiguration on creation/update
-func ValidateTraitObject(obj *v1alpha2.ApplicationConfiguration) field.ErrorList {
+func ValidateTraitObject(ctx context.Context, client client.Reader, dm discoverymapper.DiscoveryMapper, obj *v1alpha2.ApplicationConfiguration) field.ErrorList {
 	klog.Info("validate applicationConfiguration", "name", obj.Name)
 	var allErrs field.ErrorList
 	for cidx, comp := range obj.Spec.Components {
+		componentName := comp.ComponentName
+		compatibleTraits, err := getAppliedTraits(obj, componentName)
+		if err != nil {
+			fldPath := field.NewPath("spec").Child("components").Index(cidx).Child("traits")
+			allErrs = append(allErrs, field.NotFound(fldPath, componentName))
+			return allErrs
+		}
+		var preAppliedTraits = make([]unstructured.Unstructured, 0)
 		for idx, tr := range comp.Traits {
 			fldPath := field.NewPath("spec").Child("components").Index(cidx).Child("traits").Index(idx).Child("trait")
 			var content map[string]interface{}
@@ -109,6 +125,15 @@ func ValidateTraitObject(obj *v1alpha2.ApplicationConfiguration) field.ErrorList
 			if len(trait.GetAPIVersion()) == 0 || len(trait.GetKind()) == 0 {
 				allErrs = append(allErrs, field.Invalid(fldPath, content,
 					fmt.Sprintf("the trait data missing GVK, api = %s, kind = %s,", trait.GetAPIVersion(), trait.GetKind())))
+			}
+			compatibleTraits = append(compatibleTraits, preAppliedTraits...)
+			t, err := CheckTraitsConflict(ctx, client, dm, tr, compatibleTraits)
+			if err != nil {
+				allErrs = append(allErrs, field.Invalid(fldPath, err, "the trait is conflicted"))
+				return allErrs
+			}
+			if t != nil {
+				preAppliedTraits = append(preAppliedTraits, *t)
 			}
 		}
 	}
@@ -187,4 +212,56 @@ func RegisterValidatingHandler(mgr manager.Manager) error {
 		Mapper: mapper,
 	}})
 	return nil
+}
+
+// CheckTraitsConflict checks whether traits are conflicted
+func CheckTraitsConflict(ctx context.Context, client client.Reader, dm discoverymapper.DiscoveryMapper,
+	ct v1alpha2.ComponentTrait, compatibleTraits []unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	t, err := applicationconfiguration.RenderTrait(ct.Trait.Raw)
+	if err != nil {
+		return nil, nil
+	}
+	traitDef, err := util.FetchTraitDefinition(ctx, client, dm, t)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, conflict := range traitDef.Spec.ConflictsWith {
+		for j := range compatibleTraits {
+			compatibleTraitDef, err := util.FetchTraitDefinition(ctx, client, dm, &compatibleTraits[j])
+			if err != nil {
+				return nil, err
+			}
+			if conflict == compatibleTraitDef.Name {
+				err := errors.New(ErrConflictsWith)
+				return nil, errors.Wrapf(err, ErrFmtConflictsTrait, t.GetAPIVersion(), t.GetKind(), t.GetName(), conflict)
+			}
+		}
+	}
+	return t, nil
+}
+
+// GetAppliedTraits gets all the traits which is already applied to a specified component
+func getAppliedTraits(ac *v1alpha2.ApplicationConfiguration, componentName string) ([]unstructured.Unstructured, error) {
+	var traits []v1alpha2.ComponentTrait
+	var appliedTraits = make([]unstructured.Unstructured, 0)
+	deployedComponents := make([]string, 0)
+	for _, w := range ac.Status.Workloads {
+		deployedComponents = append(deployedComponents, w.ComponentName)
+	}
+	for _, c := range ac.Spec.Components {
+		if c.ComponentName != componentName || !util.Contains(deployedComponents, c.ComponentName) {
+			continue
+		}
+		traits = c.Traits
+		break
+	}
+	for _, t := range traits {
+		unstructuredTrait, err := applicationconfiguration.RenderTrait(t.Trait.Raw)
+		if err != nil {
+			return nil, err
+		}
+		appliedTraits = append(appliedTraits, *unstructuredTrait)
+	}
+	return appliedTraits, nil
 }

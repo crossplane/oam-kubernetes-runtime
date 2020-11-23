@@ -179,7 +179,7 @@ func NewReconciler(m ctrl.Manager, dm discoverymapper.DiscoveryMapper, o ...Reco
 			dm:       dm,
 			params:   ParameterResolveFn(resolve),
 			workload: ResourceRenderFn(renderWorkload),
-			trait:    ResourceRenderFn(renderTrait),
+			trait:    ResourceRenderFn(RenderTrait),
 		},
 		workloads: &workloads{
 			// NOTE(roywang) PatchingApplicator@v0.10.0 only use "application/merge-patch+json" type patch

@@ -450,3 +450,13 @@ func MergeMapOverrideWithDst(src, dst map[string]string) map[string]string {
 	}
 	return r
 }
+
+// Contains whether a slice contains an item
+func Contains(slice []string, elem string) bool {
+	for _, s := range slice {
+		if s == elem {
+			return true
+		}
+	}
+	return false
+}

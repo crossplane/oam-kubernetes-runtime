@@ -251,7 +251,7 @@ var _ = Describe("ApplicationConfiguration Admission controller Test", func() {
 				reason:    "",
 				client:    clientInstance,
 			},
-			"malformat appConfig": {
+			"malformed appConfig": {
 				trait:     "bad format",
 				operation: admissionv1beta1.Create,
 				pass:      false,
