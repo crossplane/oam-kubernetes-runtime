@@ -271,7 +271,8 @@ func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructur
 		}
 
 		componentLastRevision := c.Status.LatestRevision.Name
-		if existingWorkload.GetLabels()[oam.LabelAppComponentRevision] == componentLastRevision {
+		// if workload exists, check the revision label, we will not change the name if workload exists and no revision changed
+		if existingWorkload != nil && existingWorkload.GetLabels()[oam.LabelAppComponentRevision] == componentLastRevision {
 			return nil
 		}
 
