@@ -67,7 +67,9 @@ var (
 	ErrDataOutputNotExist = errors.New("DataOutput does not exist")
 )
 
-const instanceNamePath = "metadata.name"
+const (
+	instanceNamePath = "metadata.name"
+)
 
 // A ComponentRenderer renders an ApplicationConfiguration's Components into
 // workloads and traits.
@@ -138,7 +140,6 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 	if err != nil {
 		return nil, errors.Wrapf(err, errFmtRenderWorkload, acc.ComponentName)
 	}
-
 	compInfoLabels := map[string]string{
 		oam.LabelAppName:              ac.Name,
 		oam.LabelAppComponent:         acc.ComponentName,
@@ -176,7 +177,13 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		traits = append(traits, &Trait{Object: *t, Definition: *traitDef})
 		traitDefs = append(traitDefs, *traitDef)
 	}
-	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
+
+	existingWorkload, err := r.getExistingWorkload(ctx, ac, c, w)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := SetWorkloadInstanceName(traitDefs, w, c, existingWorkload); err != nil {
 		return nil, err
 	}
 	// create the ref after the workload name is set
@@ -257,7 +264,8 @@ func setTraitProperties(t *unstructured.Unstructured, traitName, namespace strin
 }
 
 // SetWorkloadInstanceName will set metadata.name for workload CR according to createRevision flag in traitDefinition
-func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component) error {
+func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructured.Unstructured, c *v1alpha2.Component,
+	existingWorkload *unstructured.Unstructured) error {
 	// Don't override the specified name
 	if w.GetName() != "" {
 		return nil
@@ -267,10 +275,19 @@ func SetWorkloadInstanceName(traitDefs []v1alpha2.TraitDefinition, w *unstructur
 		if c.Status.LatestRevision == nil {
 			return fmt.Errorf(errFmtCompRevision, c.Name)
 		}
-		// if revisionEnabled, use revisionName as the workload name
-		if err := pv.SetString(instanceNamePath, c.Status.LatestRevision.Name); err != nil {
+
+		componentLastRevision := c.Status.LatestRevision.Name
+		// if workload exists, check the revision label, we will not change the name if workload exists and no revision changed
+		if existingWorkload != nil && existingWorkload.GetLabels()[oam.LabelAppComponentRevision] == componentLastRevision {
+			return nil
+		}
+
+		// if revisionEnabled and the running workload's revision isn't equal to the component's latest reversion,
+		// use revisionName as the workload name
+		if err := pv.SetString(instanceNamePath, componentLastRevision); err != nil {
 			return errors.Wrapf(err, errSetValueForField, instanceNamePath, c.Status.LatestRevision)
 		}
+
 		return nil
 	}
 	// use component name as workload name, which means we will always use one workload for different revisions
@@ -669,4 +686,26 @@ func getTraitName(ac *v1alpha2.ApplicationConfiguration, componentName string,
 	}
 
 	return traitName
+}
+
+// getExistingWorkload tries to retrieve the currently running workload
+func (r *components) getExistingWorkload(ctx context.Context, ac *v1alpha2.ApplicationConfiguration, c *v1alpha2.Component, w *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	var workloadName string
+	existingWorkload := &unstructured.Unstructured{}
+	for _, component := range ac.Status.Workloads {
+		if component.ComponentName != c.GetName() {
+			continue
+		}
+		workloadName = component.Reference.Name
+	}
+	if workloadName != "" {
+		objectKey := client.ObjectKey{Namespace: ac.GetNamespace(), Name: workloadName}
+		existingWorkload.SetAPIVersion(w.GetAPIVersion())
+		existingWorkload.SetKind(w.GetKind())
+		err := r.client.Get(ctx, objectKey, existingWorkload)
+		if err != nil {
+			return nil, client.IgnoreNotFound(err)
+		}
+	}
+	return existingWorkload, nil
 }
