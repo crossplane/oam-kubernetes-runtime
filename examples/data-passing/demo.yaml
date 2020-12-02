@@ -1,0 +1,108 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dependency-clusterrole
+  labels:
+    rbac.oam.dev/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - example.com
+    resources:
+      - 'foo'
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - 'configmaps'
+    verbs:
+      - '*'
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: source
+spec:
+  workload:
+    apiVersion: example.com/v1
+    kind: Foo
+    metadata:
+      name: source
+    spec:
+      key1: test-value1
+      key2: test-value2
+    status: # comment this part to mimic dependency wait time.
+      state: pending
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: Component
+metadata:
+  name: sink
+spec:
+  workload:
+    apiVersion: example.com/v1
+    kind: Foo
+    metadata:
+      name: sink
+---
+apiVersion: core.oam.dev/v1alpha2
+kind: ApplicationConfiguration
+metadata:
+  name: example-appconfig
+spec:
+  components:
+    - componentName: source
+      dataOutputs:
+        - OutputStore:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: store
+            operations:
+              - type: "jsonPatch"
+                operator: "add"
+                toFieldPath: "data"
+                value: "{}"
+              - type: "jsonPatch"
+                operator: "add"
+                toFieldPath: "data.key1"
+                valueFrom:
+                  fieldPath: "spec.key1"
+                conditions:
+                  - operator: notEq
+                    fieldPath: "spec.key1"
+                    value: ""
+              - type: "jsonPatch"
+                operator: "add"
+                toFieldPath: "data.key2"
+                valueFrom:
+                  fieldPath: "spec.key2"    
+    - componentName: sink
+      dataInputs:
+        - InputStore:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: store
+            operations:
+              - type: "jsonPatch"
+                operator: "add"
+                toFieldPath: "spec"
+                value: "{}"
+              - type: "jsonPatch"
+                operator: "add"
+                toFieldPath: "spec.key"
+                value: '"{}"'
+              - type: "jsonPatch"
+                operator: "add"
+                toFieldPath: "spec.key"
+                toDataPath: "key1"
+                valueFrom:
+                  fieldPath: "data.key1"
+              - type: "jsonPatch"
+                operator: "add"
+                toFieldPath: "spec.key"
+                toDataPath: "key2"
+                valueFrom:
+                  fieldPath: "data.key2"
+

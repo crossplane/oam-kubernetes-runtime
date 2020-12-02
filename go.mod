@@ -7,6 +7,7 @@ require (
 	github.com/Azure/go-autorest/autorest/adal v0.8.0 // indirect
 	github.com/crossplane/crossplane-runtime v0.10.0
 	github.com/davecgh/go-spew v1.1.1
+	github.com/evanphx/json-patch v4.5.0+incompatible
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.1 // indirect
@@ -19,6 +20,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/stretchr/testify v1.4.0
+	github.com/tidwall/gjson v1.6.3
 	go.uber.org/zap v1.10.0
 	golang.org/x/tools v0.0.0-20200630223951-c138986dd9b9 // indirect
 	google.golang.org/appengine v1.6.5 // indirect
