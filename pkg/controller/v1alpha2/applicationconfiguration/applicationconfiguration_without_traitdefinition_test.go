@@ -135,7 +135,7 @@ spec:
 		By("Check workload created successfully")
 		Eventually(func() error {
 			return k8sClient.Get(ctx, workloadKey, &workload)
-		}, 5*time.Second, 300*time.Millisecond).Should(BeNil())
+		}, 10*time.Second, 300*time.Millisecond).Should(BeNil())
 
 		By("Check reconcile again and no error will happen")
 		reconcileRetry(reconciler, req)
