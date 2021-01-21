@@ -280,12 +280,18 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 	log = log.WithValues("uid", ac.GetUID(), "version", ac.GetResourceVersion())
 
+	ac.Status.Dependency = v1alpha2.DependencyStatus{}
 	workloads, depStatus, err := r.components.Render(ctx, ac)
 	if err != nil {
 		log.Info("Cannot render components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotRenderComponents, err))
 		ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errRenderComponents)))
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
+	}
+	waitTime := longWait
+	if len(depStatus.Unsatisfied) != 0 {
+		waitTime = dependCheckWait
+		ac.Status.Dependency = *depStatus
 	}
 	log.Debug("Successfully rendered components", "workloads", len(workloads))
 	r.record.Event(ac, event.Normal(reasonRenderComponents, "Successfully rendered components", "workloads", strconv.Itoa(len(workloads))))
@@ -326,13 +332,6 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 	// patch the final status on the client side, k8s sever can't merge them
 	r.updateStatus(ctx, ac, acPatch, workloads)
-
-	ac.Status.Dependency = v1alpha2.DependencyStatus{}
-	waitTime := longWait
-	if len(depStatus.Unsatisfied) != 0 {
-		waitTime = dependCheckWait
-		ac.Status.Dependency = *depStatus
-	}
 
 	// the posthook function will do the final status update
 	return reconcile.Result{RequeueAfter: waitTime}, nil
@@ -447,6 +446,12 @@ type Workload struct {
 
 	// Scopes associated with this workload.
 	Scopes []unstructured.Unstructured
+
+	// Record the DataOutputs of this workload, key is name of DataOutput.
+	DataOutputs map[string]v1alpha2.DataOutput
+
+	// Record the DataInputs of this workload.
+	DataInputs []v1alpha2.DataInput
 }
 
 // A Trait produced by an OAM ApplicationConfiguration.
@@ -458,6 +463,12 @@ type Trait struct {
 
 	// Definition indicates the trait's definition
 	Definition v1alpha2.TraitDefinition
+
+	// Record the DataOutputs of this trait, key is name of DataOutput.
+	DataOutputs map[string]v1alpha2.DataOutput
+
+	// Record the DataInputs of this trait.
+	DataInputs []v1alpha2.DataInput
 }
 
 // Status produces the status of this workload and its traits, suitable for use
