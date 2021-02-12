@@ -4,6 +4,10 @@
 PLATFORMS := linux_amd64 linux_arm64
 include ../../build/makelib/common.mk
 
+ifeq ($(ARCH),ppc64le)
+       BUILD_ARGS += -f $(IMAGE_TEMP_DIR)/Dockerfile.ppc64le
+endif
+
 # ====================================================================================
 #  Options
 IMAGE = $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH)
