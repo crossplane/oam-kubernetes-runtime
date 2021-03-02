@@ -177,6 +177,9 @@ func TestContainerizedWorkloadTranslator(t *testing.T) {
 		"dapr.io/enabled": "true",
 	}
 	dmAnnotation := cwAnnotation
+	flagEnabled := true
+	var secIDValue int64 = 1000
+
 	type args struct {
 		w oam.Workload
 	}
@@ -316,6 +319,50 @@ func TestContainerizedWorkloadTranslator(t *testing.T) {
 						Name:  "USE_VAL_SECRET",
 						Value: envVarSecretVal,
 					},
+				},
+			}))}},
+		},
+		"SuccessfulWithSecurityContext": {
+			reason: "A ContainerizedWorkload with security context should be successfully translated into a deployment.",
+			args: args{
+				w: containerizedWorkload(cwWithContainer(v1alpha2.Container{
+					Name:      "cool-container",
+					Image:     "cool/image:latest",
+					Command:   []string{"run"},
+					Arguments: []string{"--coolflag"},
+					SecurityContext: &v1alpha2.SecurityContext{
+						Capabilities: &v1alpha2.Capabilities{
+							Add:  []v1alpha2.Capability{"ADD"},
+							Drop: []v1alpha2.Capability{"DROP"},
+						},
+						Privileged:               &flagEnabled,
+						RunAsUser:                &secIDValue,
+						RunAsGroup:               &secIDValue,
+						RunAsNonRoot:             &flagEnabled,
+						ReadOnlyRootFilesystem:   &flagEnabled,
+						AllowPrivilegeEscalation: &flagEnabled,
+					},
+				})),
+			},
+			want: want{result: []oam.Object{deployment(dmWithContainer(corev1.Container{
+				Name:    "cool-container",
+				Image:   "cool/image:latest",
+				Command: []string{"run"},
+				Args:    []string{"--coolflag"},
+				SecurityContext: &corev1.SecurityContext{
+					Capabilities: &corev1.Capabilities{
+						Add:  []corev1.Capability{"ADD"},
+						Drop: []corev1.Capability{"DROP"},
+					},
+					Privileged:               &flagEnabled,
+					SELinuxOptions:           nil,
+					WindowsOptions:           nil,
+					RunAsUser:                &secIDValue,
+					RunAsGroup:               &secIDValue,
+					RunAsNonRoot:             &flagEnabled,
+					ReadOnlyRootFilesystem:   &flagEnabled,
+					AllowPrivilegeEscalation: &flagEnabled,
+					ProcMount:                nil,
 				},
 			}))}},
 		},

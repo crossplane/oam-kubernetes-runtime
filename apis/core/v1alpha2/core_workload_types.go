@@ -302,6 +302,55 @@ type ContainerHealthProbe struct {
 	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
 }
 
+// Capability represent POSIX capabilities type
+type Capability string
+
+// Capabilities to be added and removed from running containers.
+type Capabilities struct {
+	// Added capabilities
+	// +optional
+	Add []Capability `json:"add,omitempty" protobuf:"bytes,1,rep,name=add,casttype=Capability"`
+	// Removed capabilities
+	// +optional
+	Drop []Capability `json:"drop,omitempty" protobuf:"bytes,2,rep,name=drop,casttype=Capability"`
+}
+
+// SecurityContext holds security configuration that will be applied to a container.
+type SecurityContext struct {
+	// The capabilities to add/drop when running containers.
+	// Defaults to the default set of capabilities granted by the container runtime.
+	// +optional
+	Capabilities *Capabilities `json:"capabilities,omitempty" protobuf:"bytes,1,opt,name=capabilities"`
+	// Run container in privileged mode.
+	// Processes in privileged containers are essentially equivalent to root on the host.
+	// Defaults to false.
+	// +optional
+	Privileged *bool `json:"privileged,omitempty" protobuf:"varint,2,opt,name=privileged"`
+	// The UID to run the entrypoint of the container process.
+	// Defaults to user specified in image metadata if unspecified.
+	// +optional
+	RunAsUser *int64 `json:"runAsUser,omitempty" protobuf:"varint,4,opt,name=runAsUser"`
+	// The GID to run the entrypoint of the container process.
+	// Uses runtime default if unset.
+	// +optional
+	RunAsGroup *int64 `json:"runAsGroup,omitempty" protobuf:"varint,8,opt,name=runAsGroup"`
+	// Indicates that the container must run as a non-root user.
+	// +optional
+	RunAsNonRoot *bool `json:"runAsNonRoot,omitempty" protobuf:"varint,5,opt,name=runAsNonRoot"`
+	// Whether this container has a read-only root filesystem.
+	// Default is false.
+	// +optional
+	ReadOnlyRootFilesystem *bool `json:"readOnlyRootFilesystem,omitempty" protobuf:"varint,6,opt,name=readOnlyRootFilesystem"`
+	// AllowPrivilegeEscalation controls whether a process can gain more
+	// privileges than its parent process. This bool directly controls if
+	// the no_new_privs flag will be set on the container process.
+	// AllowPrivilegeEscalation is true always when the container is:
+	// 1) run as Privileged
+	// 2) has CAP_SYS_ADMIN
+	// +optional
+	AllowPrivilegeEscalation *bool `json:"allowPrivilegeEscalation,omitempty" protobuf:"varint,7,opt,name=allowPrivilegeEscalation"`
+}
+
 // A Container represents an Open Containers Initiative (OCI) container.
 type Container struct {
 	// Name of this container. Must be unique within its workload.
@@ -354,6 +403,10 @@ type Container struct {
 	// credentials required to pull this container's image can be loaded.
 	// +optional
 	ImagePullSecret *string `json:"imagePullSecret,omitempty"`
+
+	// Security options the container should run with.
+	// +optional
+	SecurityContext *SecurityContext `json:"securityContext,omitempty"`
 }
 
 // A ContainerizedWorkloadSpec defines the desired state of a
