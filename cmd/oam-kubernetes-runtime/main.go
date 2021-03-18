@@ -37,6 +37,7 @@ func main() {
 	var certDir string
 	var webhookPort int
 	var useWebhook bool
+	var debugLogs bool
 	var controllerArgs controller.Args
 
 	flag.BoolVar(&useWebhook, "use-webhook", false, "Enable Admission Webhook")
@@ -50,6 +51,7 @@ func main() {
 	flag.StringVar(&logFilePath, "log-file-path", "", "The file to write logs to")
 	flag.IntVar(&logRetainDate, "log-retain-date", 7, "The number of days of logs history to retain.")
 	flag.BoolVar(&logCompress, "log-compress", true, "Enable compression on the rotated logs.")
+	flag.BoolVar(&debugLogs, "debug-logs", false, "Enable the debug logs useful for development")
 	flag.IntVar(&controllerArgs.RevisionLimit, "revision-limit", 50,
 		"RevisionLimit is the maximum number of revisions that will be maintained. The default value is 50.")
 	flag.BoolVar(&controllerArgs.ApplyOnceOnly, "apply-once-only", false,
@@ -69,7 +71,7 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(func(o *zap.Options) {
-		o.Development = true
+		o.Development = debugLogs
 		o.DestWritter = w
 	}))
 

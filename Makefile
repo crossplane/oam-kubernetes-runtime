@@ -148,6 +148,10 @@ run: go.build
 	@# To see other arguments that can be provided, run the command with --help instead
 	$(GO_OUT_DIR)/$(PROJECT_NAME)
 
+# This is for running as a local process for convenience with debug logs.
+debug-run:
+	go run ./cmd/oam-kubernetes-runtime/main.go --debug-logs=true
+
 # load docker image to the kind cluster
 kind-load:
 	docker tag $(BUILD_REGISTRY)/oam-kubernetes-runtime-$(ARCH) crossplane/oam-kubernetes-runtime:$(VERSION)
