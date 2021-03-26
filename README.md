@@ -1,12 +1,14 @@
 # OAM Kubernetes Runtime
 
-[![Gitter](https://badges.gitter.im/oam-dev/community.svg)](https://gitter.im/oam-dev/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
-[![TODOs](https://badgen.net/https/api.tickgit.com/badgen/github.com/crossplane/oam-kubernetes-runtime)](https://www.tickgit.com/browse?repo=github.com/crossplane/oam-kubernetes-runtime)
-[![Follow on Twitter](https://img.shields.io/twitter/follow/oam_dev.svg?style=social&logo=twitter)](https://twitter.com/intent/follow?screen_name=oam_dev)
+> :tada: We have decided to promote OAM Kubernetes Runtime to an end-to-end app platform engine with the name of [KubeVela](https://github.com/oam-dev/kubevela). Please check its [documentation site](https://kubevela.io) to learn about using OAM (Open Application Model) with Kubernetes in detail.
+>
+> We made this decision because the growth of this project's feature set and community adoption have fairly exceeded its original scope as "an OAM library" in past 6 months and this made us feel it worth to promote it to a independent project which may even change how the community build developer-centric platforms in the foresee future.
+>
+> Note that KubeVela is designed to support all features and APIs (i.e. OAM spec v0.2.x releases) of OAM Kubernetes Runtime. So as existing adopters, you could just replace your binary and everything is all set. We decided to avoid directly renaming this repository to KubeVela because there're some other adopters imported this project as a library, we don't want to break their use cases.
+>
+> Though this also means we are focusing all of our attention on KubeVela repository and will only be working on this repository for critical updates and bug fixes.
 
-The plug-in for implementing Open Application Model (OAM) control plane with Kubernetes. 
-
-> :rotating_light: NOTE: this project is designed as low level dependency for building end-to-end implementation of OAM (i.e. [KubeVela](https://github.com/oam-dev/kubevela)). Do not play with it unless you know what you are doing. :rotating_light:
+The plug-in for implementing Open Application Model (OAM) on Kubernetes. 
 
 ## Prerequisites
 
