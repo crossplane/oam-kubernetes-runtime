@@ -145,7 +145,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderService)))
 	}
 	// server side apply the service
-	if err := r.Patch(ctx, service, client.Apply, applyOpts...); err != nil {
+	if err := r.applicator.Apply(ctx, service, applyOpts...); err != nil {
 		log.Error(err, "Failed to apply a service")
 		r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
 		return util.ReconcileWaitResult,

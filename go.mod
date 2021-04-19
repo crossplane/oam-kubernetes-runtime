@@ -1,6 +1,6 @@
 module github.com/crossplane/oam-kubernetes-runtime
 
-go 1.13
+go 1.15
 
 require (
 	github.com/crossplane/crossplane-runtime v0.10.0
@@ -29,4 +29,8 @@ require (
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 	sigs.k8s.io/controller-runtime v0.6.2
 	sigs.k8s.io/controller-tools v0.2.4
+)
+
+replace (
+	k8s.io/client-go => k8s.io/client-go v0.18.8
 )
