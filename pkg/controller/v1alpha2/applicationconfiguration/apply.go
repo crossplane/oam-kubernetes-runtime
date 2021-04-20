@@ -101,6 +101,9 @@ type workloads struct {
 
 func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
 	// they are all in the same namespace
+	if len(w) == 0{
+		return nil
+	}
 	var namespace = w[0].Workload.GetNamespace()
 	for _, wl := range w {
 		if !wl.HasDep {

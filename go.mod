@@ -32,5 +32,8 @@ require (
 )
 
 replace (
-	k8s.io/client-go => k8s.io/client-go v0.18.8
+	k8s.io/client-go => k8s.io/client-go v0.18.6
+	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20200410145947-61e04a5be9a6
+	k8s.io/kubectl => k8s.io/kubectl v0.18.6
+	k8s.io/utils => k8s.io/utils v0.0.0-20200603063816-c1c6865ac451
 )
