@@ -100,13 +100,13 @@ type workloads struct {
 }
 
 func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus, w []Workload, ao ...resource.ApplyOption) error {
-	if len(w) == 0{
+	if len(w) == 0 {
 		return nil
 	}
 	// they are all in the same namespace
 	var namespace = w[0].Workload.GetNamespace()
 	for _, wl := range w {
-		if !wl.HasDep {
+	        if !wl.HasDep {
 			// Apply the DataInputs to this workload
 			if err := a.ApplyInputRef(ctx, wl.Workload, wl.DataInputs, namespace, ao...); err != nil {
 				return err
