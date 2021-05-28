@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"go.uber.org/zap/zapcore"
@@ -52,6 +53,8 @@ func main() {
 	flag.BoolVar(&logCompress, "log-compress", true, "Enable compression on the rotated logs.")
 	flag.IntVar(&controllerArgs.RevisionLimit, "revision-limit", 50,
 		"RevisionLimit is the maximum number of revisions that will be maintained. The default value is 50.")
+	flag.DurationVar(&controllerArgs.LongWait, "long-wait", 1*time.Minute, "long-wait is controller next reconcile interval time like 30s, 2m etc. The default value is 1m,"+
+		" you can set it to 0 for no reconcile routine after success")
 	flag.Parse()
 
 	// setup logging
