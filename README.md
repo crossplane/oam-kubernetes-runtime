@@ -120,7 +120,7 @@ But be aware that in this case, you will lose critical validations and injection
   example-appconfig   3m48s
   ```
 
-  Check the status and events from the application   
+  Check the status and events from the application: 
   ```console
   kubectl describe appconfig example-appconfig
   Status:
