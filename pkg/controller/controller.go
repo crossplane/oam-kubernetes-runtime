@@ -13,6 +13,11 @@ limitations under the License.
 
 package controller
 
+import "time"
+
+// LongWait is controller next reconcile interval time
+var LongWait time.Duration
+
 // Args args used by controller
 type Args struct {
 	// RevisionLimit is the maximum number of revisions that will be maintained.

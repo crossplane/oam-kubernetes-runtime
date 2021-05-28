@@ -49,7 +49,6 @@ const (
 	reconcileTimeout = 1 * time.Minute
 	dependCheckWait  = 10 * time.Second
 	shortWait        = 30 * time.Second
-	longWait         = 1 * time.Minute
 )
 
 // Reconcile error strings.
@@ -313,7 +312,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	r.updateStatus(ctx, ac, acPatch, workloads)
 
 	ac.Status.Dependency = v1alpha2.DependencyStatus{}
-	waitTime := longWait
+	waitTime := controller.LongWait
 	if len(depStatus.Unsatisfied) != 0 {
 		waitTime = dependCheckWait
 		ac.Status.Dependency = *depStatus
