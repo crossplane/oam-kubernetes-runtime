@@ -49,7 +49,6 @@ const (
 	reconcileTimeout = 1 * time.Minute
 	dependCheckWait  = 10 * time.Second
 	shortWait        = 30 * time.Second
-	longWait         = 1 * time.Minute
 )
 
 // Reconcile error strings.
@@ -97,7 +96,8 @@ func Setup(mgr ctrl.Manager, args controller.Args, l logging.Logger) error {
 		}).
 		Complete(NewReconciler(mgr, dm,
 			WithLogger(l.WithValues("controller", name)),
-			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name)))))
+			WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
+			WithLogWaitTime(args.LongWait)))
 }
 
 // An OAMApplicationReconciler reconciles OAM ApplicationConfigurations by rendering and
@@ -112,6 +112,7 @@ type OAMApplicationReconciler struct {
 	record     event.Recorder
 	preHooks   map[string]ControllerHooks
 	postHooks  map[string]ControllerHooks
+	longWait   time.Duration
 }
 
 // A ReconcilerOption configures a Reconciler.
@@ -165,6 +166,13 @@ func WithPrehook(name string, hook ControllerHooks) ReconcilerOption {
 func WithPosthook(name string, hook ControllerHooks) ReconcilerOption {
 	return func(r *OAMApplicationReconciler) {
 		r.postHooks[name] = hook
+	}
+}
+
+// WithLogWaitTime set next reconcile time interval
+func WithLogWaitTime(longWait time.Duration) ReconcilerOption {
+	return func(r *OAMApplicationReconciler) {
+		r.longWait = longWait
 	}
 }
 
@@ -313,7 +321,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	r.updateStatus(ctx, ac, acPatch, workloads)
 
 	ac.Status.Dependency = v1alpha2.DependencyStatus{}
-	waitTime := longWait
+	waitTime := r.longWait
 	if len(depStatus.Unsatisfied) != 0 {
 		waitTime = dependCheckWait
 		ac.Status.Dependency = *depStatus
