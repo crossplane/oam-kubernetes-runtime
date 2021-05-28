@@ -96,7 +96,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: install Kubebuilder
-        uses: RyanSiu1995/kubebuilder-action@v1
+        uses: wonderflow/kubebuilder-action@v1.1
 
       - name: Cache Go Dependencies
         uses: actions/cache@v2
@@ -169,11 +169,12 @@ jobs:
 
       - name: Install ginkgo
         run:  |
+          sudo rm -rf /etc/apt/sources.list.d/azure-cli.list
           sudo apt-get update
           sudo apt-get install -y golang-ginkgo-dev
 
       - name: Setup Kind Cluster
-        uses: engineerd/setup-kind@v0.4.0
+        uses: engineerd/setup-kind@v0.5.0
         with:
           version: ${{ env.KIND_VERSION }}
 
