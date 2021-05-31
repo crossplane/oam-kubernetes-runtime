@@ -365,8 +365,10 @@ func (a *workloads) applyScope(ctx context.Context, wl Workload, s unstructured.
 				return nil
 			}
 		}
-	} else {
-		return errors.Wrapf(err, errFmtGetScopeWorkloadRef, s.GetAPIVersion(), s.GetKind(), s.GetName(), workloadRefsPath)
+	}else if err.Error() == "spec: no such field"{
+            // init scope, so not found field: spec
+	}else {
+	    return errors.Wrapf(err, errFmtGetScopeWorkloadRef, s.GetAPIVersion(), s.GetKind(), s.GetName(), workloadRefsPath)
 	}
 
 	refs = append(refs, workloadRef)
