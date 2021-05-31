@@ -13,6 +13,8 @@ limitations under the License.
 
 package controller
 
+import "time"
+
 // Args args used by controller
 type Args struct {
 	// RevisionLimit is the maximum number of revisions that will be maintained.
@@ -22,4 +24,7 @@ type Args struct {
 	// ApplyOnceOnly indicates whether workloads and traits should be
 	// affected if no spec change is made in the ApplicationConfiguration.
 	ApplyOnceOnly bool
+
+	// LongWait is controller next reconcile interval time
+	LongWait time.Duration
 }
