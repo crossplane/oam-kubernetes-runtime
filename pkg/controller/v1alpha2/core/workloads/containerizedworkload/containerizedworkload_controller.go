@@ -37,6 +37,7 @@ import (
 	"github.com/crossplane/oam-kubernetes-runtime/apis/core/v1alpha2"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller"
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam/util"
+	"github.com/oam-dev/kubevela/pkg/utils/apply"
 )
 
 // Reconcile error strings.
@@ -55,6 +56,7 @@ func Setup(mgr ctrl.Manager, args controller.Args, log logging.Logger) error {
 		log:    ctrl.Log.WithName("ContainerizedWorkload"),
 		record: event.NewAPIRecorder(mgr.GetEventRecorderFor("ContainerizedWorkload")),
 		Scheme: mgr.GetScheme(),
+		applicator: apply.NewAPIApplicator(mgr.GetClient()),
 	}
 	return reconciler.SetupWithManager(mgr)
 }
@@ -65,6 +67,7 @@ type Reconciler struct {
 	log    logr.Logger
 	record event.Recorder
 	Scheme *runtime.Scheme
+	applicator apply.Applicator
 }
 
 // Reconcile reconciles a ContainerizedWorkload object
@@ -101,8 +104,8 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
 	}
 	// server side apply, only the fields we set are touched
-	applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(workload.GetUID())}
-	if err := r.Patch(ctx, deploy, client.Apply, applyOpts...); err != nil {
+	applyOpts := []apply.ApplyOption{apply.MustBeControllableBy(workload.GetUID())}
+	if err := r.applicator.Apply(ctx, deploy, applyOpts...); err != nil {
 		log.Error(err, "Failed to apply to a deployment")
 		r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
 		return util.ReconcileWaitResult,
@@ -112,7 +115,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		fmt.Sprintf("Workload `%s` successfully server side patched a deployment `%s`",
 			workload.Name, deploy.Name)))
 
-	configMapApplyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(deploy.GetUID())}
+	configMapApplyOpts := []apply.ApplyOption{apply.MustBeControllableBy(deploy.GetUID())}
 	configmaps, err := r.renderConfigMaps(ctx, &workload, deploy)
 	if err != nil {
 		log.Error(err, "Failed to render configmaps")
@@ -121,7 +124,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
 	}
 	for _, cm := range configmaps {
-		if err := r.Patch(ctx, cm, client.Apply, configMapApplyOpts...); err != nil {
+		if err := r.applicator.Apply(ctx, cm, configMapApplyOpts...); err != nil {
 			log.Error(err, "Failed to apply a configmap")
 			r.record.Event(eventObj, event.Warning(errApplyConfigMap, err))
 			return util.ReconcileWaitResult,
@@ -141,7 +144,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderService)))
 	}
 	// server side apply the service
-	if err := r.Patch(ctx, service, client.Apply, applyOpts...); err != nil {
+	if err := r.applicator.Apply(ctx, service, applyOpts...); err != nil {
 		log.Error(err, "Failed to apply a service")
 		r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
 		return util.ReconcileWaitResult,
