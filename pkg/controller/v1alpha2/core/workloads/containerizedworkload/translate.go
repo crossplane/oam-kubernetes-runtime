@@ -264,6 +264,10 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 			d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes, v)
 		}
 
+		if container.SecurityContext != nil {
+			kubernetesContainer.SecurityContext = translateSecurityContext(container.SecurityContext)
+		}
+
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, kubernetesContainer)
 	}
 
@@ -273,6 +277,34 @@ func TranslateContainerWorkload(ctx context.Context, w oam.Workload) ([]oam.Obje
 	util.PassLabel(w, &d.Spec.Template)
 
 	return []oam.Object{d}, nil
+}
+
+// translateSecurityContext transforms a OAM security context into a Kubernetes one.
+func translateSecurityContext(secCtx *v1alpha2.SecurityContext) *corev1.SecurityContext {
+	result := &corev1.SecurityContext{
+		Privileged:               secCtx.Privileged,
+		RunAsUser:                secCtx.RunAsUser,
+		RunAsGroup:               secCtx.RunAsGroup,
+		RunAsNonRoot:             secCtx.RunAsNonRoot,
+		ReadOnlyRootFilesystem:   secCtx.ReadOnlyRootFilesystem,
+		AllowPrivilegeEscalation: secCtx.AllowPrivilegeEscalation,
+	}
+	if secCtx.Capabilities != nil {
+		add := make([]corev1.Capability, 0)
+		drop := make([]corev1.Capability, 0)
+		for _, toAdd := range secCtx.Capabilities.Add {
+			add = append(add, corev1.Capability(toAdd))
+		}
+		for _, toDrop := range secCtx.Capabilities.Drop {
+			drop = append(drop, corev1.Capability(toDrop))
+		}
+		cap := &corev1.Capabilities{
+			Add:  add,
+			Drop: drop,
+		}
+		result.Capabilities = cap
+	}
+	return result
 }
 
 func translateConfigFileToVolume(cf v1alpha2.ContainerConfigFile, wlName, containerName string) (v corev1.Volume, vm corev1.VolumeMount) {
