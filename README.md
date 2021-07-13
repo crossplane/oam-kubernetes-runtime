@@ -2,7 +2,7 @@
 
 > :tada: We have decided to promote OAM Kubernetes Runtime to an end-to-end app platform engine with the name of [KubeVela](https://github.com/oam-dev/kubevela). Please check its [documentation site](https://kubevela.io) to learn about using OAM (Open Application Model) with Kubernetes in detail.
 >
-> We made this decision because the growth of this project's feature set and community adoption have fairly exceeded its original scope as "an OAM library" in past 6 months and this made us feel it worth to promote it to a independent project which may even change how the community build developer-centric platforms in the foresee future.
+> We made this decision because the growth of this project's feature set and community adoption have fairly exceeded its original scope as "an OAM library" in past 6 months and this made us feel it worth to promote it to an independent project which may even change how the community builds developer-centric platforms in the foresee future.
 >
 > Note that KubeVela is designed to support all features and APIs (i.e. OAM spec v0.2.x releases) of OAM Kubernetes Runtime. So as existing adopters, you could just replace your binary and everything is all set. We decided to avoid directly renaming this repository to KubeVela because there're some other adopters imported this project as a library, we don't want to break their use cases.
 >
